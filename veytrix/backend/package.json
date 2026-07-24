@@ -1,0 +1,16 @@
+{
+  "name": "veytrix-backend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'TODO: dev server'",
+    "build": "tsc -b",
+    "start": "echo 'TODO: start server'"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  }
+}
