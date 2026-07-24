@@ -13,6 +13,7 @@ import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as LearningRouteImport } from './routes/learning'
+import { Route as EditorRouteImport } from './routes/editor'
 import { Route as CompanyRouteImport } from './routes/company'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -36,6 +37,11 @@ const LearningRoute = LearningRouteImport.update({
   path: '/learning',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EditorRoute = EditorRouteImport.update({
+  id: '/editor',
+  path: '/editor',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CompanyRoute = CompanyRouteImport.update({
   id: '/company',
   path: '/company',
@@ -50,6 +56,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/company': typeof CompanyRoute
+  '/editor': typeof EditorRoute
   '/learning': typeof LearningRoute
   '/settings': typeof SettingsRoute
   '/support': typeof SupportRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/company': typeof CompanyRoute
+  '/editor': typeof EditorRoute
   '/learning': typeof LearningRoute
   '/settings': typeof SettingsRoute
   '/support': typeof SupportRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/company': typeof CompanyRoute
+  '/editor': typeof EditorRoute
   '/learning': typeof LearningRoute
   '/settings': typeof SettingsRoute
   '/support': typeof SupportRoute
@@ -77,16 +86,25 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/company'
+    | '/editor'
     | '/learning'
     | '/settings'
     | '/support'
     | '/templates'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/company' | '/learning' | '/settings' | '/support' | '/templates'
+  to:
+    | '/'
+    | '/company'
+    | '/editor'
+    | '/learning'
+    | '/settings'
+    | '/support'
+    | '/templates'
   id:
     | '__root__'
     | '/'
     | '/company'
+    | '/editor'
     | '/learning'
     | '/settings'
     | '/support'
@@ -96,6 +114,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CompanyRoute: typeof CompanyRoute
+  EditorRoute: typeof EditorRoute
   LearningRoute: typeof LearningRoute
   SettingsRoute: typeof SettingsRoute
   SupportRoute: typeof SupportRoute
@@ -132,6 +151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LearningRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/editor': {
+      id: '/editor'
+      path: '/editor'
+      fullPath: '/editor'
+      preLoaderRoute: typeof EditorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/company': {
       id: '/company'
       path: '/company'
@@ -152,6 +178,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CompanyRoute: CompanyRoute,
+  EditorRoute: EditorRoute,
   LearningRoute: LearningRoute,
   SettingsRoute: SettingsRoute,
   SupportRoute: SupportRoute,
