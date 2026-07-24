@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Sparkles, Zap, Layers, Wand2, Film, MonitorPlay,
-  Cpu, Waveform, Type, Palette, Download, Cloud,
+  Cpu, AudioWaveform, Type, Palette, Download, Cloud,
   ChevronRight, Play, ArrowUpRight,
 } from "lucide-react";
 
@@ -91,7 +91,7 @@ function Hero() {
             <div className="grid grid-cols-[64px_1fr_260px]">
               {/* Left rail */}
               <div className="border-r border-border p-3 flex flex-col gap-3 items-center">
-                {[Film, Type, Palette, Waveform, Layers, Wand2].map((I, i) => (
+                {[Film, Type, Palette, AudioWaveform, Layers, Wand2].map((I, i) => (
                   <div
                     key={i}
                     className={[
@@ -200,7 +200,7 @@ function Hero() {
 const FEATURES = [
   { icon: Film,        title: "Cinematic Timeline",  desc: "Multi-track editing with ripple, snap, and layer control that stays out of your way." },
   { icon: MonitorPlay, title: "Live Preview",        desc: "Frame-accurate playback with safe area, grid, and zoom — no re-renders required." },
-  { icon: Waveform,    title: "Advanced Audio",      desc: "Waveform scrubbing, ducking, and mixing tuned for creators, not engineers." },
+  { icon: AudioWaveform,    title: "Advanced Audio",      desc: "AudioWaveform scrubbing, ducking, and mixing tuned for creators, not engineers." },
   { icon: Palette,     title: "Color & Filters",     desc: "Grade with confidence — LUTs, curves, and cinematic filters at your fingertips." },
   { icon: Wand2,       title: "Effects & Animation", desc: "Keyframe motion, transitions, and shaders that snap into place." },
   { icon: Download,    title: "Export Center",       desc: "Resolution, FPS, codec, bitrate — every knob, one clean panel." },
