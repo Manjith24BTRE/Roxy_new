@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Sliders, Search } from 'lucide-react';
+// Force IDE cache refresh for folder casing
 import { SAMPLE_FILTERS, FilterSample } from './samples';
 
 interface FiltersProps {

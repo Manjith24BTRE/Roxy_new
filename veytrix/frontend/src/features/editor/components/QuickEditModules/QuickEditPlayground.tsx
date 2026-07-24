@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Timeline, TimelineClip, Marker } from '../Timeline/Timeline';
-import { TextPanel, TextOverlay as StandaloneTextLayer } from '../EditingToolbar/Text/TextPanel';
-import { Captions, CaptionItem as StandaloneCaptionCue } from '../EditingToolbar/Captions/Captions';
-import { Color } from '../EditingToolbar/Color/Color';
-import { AspectRatio } from '../EditingToolbar/AspectRatio/AspectRatio';
+import { TextPanel, TextOverlay as StandaloneTextLayer } from '../../../../../text/TextPanel';
+import { Captions, CaptionItem as StandaloneCaptionCue } from '../../../../../captions/Captions';
+import { Color } from '../../../../../color/Color';
+import { AspectRatio } from '../../../../../aspect-ratio/AspectRatio';
 import { PropertiesPanel, Keyframe } from '../PropertiesPanel/PropertiesPanel';
 import { PreviewPlayer } from '../PreviewPlayer/PreviewPlayer';
 import { Wand2, Layout, Film, ArrowLeft } from 'lucide-react';

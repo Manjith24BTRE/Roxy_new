@@ -22,6 +22,8 @@ export interface TextOverlay {
   bgColor?: string;
   opacity?: number;
   rotation?: number;
+  startTime?: number;
+  time?: number;
 }
 
 interface TextPanelProps {

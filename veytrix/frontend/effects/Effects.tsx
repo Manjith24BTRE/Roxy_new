@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Sliders, Search } from 'lucide-react';
 import { SAMPLE_TRANSITIONS, TransitionSample } from './transitionSamples';
-import { Filters } from '../Filters/Filters';
+// Force IDE cache refresh for folder casing
+import { Filters } from '../filters/Filters';
 import { CinematicEffects, CINEMATIC_EFFECTS } from './Cinematic/CinematicEffects';
 import { CameraEffects, CAMERA_EFFECTS } from './Camera/CameraEffects';
 import { BlurEffects, BLUR_EFFECTS } from './Blur/BlurEffects';
