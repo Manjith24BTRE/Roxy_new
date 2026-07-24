@@ -1,16 +1,11 @@
-// -----------------------------------------------------------------------------
-// main.tsx
-// -----------------------------------------------------------------------------
-// Purpose: Entry point (ReactDOM render). Placeholder only.
-//
-// Responsibilities:
-//   - TODO: describe responsibilities
-//
-// Dependencies:
-//   - TODO: list dependencies
-//
-// Future Implementation:
-//   - TODO: implementation notes
-// -----------------------------------------------------------------------------
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { AppRouter } from '../routes/AppRouter';
 
-export {}; // placeholder
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <AppRouter />
+  </React.StrictMode>
+);
+
+
