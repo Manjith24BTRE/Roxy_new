@@ -1,23 +1,27 @@
 import React from 'react';
 import { EffectGrid } from '../components/EffectGrid';
-import { CINEMATIC_EFFECTS } from './CinematicEffects.data';
+import { FIRE_EFFECTS } from './FireEffects.data';
 
-interface CinematicEffectsProps {
+interface FireEffectsProps {
   activeEffectId: string | null;
   onSelectEffect: (id: string | null) => void;
   searchQuery: string;
 }
 
-export function CinematicEffects({ activeEffectId, onSelectEffect, searchQuery }: CinematicEffectsProps) {
+export function FireEffects({
+  activeEffectId,
+  onSelectEffect,
+  searchQuery
+}: FireEffectsProps) {
   return (
     <EffectGrid
-      effects={CINEMATIC_EFFECTS}
+      effects={FIRE_EFFECTS}
       activeEffectId={activeEffectId}
       onSelectEffect={onSelectEffect}
       searchQuery={searchQuery}
-      category="cinematic"
+      category="fire"
     />
   );
 }
 
-export default CinematicEffects;
+export default FireEffects;

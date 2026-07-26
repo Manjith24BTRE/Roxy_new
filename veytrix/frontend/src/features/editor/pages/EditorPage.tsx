@@ -20,10 +20,10 @@ import { Effects } from '../../../../effects/Effects';
 import { SAMPLE_FILTERS } from '../../../../filters/samples';
 
 // Standalone Category Databases
-import { CINEMATIC_EFFECTS } from '../../../../effects/Cinematic/CinematicEffects';
-import { CAMERA_EFFECTS } from '../../../../effects/Camera/CameraEffects';
-import { BLUR_EFFECTS } from '../../../../effects/Blur/BlurEffects';
-import { GLITCH_EFFECTS } from '../../../../effects/Glitch/GlitchEffects';
+import { CINEMATIC_EFFECTS } from '../../../../effects/Cinematic/CinematicEffects.data';
+import { CAMERA_EFFECTS } from '../../../../effects/Camera/CameraEffects.data';
+import { BLUR_EFFECTS } from '../../../../effects/Blur/BlurEffects.data';
+import { GLITCH_EFFECTS } from '../../../../effects/Glitch/GlitchEffects.data';
 import { LIGHT_EFFECTS } from '../../../../effects/Light/LightEffects';
 
 // Context Menu
@@ -763,6 +763,58 @@ export function EditorPage() {
         const progress = (currentTime - (t_boundary - 0.4)) / 0.8; // Normalized 0 to 1
         const type = clip.appliedTransition;
         
+        // --- 200 NEW PREMIUM TRANSITIONS MAPPING ---
+        if (type.includes('fade') || type.includes('dissolve') || type.includes('blend') || type.includes('dip')) {
+          const opacity = Math.max(0, 1 - Math.sin(progress * Math.PI));
+          return { opacity, overlayColor: null, filter: null, transform: null };
+        }
+        if (type.includes('zoom') || type.includes('perspective') || type.includes('tunnel')) {
+          const scale = type.includes('out') ? 1 - Math.sin(progress * Math.PI) * 0.25 : 1 + Math.sin(progress * Math.PI) * 0.3;
+          return { transform: `scale(${scale})`, opacity: 1, overlayColor: null, filter: null };
+        }
+        if (type.includes('spin') || type.includes('rotate') || type.includes('flip') || type.includes('roll') || type.includes('barrel') || type.includes('helix')) {
+          const rotate = Math.sin(progress * Math.PI) * 180;
+          const rotateY = type.includes('flip') ? ` rotateY(${rotate}deg)` : '';
+          return { transform: `rotate(${rotate}deg)${rotateY}`, opacity: 1, overlayColor: null, filter: null };
+        }
+        if (type.includes('slide') || type.includes('push') || type.includes('swipe') || type.includes('card') || type.includes('gallery')) {
+          const translateVal = (progress - 0.5) * 120;
+          const isVert = type.includes('up') || type.includes('down');
+          const factor = (type.includes('left') || type.includes('up')) ? -1 : 1;
+          const transform = isVert ? `translateY(${translateVal * factor}px)` : `translateX(${translateVal * factor}px)`;
+          return { transform, opacity: 1, overlayColor: null, filter: null };
+        }
+        if (type.includes('blur')) {
+          const blurVal = Math.sin(progress * Math.PI) * 10;
+          const opacity = Math.max(0, 1 - Math.sin(progress * Math.PI) * 0.5);
+          return { filter: `blur(${blurVal}px)`, opacity, overlayColor: null, transform: null };
+        }
+        if (type.includes('glitch') || type.includes('static') || type.includes('loss') || type.includes('error') || type.includes('crash') || type.includes('storm')) {
+          const flashOpacity = Math.sin(progress * Math.PI) * 0.5;
+          const translateVal = (progress - 0.5) * 10;
+          return {
+            filter: 'hue-rotate(60deg) contrast(1.3)',
+            overlayColor: `rgba(255,255,255,${flashOpacity})`,
+            opacity: 1,
+            transform: `translateX(${translateVal}px)`
+          };
+        }
+        if (type.includes('light') || type.includes('flare') || type.includes('burn') || type.includes('glow') || type.includes('bloom') || type.includes('rays') || type.includes('burst') || type.includes('flash')) {
+          const flashOpacity = Math.sin(progress * Math.PI) * 0.9;
+          return {
+            filter: null,
+            overlayColor: `rgba(255,255,255,${flashOpacity})`,
+            opacity: 1,
+            transform: null
+          };
+        }
+        if (type.includes('whip') || type.includes('pan') || type.includes('camera') || type.includes('shake') || type.includes('handheld') || type.includes('drone') || type.includes('crane')) {
+          const blurVal = Math.sin(progress * Math.PI) * 10;
+          const translateVal = (progress - 0.5) * 80;
+          return { filter: `blur(${blurVal}px)`, transform: `translateX(${translateVal}px)`, opacity: 1, overlayColor: null };
+        }
+
+        // --- OLD TRANSITIONS FALLBACK ---
         if (type === 'fade-black' || type === 'cross-dissolve') {
           const opacity = Math.max(0, 1 - Math.sin(progress * Math.PI));
           return { opacity, overlayColor: null, filter: null, transform: null };
@@ -1308,7 +1360,7 @@ export function EditorPage() {
                                 // Apply categorized activeEffect visual styling
                                 if (activeEffectId) {
                                   const cin = CINEMATIC_EFFECTS.find(e => e.id === activeEffectId);
-                                  if (cin) {
+                                  if (cin && cin.colorGrading) {
                                     filterStr = filterStr === 'none' ? cin.colorGrading : `${filterStr} ${cin.colorGrading}`;
                                   } else if (activeEffectId.includes('blur') || BLUR_EFFECTS.some(e => e.id === activeEffectId)) {
                                     filterStr = filterStr === 'none' ? 'blur(4px)' : `${filterStr} blur(4px)`;
@@ -1316,6 +1368,16 @@ export function EditorPage() {
                                     filterStr = filterStr === 'none' ? 'hue-rotate(45deg) saturate(1.4) contrast(1.15)' : `${filterStr} hue-rotate(45deg) saturate(1.4) contrast(1.15)`;
                                   } else if (activeEffectId.includes('light') || LIGHT_EFFECTS.some(e => e.id === activeEffectId)) {
                                     filterStr = filterStr === 'none' ? 'brightness(1.2) saturate(1.1)' : `${filterStr} brightness(1.2) saturate(1.1)`;
+                                  } else if (activeEffectId.includes('analog') || activeEffectId.includes('vhs') || activeEffectId.includes('retro') || activeEffectId.includes('sepia') || activeEffectId.includes('vintage') || activeEffectId.includes('old-movie') || activeEffectId.includes('super-8') || activeEffectId.includes('film-grain') || activeEffectId.includes('film-burn') || activeEffectId.includes('color-bleed') || activeEffectId.includes('crt') || activeEffectId.includes('dust-scratches') || activeEffectId.includes('cinema-archive')) {
+                                    filterStr = filterStr === 'none' ? 'sepia(0.3) contrast(1.1) brightness(0.95)' : `${filterStr} sepia(0.3) contrast(1.1) brightness(0.95)`;
+                                  } else if (activeEffectId.includes('fire') || activeEffectId.includes('flame') || activeEffectId.includes('ember') || activeEffectId.includes('burning') || activeEffectId.includes('heat-wave') || activeEffectId.includes('lava') || activeEffectId.includes('torch') || activeEffectId.includes('inferno') || activeEffectId.includes('camp') || activeEffectId.includes('molten') || activeEffectId.includes('ash-particles')) {
+                                    filterStr = filterStr === 'none' ? 'saturate(1.2) hue-rotate(-10deg) brightness(1.05)' : `${filterStr} saturate(1.2) hue-rotate(-10deg) brightness(1.05)`;
+                                  } else if (activeEffectId.includes('smoke') || activeEffectId.includes('fog') || activeEffectId.includes('mist') || activeEffectId.includes('steam') || activeEffectId.includes('vapor') || activeEffectId.includes('dry-ice') || activeEffectId.includes('dust-cloud')) {
+                                    filterStr = filterStr === 'none' ? 'contrast(0.9) brightness(1.05) blur(1px)' : `${filterStr} contrast(0.9) brightness(1.05) blur(1px)`;
+                                  } else if (activeEffectId.includes('rain') || activeEffectId.includes('snow') || activeEffectId.includes('storm') || activeEffectId.includes('blizzard') || activeEffectId.includes('hail') || activeEffectId.includes('lightning') || activeEffectId.includes('thunder') || activeEffectId.includes('wind') || activeEffectId.includes('aurora') || activeEffectId.includes('leaves') || activeEffectId.includes('blossom') || activeEffectId.includes('meteor') || activeEffectId.includes('moonlight') || activeEffectId.includes('rainbow') || activeEffectId.includes('sunshine') || activeEffectId.includes('cloud-overlay')) {
+                                    filterStr = filterStr === 'none' ? 'hue-rotate(15deg) saturate(0.95)' : `${filterStr} hue-rotate(15deg) saturate(0.95)`;
+                                  } else if (activeEffectId.includes('particle') || activeEffectId.includes('sparkle') || activeEffectId.includes('glitter') || activeEffectId.includes('confetti') || activeEffectId.includes('heart') || activeEffectId.includes('star') || activeEffectId.includes('bubble') || activeEffectId.includes('fireflies') || activeEffectId.includes('dust') || activeEffectId.includes('shape') || activeEffectId.includes('diamond')) {
+                                    filterStr = filterStr === 'none' ? 'contrast(1.05) saturate(1.1) brightness(1.02)' : `${filterStr} contrast(1.05) saturate(1.1) brightness(1.02)`;
                                   }
                                 }
 

@@ -3,11 +3,26 @@ import { Sliders, Search } from 'lucide-react';
 import { SAMPLE_TRANSITIONS, TransitionSample } from './transitionSamples';
 // Force IDE cache refresh for folder casing
 import { Filters } from '../filters/Filters';
-import { CinematicEffects, CINEMATIC_EFFECTS } from './Cinematic/CinematicEffects';
-import { CameraEffects, CAMERA_EFFECTS } from './Camera/CameraEffects';
-import { BlurEffects, BLUR_EFFECTS } from './Blur/BlurEffects';
-import { GlitchEffects, GLITCH_EFFECTS } from './Glitch/GlitchEffects';
+import { CinematicEffects } from './Cinematic/CinematicEffects';
+import { CINEMATIC_EFFECTS } from './Cinematic/CinematicEffects.data';
+import { CameraEffects } from './Camera/CameraEffects';
+import { CAMERA_EFFECTS } from './Camera/CameraEffects.data';
+import { BlurEffects } from './Blur/BlurEffects';
+import { BLUR_EFFECTS } from './Blur/BlurEffects.data';
+import { GlitchEffects } from './Glitch/GlitchEffects';
+import { GLITCH_EFFECTS } from './Glitch/GlitchEffects.data';
 import { LightEffects, LIGHT_EFFECTS } from './Light/LightEffects';
+import { RetroVHSEffects } from './RetroVHS/RetroVHSEffects';
+import { RETRO_VHS_EFFECTS } from './RetroVHS/RetroVHSEffects.data';
+import { FireEffects } from './Fire/FireEffects';
+import { FIRE_EFFECTS } from './Fire/FireEffects.data';
+import { SmokeEffects } from './Smoke/SmokeEffects';
+import { SMOKE_EFFECTS } from './Smoke/SmokeEffects.data';
+import { WeatherEffects, WEATHER_EFFECTS } from './Weather/WeatherEffects';
+import { ParticlesEffects } from './Particles/ParticlesEffects';
+import { PARTICLES_EFFECTS } from './Particles/ParticlesEffects.data';
+import { Transitions } from '../transitions/Transitions';
+import { SAMPLE_TRANSITIONS_NEW } from '../transitions/Transitions.data';
 
 interface EffectsProps {
   activeEffectId: string | null;
@@ -39,7 +54,7 @@ export function Effects({
   onFilterIntensityChange
 }: EffectsProps) {
   const [activeSubTab, setActiveSubTab] = useState<'effects' | 'transitions' | 'filters'>('effects');
-  const [activeCategoryTab, setActiveCategoryTab] = useState<'cinematic' | 'camera' | 'blur' | 'glitch' | 'light'>('cinematic');
+  const [activeCategoryTab, setActiveCategoryTab] = useState<'cinematic' | 'camera' | 'blur' | 'glitch' | 'light' | 'retro-vhs' | 'fire' | 'smoke' | 'weather' | 'particles'>('blur');
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredTransitions = SAMPLE_TRANSITIONS.filter((t: TransitionSample) =>
@@ -52,16 +67,28 @@ export function Effects({
     CAMERA_EFFECTS.find((e) => e.id === activeEffectId) ||
     BLUR_EFFECTS.find((e) => e.id === activeEffectId) ||
     GLITCH_EFFECTS.find((e) => e.id === activeEffectId) ||
-    LIGHT_EFFECTS.find((e) => e.id === activeEffectId);
+    LIGHT_EFFECTS.find((e) => e.id === activeEffectId) ||
+    RETRO_VHS_EFFECTS.find((e) => e.id === activeEffectId) ||
+    FIRE_EFFECTS.find((e) => e.id === activeEffectId) ||
+    SMOKE_EFFECTS.find((e) => e.id === activeEffectId) ||
+    WEATHER_EFFECTS.find((e) => e.id === activeEffectId) ||
+    PARTICLES_EFFECTS.find((e) => e.id === activeEffectId);
 
-  const activeTransition = SAMPLE_TRANSITIONS.find((t: TransitionSample) => t.id === activeTransitionId);
+  const activeTransition = 
+    SAMPLE_TRANSITIONS_NEW.find((t) => t.id === activeTransitionId) ||
+    SAMPLE_TRANSITIONS.find((t: TransitionSample) => t.id === activeTransitionId);
 
   const categories = [
-    { id: 'cinematic', name: 'Cinematic' },
-    { id: 'camera', name: 'Camera' },
     { id: 'blur', name: 'Blur' },
+    { id: 'camera', name: 'Camera' },
+    { id: 'cinematic', name: 'Cinematic' },
+    { id: 'fire', name: '🔥 Fire' },
     { id: 'glitch', name: 'Glitch' },
-    { id: 'light', name: 'Light' }
+    { id: 'light', name: 'Light' },
+    { id: 'particles', name: '✨ Particles' },
+    { id: 'retro-vhs', name: '📼 Retro & VHS' },
+    { id: 'smoke', name: '💨 Smoke' },
+    { id: 'weather', name: '🌧 Weather' }
   ];
 
   return (
@@ -198,6 +225,46 @@ export function Effects({
                       searchQuery={searchQuery}
                     />
                   )}
+
+                  {activeCategoryTab === 'retro-vhs' && (
+                    <RetroVHSEffects
+                      activeEffectId={activeEffectId}
+                      onSelectEffect={onSelectEffect}
+                      searchQuery={searchQuery}
+                    />
+                  )}
+
+                  {activeCategoryTab === 'fire' && (
+                    <FireEffects
+                      activeEffectId={activeEffectId}
+                      onSelectEffect={onSelectEffect}
+                      searchQuery={searchQuery}
+                    />
+                  )}
+
+                  {activeCategoryTab === 'smoke' && (
+                    <SmokeEffects
+                      activeEffectId={activeEffectId}
+                      onSelectEffect={onSelectEffect}
+                      searchQuery={searchQuery}
+                    />
+                  )}
+
+                  {activeCategoryTab === 'weather' && (
+                    <WeatherEffects
+                      activeEffectId={activeEffectId}
+                      onSelectEffect={onSelectEffect}
+                      searchQuery={searchQuery}
+                    />
+                  )}
+
+                  {activeCategoryTab === 'particles' && (
+                    <ParticlesEffects
+                      activeEffectId={activeEffectId}
+                      onSelectEffect={onSelectEffect}
+                      searchQuery={searchQuery}
+                    />
+                  )}
                 </div>
 
                 {/* Applied Effect Settings Sliders */}
@@ -249,62 +316,10 @@ export function Effects({
 
             {/* Transitions tab */}
             {activeSubTab === 'transitions' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onSelectTransition(null)}
-                    className={`p-3 rounded-xl border text-center transition cursor-pointer h-24 flex flex-col justify-center items-center ${
-                      !activeTransitionId
-                        ? 'bg-sky-500/10 border-sky-400/60 text-sky-400 font-semibold'
-                        : 'bg-slate-900/30 border-white/5 hover:border-white/10 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <span className="text-xl mb-1">🚫</span>
-                    <span className="text-[10px]">No Transition</span>
-                  </button>
-
-                  {filteredTransitions.map((transition: TransitionSample) => {
-                    const isSelected = transition.id === activeTransitionId;
-                    return (
-                      <button
-                        key={transition.id}
-                        type="button"
-                        onClick={() => onSelectTransition(transition.id)}
-                        className={`p-3 rounded-xl border text-left transition cursor-pointer h-24 flex flex-col justify-between ${
-                          isSelected
-                            ? 'bg-sky-500/10 border-sky-400/60 text-sky-400 font-semibold shadow-glow scale-102'
-                            : 'bg-slate-900/30 border-white/5 hover:border-white/10 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        <div className="flex justify-between w-full">
-                          <span className="text-xl">{transition.icon}</span>
-                          <span className="text-[8px] px-1 bg-slate-900/80 border border-white/5 rounded text-slate-500 font-mono">{transition.type}</span>
-                        </div>
-                        <div className="w-full truncate text-[10px] font-semibold text-slate-200">{transition.name}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {activeTransition && (
-                  <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-3 space-y-3">
-                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-sky-400 uppercase tracking-wider">
-                      <Sliders className="h-3.5 w-3.5" />
-                      <span>Transition Timing</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-400">Default Duration</span>
-                      <span className="font-mono text-slate-200 bg-slate-900 border border-white/15 px-2 py-0.5 rounded">
-                        {activeTransition.defaultDuration} seconds
-                      </span>
-                    </div>
-                    <p className="text-[9px] text-slate-500 leading-normal italic">
-                      "{activeTransition.description}"
-                    </p>
-                  </div>
-                )}
-              </div>
+              <Transitions
+                activeTransitionId={activeTransitionId}
+                onSelectTransition={onSelectTransition}
+              />
             )}
           </div>
         </>

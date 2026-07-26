@@ -1,23 +1,27 @@
 import React from 'react';
 import { EffectGrid } from '../components/EffectGrid';
-import { CINEMATIC_EFFECTS } from './CinematicEffects.data';
+import { RETRO_VHS_EFFECTS } from './RetroVHSEffects.data';
 
-interface CinematicEffectsProps {
+interface RetroVHSEffectsProps {
   activeEffectId: string | null;
   onSelectEffect: (id: string | null) => void;
   searchQuery: string;
 }
 
-export function CinematicEffects({ activeEffectId, onSelectEffect, searchQuery }: CinematicEffectsProps) {
+export function RetroVHSEffects({
+  activeEffectId,
+  onSelectEffect,
+  searchQuery
+}: RetroVHSEffectsProps) {
   return (
     <EffectGrid
-      effects={CINEMATIC_EFFECTS}
+      effects={RETRO_VHS_EFFECTS}
       activeEffectId={activeEffectId}
       onSelectEffect={onSelectEffect}
       searchQuery={searchQuery}
-      category="cinematic"
+      category="retro-vhs"
     />
   );
 }
 
-export default CinematicEffects;
+export default RetroVHSEffects;

@@ -9,12 +9,12 @@ export interface TransitionSample {
 
 export const SAMPLE_TRANSITIONS: TransitionSample[] = [
   {
-    id: 'fade-black',
-    name: 'Fade to Black',
-    type: 'Fade',
-    defaultDuration: 0.5,
-    description: 'Smoothly fade the clip to complete blackness before bringing in the next clip.',
-    icon: '🌑'
+    id: 'page-flip',
+    name: 'Creative Page Curl',
+    type: 'Creative',
+    defaultDuration: 0.8,
+    description: 'Simulates the page of a book folding over to reveal the new video track.',
+    icon: '📖'
   },
   {
     id: 'cross-dissolve',
@@ -23,6 +23,30 @@ export const SAMPLE_TRANSITIONS: TransitionSample[] = [
     defaultDuration: 0.8,
     description: 'Blends the ending of the first clip into the beginning of the second clip.',
     icon: '🌫️'
+  },
+  {
+    id: 'fade-black',
+    name: 'Fade to Black',
+    type: 'Fade',
+    defaultDuration: 0.5,
+    description: 'Smoothly fade the clip to complete blackness before bringing in the next clip.',
+    icon: '🌑'
+  },
+  {
+    id: 'glitch-cut',
+    name: 'Glitch Flash Cut',
+    type: 'Glitch',
+    defaultDuration: 0.3,
+    description: 'A sudden burst of digital static interference and screen tearing between clips.',
+    icon: '⚡'
+  },
+  {
+    id: 'spin-clockwise',
+    name: 'Rotate Spin 360',
+    type: 'Spin',
+    defaultDuration: 0.7,
+    description: 'Revolves the camera scene rapidly around the center pivot.',
+    icon: '🔄'
   },
   {
     id: 'slide-left',
@@ -63,29 +87,5 @@ export const SAMPLE_TRANSITIONS: TransitionSample[] = [
     defaultDuration: 0.5,
     description: 'Scales the outgoing clip down, sinking into the background.',
     icon: '🔎'
-  },
-  {
-    id: 'spin-clockwise',
-    name: 'Rotate Spin 360',
-    type: 'Spin',
-    defaultDuration: 0.7,
-    description: 'Revolves the camera scene rapidly around the center pivot.',
-    icon: '🔄'
-  },
-  {
-    id: 'glitch-cut',
-    name: 'Glitch Flash Cut',
-    type: 'Glitch',
-    defaultDuration: 0.3,
-    description: 'A sudden burst of digital static interference and screen tearing between clips.',
-    icon: '⚡'
-  },
-  {
-    id: 'page-flip',
-    name: 'Creative Page Curl',
-    type: 'Creative',
-    defaultDuration: 0.8,
-    description: 'Simulates the page of a book folding over to reveal the new video track.',
-    icon: '📖'
   }
 ];
