@@ -17,14 +17,10 @@ import { TextPanel, TextOverlay } from '../../../../text/TextPanel';
 import { Captions, CaptionItem } from '../../../../captions/Captions';
 import { Effects } from '../../../../effects/Effects';
 // Force IDE cache refresh for folder casing
-import { SAMPLE_FILTERS } from '../../../../filters/samples';
+import { SAMPLE_FILTERS, getInterpolatedFilter } from '../../../../filters/samples';
+import { EFFECT_PRESETS, EffectPreset, AppliedEffect, EffectKeyframe, getInterpolatedEffectProps } from '../../../../effects/effectsPreset';
 
-// Standalone Category Databases
-import { CINEMATIC_EFFECTS } from '../../../../effects/Cinematic/CinematicEffects.data';
-import { CAMERA_EFFECTS } from '../../../../effects/Camera/CameraEffects.data';
-import { BLUR_EFFECTS } from '../../../../effects/Blur/BlurEffects.data';
-import { GLITCH_EFFECTS } from '../../../../effects/Glitch/GlitchEffects.data';
-import { LIGHT_EFFECTS } from '../../../../effects/Light/LightEffects';
+
 
 // Context Menu
 import { TimelineContextMenu } from '../components/Timeline/TimelineContextMenu';
@@ -199,21 +195,163 @@ export function EditorPage() {
     }
   };
 
-  const handleAddEffectAtPlayhead = (effectId: string | null) => {
-    setActiveEffectId(effectId);
-    if (effectId) {
+  const handleAddAppliedEffect = (presetId: string) => {
+    const preset = EFFECT_PRESETS.find(p => p.id === presetId);
+    if (!preset) return;
+
+    const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
+    const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) || 
+                       (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
+
+    if (activeClip) {
+      const newEffect: AppliedEffect = {
+        id: `effect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        presetId: preset.id,
+        name: preset.name,
+        category: preset.category,
+        enabled: true,
+        intensity: preset.defaultIntensity,
+        opacity: preset.defaultOpacity,
+        speed: preset.defaultSpeed,
+        angle: preset.defaultAngle,
+        direction: preset.defaultDirection,
+        blendMode: preset.defaultBlendMode,
+        keyframes: []
+      };
+
       setTimelineClips((prev) =>
         prev.map((c) => {
-          if (currentTime >= c.timelineStart && currentTime <= c.timelineStart + c.duration) {
-            const relativePlayhead = currentTime - c.timelineStart;
-            const effects = c.effects ? [...c.effects, { id: effectId, time: relativePlayhead }] : [{ id: effectId, time: relativePlayhead }];
-            return { ...c, effects };
+          if (c.id === activeClip.id) {
+            const appliedEffects = c.appliedEffects ? [...c.appliedEffects, newEffect] : [newEffect];
+            return { ...c, appliedEffects };
           }
           return c;
         })
       );
-      showToast(`Effect "${effectId}" applied at playhead position ${currentTime.toFixed(2)}s`);
+      setActiveAppliedEffectId(newEffect.id);
+      showToast(`Effect "${preset.name}" applied to active clip`);
+    } else {
+      showToast('No active clip found to apply effect');
     }
+  };
+
+  const handleDeleteAppliedEffect = (clipId: string, effectId: string) => {
+    setTimelineClips((prev) =>
+      prev.map((c) => {
+        if (c.id === clipId) {
+          const appliedEffects = c.appliedEffects ? c.appliedEffects.filter((e: any) => e.id !== effectId) : [];
+          return { ...c, appliedEffects };
+        }
+        return c;
+      })
+    );
+    if (activeAppliedEffectId === effectId) {
+      setActiveAppliedEffectId(null);
+    }
+    showToast('Effect removed');
+  };
+
+  const handleToggleAppliedEffect = (clipId: string, effectId: string) => {
+    setTimelineClips((prev) =>
+      prev.map((c) => {
+        if (c.id === clipId) {
+          const appliedEffects = c.appliedEffects ? c.appliedEffects.map((e: any) => 
+            e.id === effectId ? { ...e, enabled: !e.enabled } : e
+          ) : [];
+          return { ...c, appliedEffects };
+        }
+        return c;
+      })
+    );
+  };
+
+  const handleUpdateAppliedEffect = (clipId: string, effectId: string, updates: Partial<AppliedEffect>) => {
+    setTimelineClips((prev) =>
+      prev.map((c) => {
+        if (c.id === clipId) {
+          const appliedEffects = c.appliedEffects ? c.appliedEffects.map((e: any) => 
+            e.id === effectId ? { ...e, ...updates } : e
+          ) : [];
+          return { ...c, appliedEffects };
+        }
+        return c;
+      })
+    );
+  };
+
+  const handleDuplicateAppliedEffect = (clipId: string, effectId: string) => {
+    setTimelineClips((prev) =>
+      prev.map((c) => {
+        if (c.id === clipId && c.appliedEffects) {
+          const target = c.appliedEffects.find((e: any) => e.id === effectId);
+          if (target) {
+            const cloned: AppliedEffect = {
+              ...target,
+              id: `effect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              name: `${target.name} (Copy)`
+            };
+            return { ...c, appliedEffects: [...c.appliedEffects, cloned] };
+          }
+        }
+        return c;
+      })
+    );
+    showToast('Effect duplicated');
+  };
+
+  const handleReorderAppliedEffects = (clipId: string, startIndex: number, endIndex: number) => {
+    setTimelineClips((prev) =>
+      prev.map((c) => {
+        if (c.id === clipId && c.appliedEffects) {
+          const result = Array.from(c.appliedEffects);
+          const [removed] = result.splice(startIndex, 1);
+          result.splice(endIndex, 0, removed);
+          return { ...c, appliedEffects: result };
+        }
+        return c;
+      })
+    );
+  };
+
+  const handleAddEffectKeyframe = (clipId: string, effectId: string, time: number, properties: any) => {
+    setTimelineClips((prev) =>
+      prev.map((c) => {
+        if (c.id === clipId && c.appliedEffects) {
+          const appliedEffects = c.appliedEffects.map((e: any) => {
+            if (e.id === effectId) {
+              const keyframe = {
+                id: `kf-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                time,
+                properties
+              };
+              const keyframes = e.keyframes ? [...e.keyframes, keyframe] : [keyframe];
+              return { ...e, keyframes };
+            }
+            return e;
+          });
+          return { ...c, appliedEffects };
+        }
+        return c;
+      })
+    );
+  };
+
+  const handleDeleteEffectKeyframe = (clipId: string, effectId: string, keyframeId: string) => {
+    setTimelineClips((prev) =>
+      prev.map((c) => {
+        if (c.id === clipId && c.appliedEffects) {
+          const appliedEffects = c.appliedEffects.map((e: any) => {
+            if (e.id === effectId) {
+              const keyframes = e.keyframes ? e.keyframes.filter((k: any) => k.id !== keyframeId) : [];
+              return { ...e, keyframes };
+            }
+            return e;
+          });
+          return { ...c, appliedEffects };
+        }
+        return c;
+      })
+    );
   };
 
   const handleAddFilterAtPlayhead = (filterId: string | null) => {
@@ -355,8 +493,14 @@ export function EditorPage() {
   const [activeOverlayId, setActiveOverlayId] = useState<string | null>(null);
   const [captions, setCaptions] = useState<CaptionItem[]>([]);
   const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
+  const [previewFilterId, setPreviewFilterId] = useState<string | null>(null);
   const [filterIntensity, setFilterIntensity] = useState(80);
+  const [filterOpacity, setFilterOpacity] = useState(100);
+  const [filterBlendMode, setFilterBlendMode] = useState('normal');
+  const [filterEnabled, setFilterEnabled] = useState(true);
+  const [showBeforeOnly, setShowBeforeOnly] = useState(false);
   const [activeEffectId, setActiveEffectId] = useState<string | null>(null);
+  const [activeAppliedEffectId, setActiveAppliedEffectId] = useState<string | null>(null);
   const [effectStrength, setEffectStrength] = useState(60);
   const [effectSpeed, setEffectSpeed] = useState(50);
   const [activeTransitionId, setActiveTransitionId] = useState<string | null>(null);
@@ -510,7 +654,7 @@ export function EditorPage() {
     timelineClips.forEach((clip) => {
       const video = videoRefs.current[clip.id];
       if (video) {
-        video.volume = volume;
+        video.volume = Math.min(1, Math.max(0, volume));
         video.muted = isMuted || !!mutedClips[clip.id];
       }
     });
@@ -1275,18 +1419,33 @@ export function EditorPage() {
 
             {activeTab === 'effects' && (
               <Effects
-                activeEffectId={activeEffectId}
-                onSelectEffect={handleAddEffectAtPlayhead}
+                timelineClips={timelineClips}
+                currentTime={currentTime}
                 activeTransitionId={activeTransitionId}
                 onSelectTransition={handleSelectTransition}
-                effectStrength={effectStrength}
-                onEffectStrengthChange={setEffectStrength}
-                effectSpeed={effectSpeed}
-                onEffectSpeedChange={setEffectSpeed}
                 activeFilterId={activeFilterId}
                 onSelectFilter={handleAddFilterAtPlayhead}
                 filterIntensity={filterIntensity}
                 onFilterIntensityChange={setFilterIntensity}
+                filterOpacity={filterOpacity}
+                onFilterOpacityChange={setFilterOpacity}
+                filterBlendMode={filterBlendMode}
+                onFilterBlendModeChange={setFilterBlendMode}
+                filterEnabled={filterEnabled}
+                onFilterEnabledChange={setFilterEnabled}
+                showBeforeOnly={showBeforeOnly}
+                onShowBeforeOnlyChange={setShowBeforeOnly}
+                onHoverFilter={setPreviewFilterId}
+                activeAppliedEffectId={activeAppliedEffectId}
+                onSetActiveAppliedEffectId={setActiveAppliedEffectId}
+                onAddAppliedEffect={handleAddAppliedEffect}
+                onDeleteAppliedEffect={handleDeleteAppliedEffect}
+                onToggleAppliedEffect={handleToggleAppliedEffect}
+                onUpdateAppliedEffect={handleUpdateAppliedEffect}
+                onDuplicateAppliedEffect={handleDuplicateAppliedEffect}
+                onReorderAppliedEffects={handleReorderAppliedEffects}
+                onAddEffectKeyframe={handleAddEffectKeyframe}
+                onDeleteEffectKeyframe={handleDeleteEffectKeyframe}
               />
             )}
           </div>
@@ -1338,61 +1497,784 @@ export function EditorPage() {
                     <>
                       {timelineClips.map((clip) => {
                         const isClipActive = activeClip?.id === clip.id;
-                        return (
-                          <video
-                            key={clip.id}
-                            ref={(el) => {
-                              videoRefs.current[clip.id] = el;
-                              if (el) {
-                                el.volume = volume;
-                                el.muted = isMuted || !!mutedClips[clip.id];
+                        const localTime = (currentTime - clip.timelineStart) + clip.startOffset;
+
+                        // Dynamic transform interpolation from applied effects keyframes
+                        let clipScale = canvasScale;
+                        let clipRotation = canvasRotation;
+                        let clipScaleX = 1;
+                        let clipScaleY = 1;
+                        let posX = 0;
+                        let posY = 0;
+
+                        if (clip.appliedEffects && isClipActive) {
+                          clip.appliedEffects.forEach((eff: AppliedEffect) => {
+                            if (!eff.enabled || showBeforeOnly) return;
+                            const props = getInterpolatedEffectProps(eff, localTime);
+                            if (props.scale !== undefined && props.scale !== 1) {
+                              clipScale = clipScale * props.scale;
+                            }
+                            if (props.rotation !== undefined && props.rotation !== 0) {
+                              clipRotation = clipRotation + props.rotation;
+                            }
+                            if (props.positionX !== undefined) posX += props.positionX;
+                            if (props.positionY !== undefined) posY += props.positionY;
+
+                            // Dynamic Camera Shake
+                            if (props.shakeAmount && props.shakeAmount > 0) {
+                              const freq = props.frequency || 10;
+                              const shakeTime = currentTime * freq;
+                              posX += Math.sin(shakeTime) * props.shakeAmount * 1.5;
+                              posY += Math.cos(shakeTime * 1.2) * props.shakeAmount * 1.5;
+                            }
+
+                            // Dynamic Basic Effects Animations
+                            const presetId = eff.presetId;
+                            const speedFactor = eff.speed / 50;
+                            const intFactor = eff.intensity / 100;
+                            const duration = clip.duration || 5;
+
+                            if (presetId === 'basic-zoom-in') {
+                              const p = Math.min(1, localTime / 2);
+                              clipScale = clipScale * (1 + p * 0.3 * intFactor);
+                            } else if (presetId === 'basic-zoom-out') {
+                              const p = Math.min(1, localTime / 2);
+                              clipScale = clipScale * (1.3 - p * 0.3 * intFactor);
+                            } else if (presetId === 'basic-move-left') {
+                              posX -= Math.min(1, localTime / 1.5) * 150 * intFactor;
+                            } else if (presetId === 'basic-move-right') {
+                              posX += Math.min(1, localTime / 1.5) * 150 * intFactor;
+                            } else if (presetId === 'basic-move-up') {
+                              posY -= Math.min(1, localTime / 1.5) * 150 * intFactor;
+                            } else if (presetId === 'basic-move-down') {
+                              posY += Math.min(1, localTime / 1.5) * 150 * intFactor;
+                            } else if (presetId === 'basic-spin-cw') {
+                              clipRotation += localTime * 90 * speedFactor * intFactor;
+                            } else if (presetId === 'basic-spin-ccw') {
+                              clipRotation -= localTime * 90 * speedFactor * intFactor;
+                            } else if (presetId === 'basic-flip-h') {
+                              clipScaleX = -1;
+                            } else if (presetId === 'basic-flip-v') {
+                              clipScaleY = -1;
+                            } else if (presetId === 'basic-scale-up') {
+                              clipScale = clipScale * (1 + 0.35 * intFactor);
+                            } else if (presetId === 'basic-scale-down') {
+                              clipScale = clipScale * (1 - 0.35 * intFactor);
+                            } else if (presetId === 'basic-bounce') {
+                              const wave = localTime * Math.PI * 2 * speedFactor * 1.5;
+                              posY -= Math.abs(Math.sin(wave)) * 50 * intFactor;
+                            } else if (presetId === 'basic-pulse') {
+                              const wave = localTime * Math.PI * 2 * speedFactor;
+                              clipScale = clipScale * (1 + Math.sin(wave) * 0.1 * intFactor);
+                            } else if (presetId === 'basic-shake') {
+                              const sT = localTime * 35 * speedFactor;
+                              posX += Math.sin(sT) * 12 * intFactor;
+                              posY += Math.cos(sT * 1.2) * 12 * intFactor;
+                            } else if (presetId === 'basic-swing') {
+                              const wave = localTime * Math.PI * 2 * speedFactor;
+                              clipRotation += Math.sin(wave) * 15 * intFactor;
+                            } else if (presetId === 'basic-elastic') {
+                              const t = localTime * speedFactor;
+                              const spring = Math.exp(-3 * t) * Math.cos(10 * t);
+                              clipScale = clipScale * (1 + (1 - spring) * 0.25 * intFactor);
+                            } else if (presetId === 'basic-stretch') {
+                              clipScaleX = 1.35 * intFactor;
+                            } else if (presetId === 'basic-compress') {
+                              clipScaleX = 0.65 * intFactor;
+                            } else if (presetId === 'basic-grow') {
+                              const p = localTime / duration;
+                              clipScale = clipScale * (1 + p * 0.4 * intFactor);
+                            } else if (presetId === 'basic-shrink') {
+                              const p = localTime / duration;
+                              clipScale = clipScale * (1 - p * 0.3 * intFactor);
+                            } else if (presetId === 'basic-rotate-l') {
+                              clipRotation -= 45 * intFactor;
+                            } else if (presetId === 'basic-rotate-r') {
+                              clipRotation += 45 * intFactor;
+                            } else if (presetId === 'basic-float-up') {
+                              posY -= Math.sin(localTime * 2.5 * speedFactor) * 30 * intFactor;
+                            } else if (presetId === 'basic-float-down') {
+                              posY += Math.sin(localTime * 2.5 * speedFactor) * 30 * intFactor;
+                            } else if (presetId === 'basic-pop-in') {
+                              const p = Math.min(1, localTime / 0.5);
+                              clipScale = clipScale * p * intFactor;
+                            } else if (presetId === 'basic-pop-out') {
+                              const p = Math.max(0, (duration - localTime) / 0.5);
+                              clipScale = clipScale * p * intFactor;
+                            } else if (presetId === 'basic-jelly') {
+                              const wave = localTime * Math.PI * 2 * speedFactor;
+                              clipScaleX = clipScaleX * (1 + Math.sin(wave) * 0.15 * intFactor);
+                              clipScaleY = clipScaleY * (1 - Math.sin(wave) * 0.15 * intFactor);
+                            } else if (presetId === 'basic-rubber') {
+                              const wave = localTime * Math.PI * 2 * speedFactor;
+                              clipScaleX = clipScaleX * (1 + Math.abs(Math.sin(wave)) * 0.2 * intFactor);
+                              clipScaleY = clipScaleY * (1 + Math.abs(Math.cos(wave)) * 0.2 * intFactor);
+                            } else if (presetId === 'basic-swing-l') {
+                              const wave = localTime * Math.PI * 2 * speedFactor;
+                              clipRotation += Math.sin(wave) * 12 * intFactor;
+                              posX -= Math.abs(Math.sin(wave)) * 25 * intFactor;
+                            } else if (presetId === 'basic-swing-r') {
+                              const wave = localTime * Math.PI * 2 * speedFactor;
+                              clipRotation += Math.sin(wave) * 12 * intFactor;
+                              posX += Math.abs(Math.sin(wave)) * 25 * intFactor;
+                            } else if (presetId === 'basic-heartbeat') {
+                              const pulse = (localTime * speedFactor) % 1;
+                              const h = pulse < 0.15 ? Math.sin(pulse * Math.PI / 0.15) * 0.12 : pulse < 0.3 ? Math.sin((pulse - 0.15) * Math.PI / 0.15) * 0.08 : 0;
+                              clipScale = clipScale * (1 + h * intFactor);
+                            } else if (presetId === 'basic-quick-zoom') {
+                              const p = Math.min(1, localTime / 0.6);
+                              clipScale = clipScale * (1 + (1 - p) * 0.6 * intFactor);
+                            } else if (presetId === 'basic-slow-zoom') {
+                              const p = localTime / duration;
+                              clipScale = clipScale * (1 + p * 0.25 * intFactor);
+                            } else if (presetId === 'basic-micro-shake') {
+                              const s = localTime * 60 * speedFactor;
+                              posX += Math.sin(s) * 3 * intFactor;
+                              posY += Math.cos(s * 1.3) * 3 * intFactor;
+                            } else if (presetId === 'basic-macro-shake') {
+                              const s = localTime * 12 * speedFactor;
+                              posX += Math.sin(s) * 25 * intFactor;
+                              posY += Math.cos(s * 1.3) * 25 * intFactor;
+                            } else if (presetId === 'basic-drift-l') {
+                              posX -= (localTime / duration) * 100 * intFactor;
+                            } else if (presetId === 'basic-drift-r') {
+                              posX += (localTime / duration) * 100 * intFactor;
+                            } else if (presetId === 'basic-drift-up') {
+                              posY -= (localTime / duration) * 100 * intFactor;
+                            } else if (presetId === 'basic-drift-down') {
+                              posY += (localTime / duration) * 100 * intFactor;
+                            } else if (presetId === 'basic-rotate-zoom') {
+                              const p = localTime / duration;
+                              clipRotation += p * 36 * intFactor;
+                              clipScale = clipScale * (1 + p * 0.15 * intFactor);
+                            } else if (presetId === 'basic-scale-rotate') {
+                              const p = localTime / duration;
+                              clipScale = clipScale * (1 + Math.sin(localTime * 3) * 0.08 * intFactor);
+                              clipRotation += p * 45 * intFactor;
+                            } else if (presetId === 'basic-expand') {
+                              const p = Math.min(1, localTime / 1.2);
+                              clipScale = clipScale * (0.7 + p * 0.3 * intFactor);
+                            } else if (presetId === 'basic-collapse') {
+                              const p = Math.min(1, localTime / 1.2);
+                              clipScale = clipScale * (1.0 - p * 0.3 * intFactor);
+                            } else if (presetId === 'basic-ease-in') {
+                              const p = Math.pow(Math.min(1, localTime / duration), 2);
+                              posX += p * 120 * intFactor;
+                            } else if (presetId === 'basic-ease-out') {
+                              const p = 1 - Math.pow(1 - Math.min(1, localTime / duration), 2);
+                              posX += p * 120 * intFactor;
+                            } else if (presetId === 'camera-handheld') {
+                              posX += Math.sin(localTime * 1.5 * speedFactor) * 15 * intFactor;
+                              posY += Math.cos(localTime * 1.1 * speedFactor) * 12 * intFactor;
+                              clipRotation += Math.sin(localTime * 0.8 * speedFactor) * 1.5 * intFactor;
+                            } else if (presetId === 'camera-shake') {
+                              const s = localTime * 35 * speedFactor;
+                              posX += Math.sin(s) * 12 * intFactor;
+                              posY += Math.cos(s * 1.2) * 12 * intFactor;
+                            } else if (presetId === 'camera-earthquake') {
+                              const s = localTime * 60 * speedFactor;
+                              posX += Math.sin(s) * 35 * intFactor;
+                              posY += Math.cos(s * 1.4) * 30 * intFactor;
+                            } else if (presetId === 'camera-crash-zoom') {
+                              const p = Math.min(1, localTime / 0.6);
+                              const ease = Math.pow(p, 3);
+                              clipScale = clipScale * (1 + ease * 0.7 * intFactor);
+                            } else if (presetId === 'camera-whip-l') {
+                              const p = Math.min(1, localTime / 0.5);
+                              posX -= (1 - p) * 350 * intFactor;
+                            } else if (presetId === 'camera-whip-r') {
+                              const p = Math.min(1, localTime / 0.5);
+                              posX += (1 - p) * 350 * intFactor;
+                            } else if (presetId === 'camera-whip-up') {
+                              const p = Math.min(1, localTime / 0.5);
+                              posY -= (1 - p) * 350 * intFactor;
+                            } else if (presetId === 'camera-whip-down') {
+                              const p = Math.min(1, localTime / 0.5);
+                              posY += (1 - p) * 350 * intFactor;
+                            } else if (presetId === 'camera-dolly-in') {
+                              clipScale = clipScale * (1 + (localTime / duration) * 0.3 * intFactor);
+                            } else if (presetId === 'camera-dolly-out') {
+                              clipScale = clipScale * (1 - (localTime / duration) * 0.25 * intFactor);
+                            } else if (presetId === 'camera-truck-l') {
+                              posX -= (localTime / duration) * 120 * intFactor;
+                            } else if (presetId === 'camera-truck-r') {
+                              posX += (localTime / duration) * 120 * intFactor;
+                            } else if (presetId === 'camera-pedestal-up') {
+                              posY -= (localTime / duration) * 120 * intFactor;
+                            } else if (presetId === 'camera-pedestal-down') {
+                              posY += (localTime / duration) * 120 * intFactor;
+                            } else if (presetId === 'camera-orbit-l') {
+                              const angle = (localTime / duration) * Math.PI * intFactor;
+                              posX -= Math.sin(angle) * 80 * speedFactor;
+                              clipScale = clipScale * (1 + (1 - Math.cos(angle)) * 0.08);
+                            } else if (presetId === 'camera-orbit-r') {
+                              const angle = (localTime / duration) * Math.PI * intFactor;
+                              posX += Math.sin(angle) * 80 * speedFactor;
+                              clipScale = clipScale * (1 + (1 - Math.cos(angle)) * 0.08);
+                            } else if (presetId === 'camera-roll-l') {
+                              clipRotation -= (localTime / duration) * 30 * speedFactor * intFactor;
+                            } else if (presetId === 'camera-roll-r') {
+                              clipRotation += (localTime / duration) * 30 * speedFactor * intFactor;
+                            } else if (presetId === 'camera-dutch-angle') {
+                              clipRotation += 12 * intFactor;
+                            } else if (presetId === 'camera-snap-zoom') {
+                              const p = (localTime * speedFactor) % 2;
+                              const snap = p < 0.4 ? Math.sin((p / 0.4) * Math.PI / 2) * 0.5 : p < 1.0 ? 0.5 - ((p - 0.4) / 0.6) * 0.5 : 0;
+                              clipScale = clipScale * (1 + snap * intFactor);
+                            } else if (presetId === 'camera-slow-push') {
+                              clipScale = clipScale * (1 + (localTime / duration) * 0.15 * intFactor);
+                            } else if (presetId === 'camera-slow-pull') {
+                              clipScale = clipScale * (1 - (localTime / duration) * 0.12 * intFactor);
+                            } else if (presetId === 'camera-action-cam') {
+                              posX += Math.sin(localTime * 25 * speedFactor) * 8 * intFactor;
+                              posY += Math.cos(localTime * 22 * speedFactor) * 8 * intFactor;
+                              clipRotation += Math.sin(localTime * 15 * speedFactor) * 2 * intFactor;
+                            } else if (presetId === 'camera-drone-rise') {
+                              posY -= (localTime / duration) * 90 * intFactor;
+                              clipScale = clipScale * (1 - (localTime / duration) * 0.08 * intFactor);
+                            } else if (presetId === 'camera-drone-drop') {
+                              posY += (localTime / duration) * 90 * intFactor;
+                              clipScale = clipScale * (1 + (localTime / duration) * 0.08 * intFactor);
+                            } else if (presetId === 'camera-fpv-dive') {
+                              clipRotation += (localTime / duration) * 90 * speedFactor * intFactor;
+                              posY += (localTime / duration) * 180 * speedFactor * intFactor;
+                              clipScale = clipScale * (1 + (localTime / duration) * 0.3 * intFactor);
+                            } else if (presetId === 'camera-fpv-fly') {
+                              posX += Math.sin(localTime * 2 * speedFactor) * 60 * intFactor;
+                              posY -= Math.sin(localTime * 1.5 * speedFactor) * 20 * intFactor;
+                            } else if (presetId === 'camera-steadicam') {
+                              posX += Math.sin(localTime * 0.8 * speedFactor) * 4 * intFactor;
+                              posY += Math.cos(localTime * 0.6 * speedFactor) * 3 * intFactor;
+                            } else if (presetId === 'camera-walking-cam') {
+                              const walkCycle = localTime * Math.PI * 2 * 1.5 * speedFactor;
+                              posY -= Math.abs(Math.sin(walkCycle)) * 12 * intFactor;
+                              posX += Math.cos(walkCycle / 2) * 5 * intFactor;
+                            } else if (presetId === 'camera-running-cam') {
+                              const runCycle = localTime * Math.PI * 2 * 3.0 * speedFactor;
+                              posY -= Math.abs(Math.sin(runCycle)) * 30 * intFactor;
+                              posX += Math.cos(runCycle / 2) * 12 * intFactor;
+                              clipRotation += Math.sin(runCycle) * 2.5 * intFactor;
+                            } else if (presetId === 'camera-pov-motion') {
+                              posX += Math.sin(localTime * 2 * speedFactor) * 15 * intFactor;
+                              posY += Math.cos(localTime * 1.6 * speedFactor) * 8 * intFactor;
+                            } else if (presetId === 'camera-lens-breathing') {
+                              const breathe = Math.sin(localTime * Math.PI * speedFactor);
+                              clipScale = clipScale * (1 + breathe * 0.025 * intFactor);
+                            } else if (presetId === 'camera-parallax') {
+                              clipScale = clipScale * (1 + (localTime / duration) * 0.12 * intFactor);
+                              posX -= (localTime / duration) * 50 * intFactor;
+                            } else if (presetId === 'camera-360-orbit') {
+                              clipRotation += (localTime / duration) * 360 * speedFactor * intFactor;
+                            } else if (presetId === 'camera-arc-shot') {
+                              const arc = (localTime / duration) * Math.PI * intFactor;
+                              posX += Math.sin(arc) * 100 * speedFactor;
+                              clipRotation -= (localTime / duration) * 30 * intFactor;
+                            } else if (presetId === 'camera-drift') {
+                              posX += Math.sin(localTime * 0.5 * speedFactor) * 25 * intFactor;
+                              posY += Math.cos(localTime * 0.7 * speedFactor) * 25 * intFactor;
+                            } else if (presetId === 'camera-tilt-up') {
+                              posY -= (localTime / duration) * 70 * intFactor;
+                            } else if (presetId === 'camera-tilt-down') {
+                              posY += (localTime / duration) * 70 * intFactor;
+                            } else if (presetId === 'camera-pan-l') {
+                              posX -= (localTime / duration) * 70 * intFactor;
+                            } else if (presetId === 'camera-pan-r') {
+                              posX += (localTime / duration) * 70 * intFactor;
+                            } else if (presetId === 'camera-jitter-cam') {
+                              const j = localTime * 80 * speedFactor;
+                              posX += Math.sin(j) * 2.5 * intFactor;
+                              posY += Math.cos(j * 1.2) * 2.5 * intFactor;
+                            } else if (presetId === 'camera-doc-cam') {
+                              posX += Math.sin(localTime * 1.2 * speedFactor) * 10 * intFactor;
+                              const zoomStep = Math.floor(localTime * speedFactor) % 3 === 0 ? 0.08 : 0;
+                              clipScale = clipScale * (1 + zoomStep * intFactor);
+                            } else if (presetId === 'camera-cinema-cam') {
+                              posX += Math.sin(localTime * 0.6) * 5 * intFactor;
+                            } else if (presetId === 'camera-movie-push') {
+                              clipScale = clipScale * (1 + (localTime / duration) * 0.18 * intFactor);
+                            } else if (presetId === 'camera-epic-zoom') {
+                              clipScale = clipScale * (1 - (localTime / duration) * 0.22 * intFactor);
+                            } else if (presetId.startsWith('glitch-')) {
+                              const glitchFreq = 30 * speedFactor;
+                              const isGlitchFrame = Math.sin(localTime * glitchFreq) > (0.85 - intFactor * 0.25);
+                              if (isGlitchFrame) {
+                                const noiseX = Math.sin(localTime * 100) * 20 * intFactor;
+                                const noiseY = Math.cos(localTime * 120) * 12 * intFactor;
+                                posX += noiseX;
+                                posY += noiseY;
+                                if (presetId === 'glitch-screen-tear' || presetId === 'glitch-slice' || presetId === 'glitch-block-shift' || presetId === 'glitch-mirror') {
+                                  clipScaleX = clipScaleX * (1 + (Math.sin(localTime * 200) * 0.08 * intFactor));
+                                  posX += Math.sin(localTime * 150) * 35 * intFactor;
+                                }
+                                if (presetId === 'glitch-digital' || presetId === 'glitch-corruption' || presetId === 'glitch-cyber' || presetId === 'glitch-quantum' || presetId === 'glitch-master') {
+                                  clipRotation += Math.sin(localTime * 90) * 4 * intFactor;
+                                }
                               }
-                            }}
-                            src={clip.url}
-                            preload="auto"
-                            className="h-full w-full object-contain mx-auto pointer-events-none transition-all duration-150 absolute inset-0"
-                            style={{
-                              display: isClipActive ? 'block' : 'none',
-                              filter: (() => {
-                                const filterObj = SAMPLE_FILTERS.find((f: any) => f.id === activeFilterId);
-                                let filterStr = filterObj ? `${filterObj.cssFilter} brightness(${1 + (filterIntensity - 80) / 400})` : 'none';
+                            } else if (presetId.startsWith('lens-')) {
+                              if (presetId === 'lens-fisheye' || presetId === 'lens-barrel' || presetId === 'lens-wide-angle' || presetId === 'lens-ultra-wide' || presetId === 'lens-telephoto' || presetId === 'lens-zoom' || presetId === 'lens-compression' || presetId === 'lens-cinema' || presetId === 'lens-vintage' || presetId === 'lens-prime' || presetId === 'lens-master') {
+                                clipScale = clipScale * (1 + 0.15 * intFactor);
+                              } else if (presetId === 'lens-twist' || presetId === 'lens-warp') {
+                                clipRotation += Math.sin(localTime * 4 * speedFactor) * 8 * intFactor;
+                                clipScale = clipScale * (1 + Math.sin(localTime * 2 * speedFactor) * 0.05 * intFactor);
+                              } else if (presetId === 'lens-breathing' || presetId === 'lens-focus-ring') {
+                                const breathe = Math.sin(localTime * 3 * speedFactor) * 0.04 * intFactor;
+                                clipScale = clipScale * (1 + breathe);
+                              } else if (presetId === 'lens-drift' || presetId === 'lens-optical-drift') {
+                                posX += Math.sin(localTime * 1.5 * speedFactor) * 10 * intFactor;
+                                posY += Math.cos(localTime * 1.2 * speedFactor) * 8 * intFactor;
+                                clipRotation += Math.sin(localTime * 0.8 * speedFactor) * 1.5 * intFactor;
+                              } else if (presetId === 'lens-pulse') {
+                                const pulse = Math.abs(Math.sin(localTime * Math.PI * speedFactor)) * 0.08 * intFactor;
+                                clipScale = clipScale * (1 + pulse);
+                              } else if (presetId === 'lens-stretch') {
+                                clipScaleX = clipScaleX * (1 + 0.2 * intFactor);
+                              } else if (presetId === 'lens-pincushion') {
+                                clipScale = clipScale * (1 - 0.12 * intFactor);
+                              }
+                            } else if (presetId.startsWith('dist-')) {
+                              if (presetId === 'dist-wave' || presetId === 'dist-water' || presetId === 'dist-heat' || presetId === 'dist-wobble' || presetId === 'dist-organic' || presetId === 'dist-fluid' || presetId === 'dist-morph' || presetId === 'dist-chaos') {
+                                posX += Math.sin(localTime * 8 * speedFactor) * 15 * intFactor;
+                                posY += Math.cos(localTime * 6 * speedFactor) * 10 * intFactor;
+                              } else if (presetId === 'dist-jelly' || presetId === 'dist-rubber' || presetId === 'dist-elastic' || presetId === 'dist-elastic-bounce') {
+                                const jellyScaleX = 1 + Math.sin(localTime * 10 * speedFactor) * 0.08 * intFactor;
+                                const jellyScaleY = 1 + Math.cos(localTime * 10 * speedFactor) * 0.08 * intFactor;
+                                clipScaleX = clipScaleX * jellyScaleX;
+                                clipScaleY = clipScaleY * jellyScaleY;
+                              } else if (presetId === 'dist-swirl' || presetId === 'dist-twist' || presetId === 'dist-spiral' || presetId === 'dist-vortex' || presetId === 'dist-tornado') {
+                                clipRotation += Math.sin(localTime * 3 * speedFactor) * 12 * intFactor;
+                                clipScale = clipScale * (1 + 0.05 * intFactor);
+                              } else if (presetId === 'dist-stretch' || presetId === 'dist-pinch' || presetId === 'dist-bulge' || presetId === 'dist-warp' || presetId === 'dist-extreme' || presetId === 'dist-master') {
+                                clipScaleX = clipScaleX * (1 + 0.15 * intFactor);
+                                clipScaleY = clipScaleY * (1 + 0.15 * intFactor);
+                              } else if (presetId === 'dist-kaleidoscope') {
+                                clipRotation += Math.sin(localTime * speedFactor) * 5;
+                                clipScale = clipScale * 1.15;
+                              }
+                            }
+                          });
+                        }
 
-                                // Apply categorized activeEffect visual styling
-                                if (activeEffectId) {
-                                  const cin = CINEMATIC_EFFECTS.find(e => e.id === activeEffectId);
-                                  if (cin && cin.colorGrading) {
-                                    filterStr = filterStr === 'none' ? cin.colorGrading : `${filterStr} ${cin.colorGrading}`;
-                                  } else if (activeEffectId.includes('blur') || BLUR_EFFECTS.some(e => e.id === activeEffectId)) {
-                                    filterStr = filterStr === 'none' ? 'blur(4px)' : `${filterStr} blur(4px)`;
-                                  } else if (activeEffectId.includes('glitch') || GLITCH_EFFECTS.some(e => e.id === activeEffectId)) {
-                                    filterStr = filterStr === 'none' ? 'hue-rotate(45deg) saturate(1.4) contrast(1.15)' : `${filterStr} hue-rotate(45deg) saturate(1.4) contrast(1.15)`;
-                                  } else if (activeEffectId.includes('light') || LIGHT_EFFECTS.some(e => e.id === activeEffectId)) {
-                                    filterStr = filterStr === 'none' ? 'brightness(1.2) saturate(1.1)' : `${filterStr} brightness(1.2) saturate(1.1)`;
-                                  } else if (activeEffectId.includes('analog') || activeEffectId.includes('vhs') || activeEffectId.includes('retro') || activeEffectId.includes('sepia') || activeEffectId.includes('vintage') || activeEffectId.includes('old-movie') || activeEffectId.includes('super-8') || activeEffectId.includes('film-grain') || activeEffectId.includes('film-burn') || activeEffectId.includes('color-bleed') || activeEffectId.includes('crt') || activeEffectId.includes('dust-scratches') || activeEffectId.includes('cinema-archive')) {
-                                    filterStr = filterStr === 'none' ? 'sepia(0.3) contrast(1.1) brightness(0.95)' : `${filterStr} sepia(0.3) contrast(1.1) brightness(0.95)`;
-                                  } else if (activeEffectId.includes('fire') || activeEffectId.includes('flame') || activeEffectId.includes('ember') || activeEffectId.includes('burning') || activeEffectId.includes('heat-wave') || activeEffectId.includes('lava') || activeEffectId.includes('torch') || activeEffectId.includes('inferno') || activeEffectId.includes('camp') || activeEffectId.includes('molten') || activeEffectId.includes('ash-particles')) {
-                                    filterStr = filterStr === 'none' ? 'saturate(1.2) hue-rotate(-10deg) brightness(1.05)' : `${filterStr} saturate(1.2) hue-rotate(-10deg) brightness(1.05)`;
-                                  } else if (activeEffectId.includes('smoke') || activeEffectId.includes('fog') || activeEffectId.includes('mist') || activeEffectId.includes('steam') || activeEffectId.includes('vapor') || activeEffectId.includes('dry-ice') || activeEffectId.includes('dust-cloud')) {
-                                    filterStr = filterStr === 'none' ? 'contrast(0.9) brightness(1.05) blur(1px)' : `${filterStr} contrast(0.9) brightness(1.05) blur(1px)`;
-                                  } else if (activeEffectId.includes('rain') || activeEffectId.includes('snow') || activeEffectId.includes('storm') || activeEffectId.includes('blizzard') || activeEffectId.includes('hail') || activeEffectId.includes('lightning') || activeEffectId.includes('thunder') || activeEffectId.includes('wind') || activeEffectId.includes('aurora') || activeEffectId.includes('leaves') || activeEffectId.includes('blossom') || activeEffectId.includes('meteor') || activeEffectId.includes('moonlight') || activeEffectId.includes('rainbow') || activeEffectId.includes('sunshine') || activeEffectId.includes('cloud-overlay')) {
-                                    filterStr = filterStr === 'none' ? 'hue-rotate(15deg) saturate(0.95)' : `${filterStr} hue-rotate(15deg) saturate(0.95)`;
-                                  } else if (activeEffectId.includes('particle') || activeEffectId.includes('sparkle') || activeEffectId.includes('glitter') || activeEffectId.includes('confetti') || activeEffectId.includes('heart') || activeEffectId.includes('star') || activeEffectId.includes('bubble') || activeEffectId.includes('fireflies') || activeEffectId.includes('dust') || activeEffectId.includes('shape') || activeEffectId.includes('diamond')) {
-                                    filterStr = filterStr === 'none' ? 'contrast(1.05) saturate(1.1) brightness(1.02)' : `${filterStr} contrast(1.05) saturate(1.1) brightness(1.02)`;
+                        return (
+                          <div
+                            key={clip.id}
+                            className="absolute inset-0 pointer-events-none"
+                            style={{ display: isClipActive ? 'block' : 'none' }}
+                          >
+                            <video
+                              ref={(el) => {
+                                videoRefs.current[clip.id] = el;
+                                if (el) {
+                                  el.volume = Math.min(1, Math.max(0, volume));
+                                  el.muted = isMuted || !!mutedClips[clip.id];
+                                }
+                              }}
+                              src={clip.url}
+                              preload="auto"
+                              className="h-full w-full object-contain mx-auto pointer-events-none transition-all duration-150 absolute inset-0"
+                              style={{
+                                filter: (() => {
+                                  const targetFilterId = previewFilterId !== null ? previewFilterId : activeFilterId;
+                                  const filterObj = SAMPLE_FILTERS.find((f: any) => f.id === targetFilterId);
+                                  let filterStr = (filterObj && filterEnabled && !showBeforeOnly) ? getInterpolatedFilter(filterObj.cssFilter, filterIntensity) : 'none';
+
+                                  // Apply custom stacked effects filters
+                                  if (clip.appliedEffects) {
+                                    clip.appliedEffects.forEach((eff: AppliedEffect) => {
+                                      if (!eff.enabled || showBeforeOnly) return;
+                                      const props = getInterpolatedEffectProps(eff, localTime);
+                                      const preset = EFFECT_PRESETS.find(p => p.id === eff.presetId);
+                                      const speedFactor = eff.speed / 50;
+                                      const intFactor = eff.intensity / 100;
+                                      if (preset && preset.cssFilter) {
+                                        const interpolatedFilter = getInterpolatedFilter(preset.cssFilter, props.intensity);
+                                        filterStr = filterStr === 'none' ? interpolatedFilter : `${filterStr} ${interpolatedFilter}`;
+                                      }
+                                      if (props.blur && props.blur > 0) {
+                                        filterStr = filterStr === 'none' ? `blur(${props.blur}px)` : `${filterStr} blur(${props.blur}px)`;
+                                      }
+                                      if (props.glow && props.glow > 0) {
+                                        filterStr = filterStr === 'none' ? `drop-shadow(0 0 ${props.glow}px rgba(14,165,233,0.8))` : `${filterStr} drop-shadow(0 0 ${props.glow}px rgba(14,165,233,0.8))`;
+                                      }
+
+                                      // Specific basic filters focus
+                                      if (eff.presetId === 'basic-center-focus') {
+                                        const focusFilter = `contrast(1.1) brightness(1.05)`;
+                                        filterStr = filterStr === 'none' ? focusFilter : `${filterStr} ${focusFilter}`;
+                                      } else if (eff.presetId === 'camera-focus-pull') {
+                                        const pullBlur = Math.max(0, 8 - localTime * 4 * speedFactor) * intFactor;
+                                        if (pullBlur > 0) filterStr = filterStr === 'none' ? `blur(${pullBlur}px)` : `${filterStr} blur(${pullBlur}px)`;
+                                      } else if (eff.presetId === 'camera-rack-focus') {
+                                        const cycle = Math.sin(localTime * Math.PI * 0.8 * speedFactor);
+                                        const rackBlur = Math.max(0, cycle * 8) * intFactor;
+                                        if (rackBlur > 0) filterStr = filterStr === 'none' ? `blur(${rackBlur}px)` : `${filterStr} blur(${rackBlur}px)`;
+                                      } else if (eff.presetId === 'camera-focus-blur') {
+                                        const focusBlur = Math.max(0, 10 - localTime * 5 * speedFactor) * intFactor;
+                                        if (focusBlur > 0) filterStr = filterStr === 'none' ? `blur(${focusBlur}px)` : `${filterStr} blur(${focusBlur}px)`;
+                                      } else if (eff.presetId === 'camera-flash') {
+                                        const flashVal = Math.max(0, 1 - localTime * 3 * speedFactor) * intFactor;
+                                        if (flashVal > 0) filterStr = filterStr === 'none' ? `brightness(${1 + flashVal * 1.5}) contrast(${1 - flashVal * 0.2})` : `${filterStr} brightness(${1 + flashVal * 1.5}) contrast(${1 - flashVal * 0.2})`;
+                                      } else if (eff.presetId === 'camera-exposure-shift') {
+                                        const shift = Math.sin(localTime * 15 * speedFactor) * 0.15 * intFactor;
+                                        filterStr = filterStr === 'none' ? `brightness(${1 + shift})` : `${filterStr} brightness(${1 + shift})`;
+                                      } else if (eff.presetId.startsWith('blur-')) {
+                                        let blurRad = 0;
+                                        const p = eff.presetId;
+                                        if (p === 'blur-gaussian') {
+                                          blurRad = 15 * intFactor;
+                                        } else if (p === 'blur-motion' || p === 'blur-directional' || p === 'blur-horizontal' || p === 'blur-vertical' || p === 'blur-diagonal') {
+                                          blurRad = 18 * intFactor;
+                                        } else if (p === 'blur-zoom' || p === 'blur-radial') {
+                                          blurRad = 12 * intFactor;
+                                        } else if (p === 'blur-lens' || p === 'blur-cinema' || p === 'blur-pro-lens') {
+                                          blurRad = 16 * intFactor;
+                                        } else if (p === 'blur-bokeh' || p === 'blur-crystal' || p === 'blur-pixel' || p === 'blur-edge') {
+                                          blurRad = 18 * intFactor;
+                                        } else if (p === 'blur-background' || p === 'blur-center' || p === 'blur-mirror' || p === 'blur-trail' || p === 'blur-echo') {
+                                          blurRad = 15 * intFactor;
+                                        } else if (p === 'blur-foreground' || p === 'blur-portrait') {
+                                          blurRad = 12 * intFactor;
+                                        } else if (p === 'blur-depth') {
+                                          blurRad = 16 * intFactor;
+                                        } else if (p === 'blur-tilt-shift') {
+                                          blurRad = 14 * intFactor;
+                                        } else if (p === 'blur-soft-focus') {
+                                          blurRad = 8 * intFactor;
+                                          filterStr = filterStr === 'none' ? `brightness(1.08) saturate(1.1)` : `${filterStr} brightness(1.08) saturate(1.1)`;
+                                        } else if (p === 'blur-dream') {
+                                          blurRad = 10 * intFactor;
+                                          filterStr = filterStr === 'none' ? `brightness(1.1) saturate(1.15) hue-rotate(5deg)` : `${filterStr} brightness(1.1) saturate(1.15) hue-rotate(5deg)`;
+                                        } else if (p === 'blur-glow' || p === 'blur-light') {
+                                          blurRad = 9 * intFactor;
+                                          filterStr = filterStr === 'none' ? `brightness(1.15)` : `${filterStr} brightness(1.15)`;
+                                        } else if (p === 'blur-fog') {
+                                          blurRad = 12 * intFactor;
+                                          filterStr = filterStr === 'none' ? `contrast(0.9) opacity(0.85)` : `${filterStr} contrast(0.9) opacity(0.85)`;
+                                        } else if (p === 'blur-heat') {
+                                          blurRad = 6 * intFactor + Math.abs(Math.sin(localTime * 15 * speedFactor)) * 4;
+                                        } else if (p === 'blur-ripple') {
+                                          blurRad = 5 * intFactor + Math.abs(Math.sin(localTime * 8 * speedFactor)) * 4;
+                                        } else if (p === 'blur-focus') {
+                                          blurRad = Math.max(0, 15 - localTime * 5 * speedFactor) * intFactor;
+                                        } else if (p === 'blur-pulse') {
+                                          blurRad = Math.abs(Math.sin(localTime * Math.PI * speedFactor)) * 20 * intFactor;
+                                        } else if (p === 'blur-fade') {
+                                          blurRad = Math.max(0, 1 - localTime / (duration * 0.5)) * 25 * intFactor;
+                                        } else if (p === 'blur-sweep') {
+                                          const sweep = (localTime * speedFactor) % 2;
+                                          blurRad = Math.abs(Math.sin(sweep * Math.PI)) * 18 * intFactor;
+                                        } else if (p === 'blur-spin' || p === 'blur-whirl') {
+                                          blurRad = 15 * intFactor;
+                                        } else if (p === 'blur-wave') {
+                                          blurRad = 14 * intFactor;
+                                        } else if (p === 'blur-glass') {
+                                          blurRad = 16 * intFactor;
+                                          filterStr = filterStr === 'none' ? `saturate(0.95) contrast(1.05)` : `${filterStr} saturate(0.95) contrast(1.05)`;
+                                        } else if (p === 'blur-smooth' || p === 'blur-smart') {
+                                          blurRad = 10 * intFactor;
+                                        } else if (p === 'blur-night') {
+                                          blurRad = 16 * intFactor;
+                                          filterStr = filterStr === 'none' ? `contrast(0.9) brightness(0.92)` : `${filterStr} contrast(0.9) brightness(0.92)`;
+                                        } else if (p === 'blur-ghost' || p === 'blur-liquid') {
+                                          blurRad = 8 * intFactor + Math.abs(Math.sin(localTime * 4 * speedFactor)) * 4;
+                                        } else if (p === 'blur-bloom') {
+                                          blurRad = 14 * intFactor;
+                                          filterStr = filterStr === 'none' ? `brightness(1.15) contrast(1.08)` : `${filterStr} brightness(1.15) contrast(1.08)`;
+                                        } else if (p === 'blur-stretch' || p === 'blur-speed' || p === 'blur-action' || p === 'blur-velocity') {
+                                          blurRad = 15 * intFactor;
+                                        } else if (p === 'blur-extreme') {
+                                          blurRad = 35 * intFactor;
+                                        }
+
+                                        if (blurRad > 0) {
+                                          filterStr = filterStr === 'none' ? `blur(${blurRad}px)` : `${filterStr} blur(${blurRad}px)`;
+                                        }
+                                      } else if (eff.presetId.startsWith('glitch-')) {
+                                        const p = eff.presetId;
+                                        if (p === 'glitch-rgb-split' || p === 'glitch-rgb-shift' || p === 'glitch-color-offset' || p === 'glitch-rgb-flicker' || p === 'glitch-neon' || p === 'glitch-cyber-flash') {
+                                          const split = Math.sin(localTime * 35 * speedFactor) * 8 * intFactor;
+                                          filterStr = filterStr === 'none' ? `drop-shadow(${split}px 0 0 rgba(239,68,68,0.7)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.7))` : `${filterStr} drop-shadow(${split}px 0 0 rgba(239,68,68,0.7)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.7))`;
+                                        }
+                                        if (p === 'glitch-tv-static' || p === 'glitch-digital-noise' || p === 'glitch-static-flash' || p === 'glitch-noise-pulse' || p === 'glitch-data-explosion' || p === 'glitch-ultra') {
+                                          const noiseBright = 1 + (Math.sin(localTime * 60 * speedFactor) > 0.7 ? (Math.random() - 0.5) * 0.25 * intFactor : 0);
+                                          filterStr = filterStr === 'none' ? `brightness(${noiseBright}) contrast(${2 - noiseBright})` : `${filterStr} brightness(${noiseBright}) contrast(${2 - noiseBright})`;
+                                        }
+                                        if (p === 'glitch-crt-flicker' || p === 'glitch-signal-loss' || p === 'glitch-broken-signal' || p === 'glitch-system-crash') {
+                                          const flicker = Math.sin(localTime * 50 * speedFactor) > 0.85 ? 1.3 * intFactor : 1.0;
+                                          filterStr = filterStr === 'none' ? `brightness(${flicker})` : `${filterStr} brightness(${flicker})`;
+                                        }
+                                      } else if (eff.presetId.startsWith('cine-')) {
+                                        const p = eff.presetId;
+                                        if (p === 'cine-projector' || p === 'cine-film-burn' || p === 'cine-vintage-film') {
+                                          const flicker = 1 + (Math.sin(localTime * 50 * speedFactor) > 0.8 ? (Math.random() - 0.5) * 0.08 * intFactor : 0);
+                                          filterStr = filterStr === 'none' ? `brightness(${flicker})` : `${filterStr} brightness(${flicker})`;
+                                        }
+                                        if (p === 'cine-softness' || p === 'cine-soft-diffusion' || p === 'cine-dream' || p === 'cine-cinema-bloom') {
+                                          const blurAmount = 3 * intFactor;
+                                          filterStr = filterStr === 'none' ? `blur(${blurAmount}px)` : `${filterStr} blur(${blurAmount}px)`;
+                                        }
+                                      } else if (eff.presetId.startsWith('lens-')) {
+                                        const p = eff.presetId;
+                                        if (p === 'lens-chromatic' || p === 'lens-prism' || p === 'lens-crystal' || p === 'lens-ghost' || p === 'lens-reflection' || p === 'lens-circular') {
+                                          const split = 4 * intFactor;
+                                          filterStr = filterStr === 'none' ? `drop-shadow(${split}px 0 0 rgba(239,68,68,0.5)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.5))` : `${filterStr} drop-shadow(${split}px 0 0 rgba(239,68,68,0.5)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.5))`;
+                                        }
+                                        if (p === 'lens-optical-blur' || p === 'lens-foggy' || p === 'lens-soft-glass' || p === 'lens-macro-focus' || p === 'lens-rack-focus') {
+                                          const blurAmount = 4 * intFactor;
+                                          filterStr = filterStr === 'none' ? `blur(${blurAmount}px)` : `${filterStr} blur(${blurAmount}px)`;
+                                        }
+                                      } else if (eff.presetId.startsWith('light-')) {
+                                        const p = eff.presetId;
+                                        if (p === 'light-camera-flash') {
+                                          const flashVal = Math.max(0, 1 - localTime * 3 * speedFactor) * intFactor;
+                                          filterStr = filterStr === 'none' ? `brightness(${1 + flashVal * 1.5})` : `${filterStr} brightness(${1 + flashVal * 1.5})`;
+                                        }
+                                        if (p === 'light-flicker' || p === 'light-fire-glow' || p === 'light-candle') {
+                                          const flicker = 1 + (Math.sin(localTime * 40 * speedFactor) * 0.08 * intFactor);
+                                          filterStr = filterStr === 'none' ? `brightness(${flicker})` : `${filterStr} brightness(${flicker})`;
+                                        }
+                                        if (p === 'light-pulse') {
+                                          const pulse = 1 + (Math.sin(localTime * Math.PI * speedFactor) * 0.12 * intFactor);
+                                          filterStr = filterStr === 'none' ? `brightness(${pulse})` : `${filterStr} brightness(${pulse})`;
+                                        }
+                                      } else if (eff.presetId.startsWith('dist-')) {
+                                        const p = eff.presetId;
+                                        if (p === 'dist-prism' || p === 'dist-refraction' || p === 'dist-glass' || p === 'dist-liquid-glass' || p === 'dist-crystal') {
+                                          const split = 4 * intFactor;
+                                          filterStr = filterStr === 'none' ? `drop-shadow(${split}px 0 0 rgba(239,68,68,0.4)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.4))` : `${filterStr} drop-shadow(${split}px 0 0 rgba(239,68,68,0.4)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.4))`;
+                                        }
+                                      }
+                                    });
                                   }
-                                }
 
-                                if (isClipActive && transitionData?.filter) {
-                                  filterStr = filterStr === 'none' ? transitionData.filter : `${filterStr} ${transitionData.filter}`;
-                                }
+                                  // Apply legacy effects visual styling (fallback)
+                                  if (activeEffectId) {
+                                    if (activeEffectId.includes('blur')) {
+                                      filterStr = filterStr === 'none' ? 'blur(4px)' : `${filterStr} blur(4px)`;
+                                    } else if (activeEffectId.includes('glitch')) {
+                                      filterStr = filterStr === 'none' ? 'hue-rotate(45deg) saturate(1.4) contrast(1.15)' : `${filterStr} hue-rotate(45deg) saturate(1.4) contrast(1.15)`;
+                                    } else if (activeEffectId.includes('light')) {
+                                      filterStr = filterStr === 'none' ? 'brightness(1.2) saturate(1.1)' : `${filterStr} brightness(1.2) saturate(1.1)`;
+                                    } else if (activeEffectId.includes('analog') || activeEffectId.includes('vhs') || activeEffectId.includes('retro')) {
+                                      filterStr = filterStr === 'none' ? 'sepia(0.3) contrast(1.1) brightness(0.95)' : `${filterStr} sepia(0.3) contrast(1.1) brightness(0.95)`;
+                                    }
+                                  }
 
-                                return filterStr;
-                              })(),
-                              opacity: isClipActive && transitionData?.opacity !== undefined ? transitionData.opacity : 1,
-                              transform: isClipActive && transitionData?.transform ? transitionData.transform : undefined,
-                            }}
-                            onTimeUpdate={() => handleTimeUpdate(clip.id)}
-                            onEnded={() => handleClipEnded(clip.id)}
-                          />
+                                  if (isClipActive && transitionData?.filter) {
+                                    filterStr = filterStr === 'none' ? transitionData.filter : `${filterStr} ${transitionData.filter}`;
+                                  }
+
+                                  return filterStr;
+                                })(),
+                                opacity: (() => {
+                                  let baseOpacity = isClipActive && transitionData?.opacity !== undefined ? transitionData.opacity : 1;
+                                  if (filterEnabled && !showBeforeOnly) {
+                                    baseOpacity = baseOpacity * (filterOpacity / 100);
+                                  }
+                                  if (clip.appliedEffects) {
+                                    clip.appliedEffects.forEach((eff: AppliedEffect) => {
+                                      if (!eff.enabled || showBeforeOnly) return;
+                                      const props = getInterpolatedEffectProps(eff, localTime);
+                                      baseOpacity = baseOpacity * (props.opacity / 100);
+
+                                      // Basic effect overrides
+                                      const presetId = eff.presetId;
+                                      const duration = clip.duration || 5;
+                                      const intFactor = eff.intensity / 100;
+                                      const speedFactor = eff.speed / 50;
+
+                                      if (presetId === 'basic-fade-in') {
+                                        const fadeDuration = 1.0 / speedFactor;
+                                        if (localTime <= fadeDuration) {
+                                          baseOpacity = baseOpacity * (localTime / fadeDuration) * intFactor + baseOpacity * (1 - intFactor);
+                                        }
+                                      } else if (presetId === 'basic-fade-out') {
+                                        const fadeDuration = 1.0 / speedFactor;
+                                        if (duration - localTime <= fadeDuration) {
+                                          const diff = Math.max(0, duration - localTime);
+                                          baseOpacity = baseOpacity * (diff / fadeDuration) * intFactor + baseOpacity * (1 - intFactor);
+                                        }
+                                      } else if (presetId === 'basic-blink') {
+                                        const blinkTime = Math.floor(localTime * 8 * speedFactor) % 2;
+                                        if (blinkTime === 0) {
+                                          baseOpacity = baseOpacity * (1 - 0.7 * intFactor);
+                                        }
+                                      }
+                                    });
+                                  }
+                                  return baseOpacity;
+                                })(),
+                                mixBlendMode: (filterEnabled && !showBeforeOnly) ? (filterBlendMode as any) : 'normal',
+                                transform: `translate(${posX}px, ${posY}px) scale(${clipScale * clipScaleX}, ${clipScale * clipScaleY}) rotate(${clipRotation}deg)`,
+                              }}
+                              onTimeUpdate={() => handleTimeUpdate(clip.id)}
+                              onEnded={() => handleClipEnded(clip.id)}
+                            />
+
+                            {/* Render applied stacked effects sibling overlays */}
+                            {clip.appliedEffects?.map((eff: AppliedEffect) => {
+                              if (!eff.enabled || showBeforeOnly) return null;
+                              const preset = EFFECT_PRESETS.find(p => p.id === eff.presetId);
+                              if (!preset) return null;
+
+                              const props = getInterpolatedEffectProps(eff, localTime);
+                              const speedFactor = props.speed / 50;
+                              const intFactor = props.intensity / 100;
+                              
+                              const customStyles: React.CSSProperties = {
+                                mixBlendMode: eff.blendMode as any,
+                                opacity: props.opacity / 100,
+                                ...preset.overlayStyle,
+                                ...(preset.overlayClass ? {} : {
+                                  transform: `rotate(${props.angle}deg)`
+                                })
+                              };
+
+                              const p = eff.presetId;
+                              let overlayStyles: React.CSSProperties = { ...customStyles };
+
+                              if (p === 'cine-letterbox') {
+                                const size = ((eff.letterboxSize ?? 25) * (props.intensity / 100)) * 0.8;
+                                overlayStyles = {
+                                  ...overlayStyles,
+                                  boxShadow: `inset 0 ${size}px 0 #000, inset 0 -${size}px 0 #000`,
+                                  background: 'transparent'
+                                };
+                              } else if (p === 'cine-vignette') {
+                                const vign = (eff.vignetteAmount ?? 50) * (props.intensity / 100);
+                                overlayStyles = {
+                                  ...overlayStyles,
+                                  background: `radial-gradient(circle, transparent ${100 - vign}%, rgba(0,0,0,0.85) 150%)`
+                                };
+                              } else if (p === 'cine-spotlight') {
+                                overlayStyles = {
+                                  ...overlayStyles,
+                                  background: `radial-gradient(circle at 50% 50%, transparent 20%, rgba(0,0,0,0.7) 120%)`
+                                };
+                              } else if (p === 'cine-film-grain') {
+                                const grainShiftX = (Math.floor(localTime * 100) % 4) * 5;
+                                const grainShiftY = (Math.floor(localTime * 120) % 4) * 5;
+                                overlayStyles = {
+                                  ...overlayStyles,
+                                  background: `repeating-linear-gradient(${props.angle}deg, rgba(255,255,255,0.06) 0px, transparent 1px, rgba(0,0,0,0.06) 2px)`,
+                                  backgroundSize: '3px 3px',
+                                  transform: `translate(${grainShiftX}px, ${grainShiftY}px)`
+                                };
+                              } else if (p === 'cine-film-scratches') {
+                                const scratchOffset = (Math.floor(localTime * 15) % 10) * 8;
+                                overlayStyles = {
+                                  ...overlayStyles,
+                                  backgroundImage: `linear-gradient(90deg, transparent ${scratchOffset}%, rgba(255,255,255,0.12) ${scratchOffset}%, rgba(255,255,255,0.12) ${scratchOffset + 0.2}%, transparent ${scratchOffset + 1}%)`,
+                                  backgroundSize: '100% 100%'
+                                };
+                              } else if (p === 'cine-leak-gold' || p === 'cine-film-burn') {
+                                const leakPos = (localTime * 40 * (props.speed / 50)) % 100;
+                                overlayStyles = {
+                                  ...overlayStyles,
+                                  background: `linear-gradient(${props.angle}deg, rgba(245,158,11,0) ${leakPos - 20}%, rgba(245,158,11,0.25) ${leakPos}%, rgba(245,158,11,0) ${leakPos + 20}%)`
+                                };
+                              } else if (p === 'cine-leak-blue') {
+                                const leakPos = (localTime * 40 * (props.speed / 50)) % 100;
+                                overlayStyles = {
+                                  ...overlayStyles,
+                                  background: `linear-gradient(${props.angle}deg, rgba(14,165,233,0) ${leakPos - 20}%, rgba(14,165,233,0.25) ${leakPos}%, rgba(14,165,233,0) ${leakPos + 20}%)`
+                                };
+                              } else if (p === 'cine-leak-rainbow') {
+                                 const leakPos = (localTime * 35 * (props.speed / 50)) % 100;
+                                 overlayStyles = {
+                                   ...overlayStyles,
+                                   background: `linear-gradient(${props.angle}deg, rgba(239,68,68,0) ${leakPos - 25}%, rgba(245,158,11,0.15) ${leakPos - 10}%, rgba(34,197,94,0.15) ${leakPos}%, rgba(14,165,233,0.15) ${leakPos + 10}%, rgba(239,68,68,0) ${leakPos + 25}%)`
+                                 };
+                               } else if (p.startsWith('lens-')) {
+                                 if (p === 'lens-vignette') {
+                                   const vign = (eff.vignetteAmount ?? 50) * (props.intensity / 100);
+                                   overlayStyles = {
+                                     ...overlayStyles,
+                                     background: `radial-gradient(circle, transparent ${100 - vign}%, rgba(0,0,0,0.85) 150%)`
+                                   };
+                                 } else if (p === 'lens-focus-ring') {
+                                   overlayStyles = {
+                                     ...overlayStyles,
+                                     border: '2px solid rgba(14,165,233,0.3)',
+                                     borderRadius: '50%',
+                                     width: '120px',
+                                     height: '120px',
+                                     margin: 'auto',
+                                     top: '0', bottom: '0', left: '0', right: '0',
+                                     boxShadow: '0 0 10px rgba(14,165,233,0.2)'
+                                   };
+                                 } else if (p === 'lens-split-diopter') {
+                                   overlayStyles = {
+                                     ...overlayStyles,
+                                     borderLeft: '1px solid rgba(255,255,255,0.25)',
+                                     background: 'transparent'
+                                   };
+                                 } else if (p === 'lens-crack') {
+                                   overlayStyles = {
+                                     ...overlayStyles,
+                                     background: 'repeating-linear-gradient(60deg, transparent, transparent 15px, rgba(255,255,255,0.08) 16px, transparent 17px)'
+                                   };
+                                 }
+                               } else if (p.startsWith('light-')) {
+                                 if (p === 'light-spotlight' || p === 'light-flashlight') {
+                                   overlayStyles = {
+                                     ...overlayStyles,
+                                     background: `radial-gradient(circle at 50% 50%, transparent 20%, rgba(0,0,0,0.7) 120%)`
+                                   };
+                                 } else if (p === 'light-stage-light') {
+                                   const angleSweep = props.angle + Math.sin(localTime * 2 * speedFactor) * 20;
+                                   overlayStyles = {
+                                     ...overlayStyles,
+                                     background: `linear-gradient(${angleSweep}deg, rgba(239,68,68,0.15) 30%, transparent 50%, rgba(14,165,233,0.15) 70%)`
+                                   };
+                                 } else if (p === 'light-sweep' || p === 'light-glow-sweep') {
+                                    const sweepPos = (localTime * 45 * (props.speed / 50)) % 120 - 10;
+                                    overlayStyles = {
+                                      ...overlayStyles,
+                                      background: `linear-gradient(${props.angle}deg, transparent ${sweepPos - 20}%, rgba(255,255,255,0.25) ${sweepPos}%, transparent ${sweepPos + 20}%)`
+                                    };
+                                  } else if (p === 'light-aurora') {
+                                    const greenPos = 50 + Math.sin(localTime * 1.5 * (props.speed / 50)) * 20;
+                                    overlayStyles = {
+                                      ...overlayStyles,
+                                      background: `linear-gradient(${props.angle}deg, rgba(34,197,94,0.12) ${greenPos}%, rgba(217,70,239,0.1) ${greenPos + 25}%)`
+                                    };
+                                  }
+                               } else if (p.startsWith('dist-')) {
+                                 if (p === 'dist-mirror') {
+                                   overlayStyles = {
+                                     ...overlayStyles,
+                                     borderLeft: '1px dashed rgba(255,255,255,0.15)',
+                                     background: 'transparent'
+                                   };
+                                 } else if (p === 'dist-shockwave') {
+                                   const waveRadius = ((localTime * 40 * (props.speed / 50)) % 100) * 1.5;
+                                   overlayStyles = {
+                                     ...overlayStyles,
+                                     borderRadius: '50%',
+                                     border: '2px solid rgba(255,255,255,0.2)',
+                                     width: `${waveRadius}px`,
+                                     height: `${waveRadius}px`,
+                                     margin: 'auto',
+                                     top: '0', bottom: '0', left: '0', right: '0',
+                                     transform: 'scale(1.2)'
+                                   };
+                                 } else if (p === 'dist-tunnel') {
+                                   overlayStyles = {
+                                     ...overlayStyles,
+                                     background: `radial-gradient(circle, transparent 20%, rgba(0,0,0,0.8) 90%)`
+                                   };
+                                 }
+                               }
+
+                              return (
+                                <div
+                                  key={eff.id}
+                                  className={`absolute inset-0 pointer-events-none transition-all duration-150 z-10 ${preset.overlayClass || ''}`}
+                                  style={overlayStyles}
+                                />
+                              );
+                            })}
+                          </div>
                         );
                       })}
                       {transitionData?.overlayColor && (
