@@ -134,11 +134,11 @@ export function UploadPage() {
                   className="flex items-center justify-between rounded-xl glass p-3 border border-border"
                 >
                   <div className="flex items-center gap-3 overflow-hidden">
-                    <div className="h-10 w-14 rounded-lg bg-black/60 overflow-hidden relative flex-shrink-0 flex items-center justify-center border border-white/10">
+                    <div className="h-10 w-14 rounded-lg bg-black/60 overflow-hidden relative flex-shrink-0 flex items-center justify-center border border-border">
                       {item.thumbnails[0] ? (
                         <img src={item.thumbnails[0]} alt="" className="h-full w-full object-cover" />
                       ) : (
-                        <Film className="h-4 w-4 text-sky-400" />
+                        <Film className="h-4 w-4 text-primary" />
                       )}
                     </div>
                     <div className="truncate">
@@ -155,7 +155,7 @@ export function UploadPage() {
                       e.stopPropagation();
                       removeMediaFile(item.id);
                     }}
-                    className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition"
+                    className="p-1.5 rounded-lg hover:bg-red-500/20 text-muted-foreground hover:text-red-400 transition"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -174,7 +174,7 @@ export function UploadPage() {
             className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl px-8 py-3.5 text-sm font-semibold transition ${
               hasVideo || mediaFiles.length > 0
                 ? 'bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-95'
-                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                : 'bg-surface-hover text-muted-foreground cursor-not-allowed'
             }`}
           >
             <span>Continue to Editor</span>

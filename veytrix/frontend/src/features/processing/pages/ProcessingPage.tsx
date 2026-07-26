@@ -45,7 +45,7 @@ export function ProcessingPage() {
   }, [navigate]);
 
   return (
-    <main className="relative min-h-[calc(100vh-64px)] flex items-center justify-center p-6 overflow-hidden bg-slate-950">
+    <main className="relative min-h-[calc(100vh-64px)] flex items-center justify-center p-6 overflow-hidden bg-background">
       <div className="absolute inset-0 bg-mesh opacity-80 pointer-events-none" />
       <div className="absolute inset-0 grid-lines opacity-[0.06] pointer-events-none" />
       <div className="absolute top-1/2 left-1/2 h-[500px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/25 blur-[150px] pointer-events-none" />

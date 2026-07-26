@@ -95,13 +95,13 @@ export function TimelineContextMenu({
   return (
     <div
       ref={menuRef}
-      className="absolute w-56 rounded-xl border border-white/10 bg-[#0d111d]/95 backdrop-blur-xl shadow-2xl p-1.5 z-[100] text-slate-200 select-none animate-in fade-in slide-in-from-top-2 duration-150 flex flex-col max-h-[380px] overflow-y-auto"
+      className="absolute w-56 rounded-xl border border-border bg-surface backdrop-blur-xl shadow-2xl p-1.5 z-[100] text-foreground select-none animate-in fade-in slide-in-from-top-2 duration-150 flex flex-col max-h-[380px] overflow-y-auto"
       style={{
         left: `${adjustedX}px`,
         top: `${adjustedY}px`
       }}
     >
-      <div className="px-2.5 py-1.5 text-[9px] font-bold text-slate-500 uppercase tracking-widest border-b border-white/5">
+      <div className="px-2.5 py-1.5 text-[9px] font-bold text-muted-foreground uppercase tracking-widest border-b border-border">
         Clip: {clip.name}
       </div>
 
@@ -109,7 +109,7 @@ export function TimelineContextMenu({
         {menuGroups.map((group, groupIdx) => (
           <div key={groupIdx} className="space-y-0.5">
             {groupIdx > 0 && <div className="h-px bg-white/5 my-1" />}
-            <span className="px-2.5 py-0.5 text-[8px] font-mono uppercase tracking-wider text-slate-600 block">
+            <span className="px-2.5 py-0.5 text-[8px] font-mono uppercase tracking-wider text-muted-foreground block">
               {group.label}
             </span>
             {group.items.map((item) => {
@@ -125,14 +125,14 @@ export function TimelineContextMenu({
                   }}
                   className={`w-full flex items-center justify-between px-2.5 py-1.5 text-left rounded-md transition text-xs cursor-pointer ${
                     item.disabled
-                      ? 'opacity-30 cursor-not-allowed text-slate-500'
+                      ? 'opacity-30 cursor-not-allowed text-muted-foreground'
                       : item.danger
                       ? 'text-red-400 hover:bg-red-500/10'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      : 'text-foreground hover:bg-surface-hover hover:text-foreground'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <Icon className={`h-3.5 w-3.5 ${item.disabled ? 'text-slate-600' : item.danger ? 'text-red-400' : 'text-slate-400 group-hover:text-white'}`} />
+                    <Icon className={`h-3.5 w-3.5 ${item.disabled ? 'text-muted-foreground' : item.danger ? 'text-red-400' : 'text-muted-foreground group-hover:text-foreground'}`} />
                     <span>{item.label}</span>
                   </div>
                   {item.id === 'lock' && isLocked && <span className="text-[8px] bg-amber-500/20 text-amber-400 px-1 rounded">Locked</span>}

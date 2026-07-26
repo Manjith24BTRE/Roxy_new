@@ -34,29 +34,29 @@ const COLS = [
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border bg-surface/30">
+    <footer className="border-t border-[#1D2B64]/20 bg-[#1D2B64] text-white">
       <div className="mx-auto max-w-7xl px-6 py-14">
         <div className="grid gap-10 md:grid-cols-4">
           <div>
             <div className="flex items-center gap-2">
-              <VeytrixLogo className="h-6 w-6" />
-              <span className="font-display text-lg font-semibold">VEYTRIX</span>
+              <VeytrixLogo className="h-6 w-6 text-white" />
+              <span className="font-display text-lg font-semibold tracking-tight text-white">VEYTRIX</span>
             </div>
-            <p className="mt-3 text-sm text-muted-foreground max-w-xs">
-              A cinematic video editor engineered for the next generation of creators.
+            <p className="mt-4 text-sm text-[#E6F2F8]/70 max-w-xs leading-relaxed">
+              A cinematic video editor engineered for the next generation of creators. Built for speed, precision, and flow.
             </p>
           </div>
           {COLS.map((c) => (
             <div key={c.title}>
-              <div className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+              <div className="text-xs font-mono uppercase tracking-widest text-[#8CC8E8]">
                 {c.title}
               </div>
-              <ul className="mt-4 space-y-2">
+              <ul className="mt-4 space-y-3">
                 {c.items.map((i) => (
                   <li key={i.label}>
                     <Link
                       to={i.to}
-                      className="text-sm text-foreground/80 hover:text-foreground transition"
+                      className="text-sm text-[#E6F2F8]/80 hover:text-white transition-colors"
                     >
                       {i.label}
                     </Link>
@@ -66,13 +66,15 @@ export function SiteFooter() {
             </div>
           ))}
         </div>
-        <div className="mt-12 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-t border-border pt-6">
-          <p className="text-xs text-muted-foreground">
+        <div className="mt-16 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-t border-[#8CC8E8]/10 pt-8">
+          <p className="text-xs text-[#E6F2F8]/60">
             © {new Date().getFullYear()} VEYTRIX. Crafted for creators.
           </p>
-          <p className="text-xs text-muted-foreground font-mono">
-            v0.1.0 · build · <span className="text-primary">online</span>
-          </p>
+          <div className="flex items-center gap-4">
+            <p className="text-xs text-[#E6F2F8]/60 font-mono flex items-center gap-2">
+              v0.1.0 · build · <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#8CC8E8] animate-pulse" /> online</span>
+            </p>
+          </div>
         </div>
       </div>
     </footer>

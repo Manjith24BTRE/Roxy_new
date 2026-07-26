@@ -1251,14 +1251,14 @@ export function EditorPage() {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#070a11] text-slate-100 overflow-hidden font-sans select-none">
+    <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden font-sans select-none">
       {/* ---------------- TOP BAR ---------------- */}
-      <header className="h-12 border-b border-white/10 bg-[#0c101d] px-4 flex items-center justify-between flex-shrink-0">
+      <header className="h-12 border-b border-border bg-surface px-4 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white px-2.5 py-1.5 rounded-md hover:bg-slate-800 transition"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-md hover:bg-surface-hover transition"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Dashboard</span>
@@ -1266,10 +1266,10 @@ export function EditorPage() {
           <div className="h-4 w-px bg-white/10" />
           <div className="flex items-center gap-2">
             <VeytrixLogo className="h-5 w-5" />
-            <span className="font-mono text-xs font-semibold text-slate-200">
+            <span className="font-mono text-xs font-semibold text-foreground">
               veytrix / {activeMedia ? activeMedia.name : 'untitled-project.vxp'}
             </span>
-            <span className="rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[10px] font-mono px-2 py-0.5">
+            <span className="rounded bg-primary/10 border border-sky-500/20 text-primary text-[10px] font-mono px-2 py-0.5">
               Draft
             </span>
           </div>
@@ -1278,14 +1278,14 @@ export function EditorPage() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-surface-hover hover:bg-surface-hover text-foreground transition"
           >
             <Save className="h-3.5 w-3.5" />
             <span>Save</span>
           </button>
           <button
             type="button"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-md bg-gradient-primary text-slate-950 font-semibold shadow-glow hover:opacity-95 transition"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-md bg-gradient-primary text-primary-foreground font-semibold shadow-glow hover:opacity-95 transition"
           >
             <Download className="h-3.5 w-3.5" />
             <span>Export</span>
@@ -1297,8 +1297,8 @@ export function EditorPage() {
       <div className="flex-1 grid grid-cols-[280px_1fr_300px] overflow-hidden">
 
         {/* LEFT PANEL: Media Library & Quick AI Edit Modules */}
-        <aside className="border-r border-white/10 bg-[#090d16] flex flex-col overflow-hidden">
-          <div className="flex border-b border-white/10 bg-[#0c101d] p-1 gap-0.5 overflow-x-auto flex-shrink-0 scrollbar-none">
+        <aside className="border-r border-border bg-surface flex flex-col overflow-hidden">
+          <div className="flex border-b border-border bg-surface p-1 gap-0.5 overflow-x-auto flex-shrink-0 scrollbar-none">
             {[
               { id: 'media', label: 'Media', icon: Film },
               { id: 'ratio', label: 'Ratio', icon: Crop },
@@ -1313,8 +1313,8 @@ export function EditorPage() {
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`flex-1 flex flex-col items-center justify-center gap-1 py-1.5 px-1 min-w-[44px] text-[9px] font-semibold rounded-md transition cursor-pointer ${
                   activeTab === tab.id
-                    ? 'bg-sky-500/15 text-sky-400 border border-sky-500/25'
-                    : 'text-slate-400 hover:bg-slate-800'
+                    ? 'bg-primary/15 text-primary border border-sky-500/25'
+                    : 'text-muted-foreground hover:bg-surface-hover'
                 }`}
               >
                 <tab.icon className="h-3.5 w-3.5" />
@@ -1326,19 +1326,19 @@ export function EditorPage() {
           <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
             {activeTab === 'media' && (
               <>
-                <div className="p-3 border-b border-white/10 space-y-2 flex-shrink-0">
+                <div className="p-3 border-b border-border space-y-2 flex-shrink-0">
                   <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                     <input
                       type="text"
                       placeholder="Search assets..."
-                      className="w-full rounded-md bg-slate-900 border border-white/10 pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none"
+                      className="w-full rounded-md bg-surface border border-border pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
                     />
                   </div>
                   <button
                     type="button"
                     onClick={() => navigate('/upload')}
-                    className="w-full flex items-center justify-center gap-1.5 rounded-md bg-sky-500/10 border border-sky-500/20 py-1.5 text-xs font-medium text-sky-400 hover:bg-sky-500/20 transition cursor-pointer"
+                    className="w-full flex items-center justify-center gap-1.5 rounded-md bg-primary/10 border border-sky-500/20 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition cursor-pointer"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     <span>Import More Media</span>
@@ -1347,7 +1347,7 @@ export function EditorPage() {
 
                 {/* Media Asset List */}
                 <div className="flex-1 p-3 overflow-y-auto space-y-3">
-                  <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
                     Uploaded Clips ({mediaFiles.length})
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -1359,23 +1359,23 @@ export function EditorPage() {
                           setIsSelectedOnCanvas(true);
                           handleSeek(0);
                         }}
-                        className={`group relative aspect-video rounded-md border overflow-hidden bg-slate-900 cursor-pointer transition ${
+                        className={`group relative aspect-video rounded-md border overflow-hidden bg-surface cursor-pointer transition ${
                           item.id === activeMedia?.id
                             ? 'border-sky-400 ring-1 ring-sky-400 shadow-glow'
-                            : 'border-white/10 hover:border-sky-400/50'
+                            : 'border-border hover:border-sky-400/50'
                         }`}
                       >
                         {item.thumbnails[0] ? (
                           <img src={item.thumbnails[0]} alt="" className="h-full w-full object-cover animate-fade-in" />
                         ) : (
-                          <div className="h-full w-full bg-slate-800 flex items-center justify-center">
-                            <Film className="h-4 w-4 text-slate-400" />
+                          <div className="h-full w-full bg-surface-hover flex items-center justify-center">
+                            <Film className="h-4 w-4 text-muted-foreground" />
                           </div>
                         )}
-                        <div className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[9px] font-mono text-white">
+                        <div className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[9px] font-mono text-foreground">
                           {item.durationFormatted}
                         </div>
-                        <div className="absolute top-1 left-1 rounded bg-black/70 px-1 py-0.5 text-[8px] font-mono text-slate-300 truncate max-w-[80px]">
+                        <div className="absolute top-1 left-1 rounded bg-black/70 px-1 py-0.5 text-[8px] font-mono text-foreground truncate max-w-[80px]">
                           {item.name}
                         </div>
                       </div>
@@ -1454,7 +1454,7 @@ export function EditorPage() {
 
         {/* CENTER: Live Video Preview Monitor with Interactive Bounding Box */}
         <main
-          className="flex flex-col border-r border-white/10 bg-[#05080f] overflow-hidden"
+          className="flex flex-col border-r border-border bg-background overflow-hidden"
           onDoubleClick={() => setIsSelectedOnCanvas(false)}
         >
           <div
@@ -1463,7 +1463,7 @@ export function EditorPage() {
             onMouseUp={handleCanvasMouseUp}
           >
             <div
-              className="relative w-full rounded-xl border border-white/15 bg-black overflow-hidden shadow-2xl flex flex-col justify-between p-2 group transition-all duration-300 mx-auto"
+              className="relative w-full rounded-xl border border-border-strong bg-black overflow-hidden shadow-2xl flex flex-col justify-between p-2 group transition-all duration-300 mx-auto"
               style={{
                 aspectRatio: aspectRatio,
                 maxWidth: aspectRatio === '16/9' ? '896px' :
@@ -2285,7 +2285,7 @@ export function EditorPage() {
                       )}
                     </>
                   ) : (
-                    <div className="h-full w-full flex items-center justify-center text-slate-500 text-sm">
+                    <div className="h-full w-full flex items-center justify-center text-muted-foreground text-sm">
                       No video selected
                     </div>
                   );
@@ -2296,7 +2296,7 @@ export function EditorPage() {
                   <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_4px,3px_100%] pointer-events-none z-10 opacity-70 animate-pulse" />
                 )}
                 {(activeEffectId === 'glitch-core' || activeEffectId?.includes('pixel') || activeEffectId?.includes('corruption') || activeEffectId?.includes('signal')) && (
-                  <div className="absolute inset-0 bg-sky-500/5 mix-blend-color-dodge pointer-events-none z-10 animate-[pulse_0.1s_infinite]" />
+                  <div className="absolute inset-0 bg-primary/5 mix-blend-color-dodge pointer-events-none z-10 animate-[pulse_0.1s_infinite]" />
                 )}
                 {(activeEffectId === 'cinema-flare' || activeEffectId?.includes('flare') || activeEffectId?.includes('leak') || activeEffectId?.includes('prism') || activeEffectId?.includes('sun')) && (
                   <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-amber-400/10 to-blue-500/20 pointer-events-none z-10 opacity-60" />
@@ -2374,7 +2374,7 @@ export function EditorPage() {
                   <div className="absolute inset-0 border-2 border-sky-400 pointer-events-none z-20 shadow-glow">
                     {/* Top Rotation Handle */}
                     <div
-                      className="absolute -top-7 left-1/2 -translate-x-1/2 h-5 w-5 rounded-full bg-sky-400 text-slate-950 flex items-center justify-center cursor-grab pointer-events-auto shadow-md"
+                      className="absolute -top-7 left-1/2 -translate-x-1/2 h-5 w-5 rounded-full bg-sky-400 text-primary-foreground flex items-center justify-center cursor-grab pointer-events-auto shadow-md"
                       onMouseDown={(e) => {
                         e.stopPropagation();
                         setIsRotatingCanvas(true);
@@ -2427,10 +2427,10 @@ export function EditorPage() {
 
               {/* Overlay Top Badges */}
               <div className="absolute top-3 left-3 right-3 z-10 flex items-center justify-between text-xs font-mono pointer-events-none">
-                <span className="rounded bg-black/70 border border-white/10 px-2 py-0.5 text-slate-300">
+                <span className="rounded bg-black/70 border border-border px-2 py-0.5 text-foreground">
                   {activeMedia ? activeMedia.name : '4K · 24fps'}
                 </span>
-                <span className="rounded bg-sky-500 text-slate-950 font-bold px-2 py-0.5">
+                <span className="rounded bg-primary text-primary-foreground font-bold px-2 py-0.5">
                   LIVE PREVIEW
                 </span>
               </div>
@@ -2438,7 +2438,7 @@ export function EditorPage() {
           </div>
 
           {/* Full Professional Video Player Controls Bar */}
-          <div className="border-t border-white/10 bg-[#090d16] px-4 py-2 flex flex-col gap-2 flex-shrink-0">
+          <div className="border-t border-border bg-surface px-4 py-2 flex flex-col gap-2 flex-shrink-0">
             {/* Seek Bar Slider */}
             <div className="flex items-center gap-2">
               <input
@@ -2448,23 +2448,23 @@ export function EditorPage() {
                 step="0.05"
                 value={currentTime}
                 onChange={(e) => handleSeek(Number(e.target.value))}
-                className="w-full accent-sky-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                className="w-full accent-primary h-1.5 bg-surface-hover rounded-lg cursor-pointer"
               />
             </div>
 
             {/* Controls Info Bar */}
-            <div className="flex items-center justify-between text-xs font-mono text-slate-400">
-              <div className="flex items-center gap-1 text-slate-300">
-                <span className="text-sky-400 font-semibold">{formatTimecode(currentTime)}</span>
-                <span className="text-slate-600">/</span>
-                <span className="text-slate-400">{formatTimecode(duration || activeMedia?.duration || 0)}</span>
+            <div className="flex items-center justify-between text-xs font-mono text-muted-foreground">
+              <div className="flex items-center gap-1 text-foreground">
+                <span className="text-primary font-semibold">{formatTimecode(currentTime)}</span>
+                <span className="text-muted-foreground">/</span>
+                <span className="text-muted-foreground">{formatTimecode(duration || activeMedia?.duration || 0)}</span>
               </div>
 
               <div className="flex items-center gap-4">
                 {/* Volume & Mute */}
-                <div className="flex items-center gap-1.5 text-slate-400">
-                  <button type="button" onClick={toggleMute} className="hover:text-white transition">
-                    <Volume2 className={`h-4 w-4 ${isMuted ? 'text-red-400' : 'text-slate-400'}`} />
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <button type="button" onClick={toggleMute} className="hover:text-foreground transition">
+                    <Volume2 className={`h-4 w-4 ${isMuted ? 'text-red-400' : 'text-muted-foreground'}`} />
                   </button>
                   <input
                     type="range"
@@ -2477,12 +2477,12 @@ export function EditorPage() {
                       setVolume(v);
                       setIsMuted(false);
                     }}
-                    className="w-16 accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                    className="w-16 accent-primary h-1 bg-surface-hover rounded-lg cursor-pointer"
                   />
                 </div>
 
                 {/* Fullscreen */}
-                <button type="button" onClick={toggleFullscreen} className="p-1 text-slate-400 hover:text-white transition">
+                <button type="button" onClick={toggleFullscreen} className="p-1 text-muted-foreground hover:text-foreground transition">
                   <Maximize2 className="h-4 w-4" />
                 </button>
               </div>
@@ -2491,29 +2491,29 @@ export function EditorPage() {
         </main>
 
         {/* RIGHT PANEL: Clip Inspector */}
-        <aside className="border-l border-white/10 bg-[#090d16] flex flex-col overflow-y-auto p-4 space-y-6">
+        <aside className="border-l border-border bg-surface flex flex-col overflow-y-auto p-4 space-y-6">
           <div>
-            <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-3">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-3">
               Active Clip Properties
             </div>
-            <div className="rounded-lg border border-white/10 bg-slate-900/60 p-3 space-y-3">
+            <div className="rounded-lg border border-border bg-surface/60 p-3 space-y-3">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Asset Name</span>
-                <span className="font-mono text-slate-200 truncate max-w-[140px]">{activeMedia?.name || 'None'}</span>
+                <span className="text-muted-foreground">Asset Name</span>
+                <span className="font-mono text-foreground truncate max-w-[140px]">{activeMedia?.name || 'None'}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">File Size</span>
-                <span className="font-mono text-slate-200">{activeMedia?.size || '0 MB'}</span>
+                <span className="text-muted-foreground">File Size</span>
+                <span className="font-mono text-foreground">{activeMedia?.size || '0 MB'}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Duration</span>
-                <span className="font-mono text-slate-200">{activeMedia?.durationFormatted || '00:00'}</span>
+                <span className="text-muted-foreground">Duration</span>
+                <span className="font-mono text-foreground">{activeMedia?.durationFormatted || '00:00'}</span>
               </div>
             </div>
           </div>
 
           <div>
-            <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-3">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-3">
               Transform & Blend
             </div>
             <div className="space-y-3">
@@ -2525,8 +2525,8 @@ export function EditorPage() {
                 ['Position Y', `${Math.round(canvasPos.y)} px`],
               ].map(([k, v]) => (
                 <div key={k} className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">{k}</span>
-                  <span className="font-mono text-slate-200 bg-slate-900 border border-white/10 px-2 py-1 rounded">
+                  <span className="text-muted-foreground">{k}</span>
+                  <span className="font-mono text-foreground bg-surface border border-border px-2 py-1 rounded">
                     {v}
                   </span>
                 </div>
@@ -2537,21 +2537,21 @@ export function EditorPage() {
       </div>
 
       {/* ---------------- BOTTOM TIMELINE SECTION ---------------- */}
-      <footer className="h-64 border-t border-white/10 bg-[#090d16] flex flex-col flex-shrink-0">
+      <footer className="h-64 border-t border-border bg-surface flex flex-col flex-shrink-0">
         {/* Toolbar */}
-        <div className="h-9 border-b border-white/10 px-4 flex items-center justify-between bg-[#0c101d] text-slate-400 select-none flex-shrink-0">
+        <div className="h-9 border-b border-border px-4 flex items-center justify-between bg-surface text-muted-foreground select-none flex-shrink-0">
           <div className="flex items-center gap-2">
-            <button type="button" className="p-1 hover:text-white transition" title="Undo">
+            <button type="button" className="p-1 hover:text-foreground transition" title="Undo">
               <RotateCcw className="h-3.5 w-3.5" />
             </button>
-            <button type="button" className="p-1 hover:text-white transition" title="Redo">
+            <button type="button" className="p-1 hover:text-foreground transition" title="Redo">
               <RotateCcw className="h-3.5 w-3.5 transform -scale-x-100" />
             </button>
             <div className="h-3.5 w-px bg-white/10 mx-1" />
             <button
               type="button"
               onClick={handleTrimActiveClip}
-              className="p-1 hover:text-white transition"
+              className="p-1 hover:text-foreground transition"
               title="Trim active clip to playhead"
             >
               <Scissors className="h-3.5 w-3.5" />
@@ -2559,7 +2559,7 @@ export function EditorPage() {
             <button
               type="button"
               onClick={handleSplitActiveClip}
-              className="p-1 hover:text-white transition"
+              className="p-1 hover:text-foreground transition"
               title="Split active clip at playhead"
             >
               <Split className="h-3.5 w-3.5" />
@@ -2573,7 +2573,7 @@ export function EditorPage() {
                 setActiveMediaId(mediaFiles[0]?.id || null);
                 handleSeek(0);
               }}
-              className="p-1 hover:text-white transition text-slate-400"
+              className="p-1 hover:text-foreground transition text-muted-foreground"
               title="Skip to Start"
             >
               <SkipBack className="h-3.5 w-3.5" />
@@ -2582,7 +2582,7 @@ export function EditorPage() {
             <button
               type="button"
               onClick={() => handleSeek(Math.max(0, currentTime - 1))}
-              className="p-1 hover:text-white transition text-slate-400 font-mono text-[10px] font-bold"
+              className="p-1 hover:text-foreground transition text-muted-foreground font-mono text-[10px] font-bold"
               title="Backward 1 second (Left Arrow)"
             >
               -1s
@@ -2591,7 +2591,7 @@ export function EditorPage() {
             <button
               type="button"
               onClick={togglePlay}
-              className="h-6 w-6 rounded-md bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
+              className="h-6 w-6 rounded-md bg-white/10 hover:bg-white/20 text-foreground flex items-center justify-center transition"
               title={isPlaying ? 'Pause' : 'Play'}
             >
               {isPlaying ? <Pause className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 fill-current translate-x-0.5" />}
@@ -2603,7 +2603,7 @@ export function EditorPage() {
                 const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
                 handleSeek(Math.min(totalDur, currentTime + 1));
               }}
-              className="p-1 hover:text-white transition text-slate-400 font-mono text-[10px] font-bold"
+              className="p-1 hover:text-foreground transition text-muted-foreground font-mono text-[10px] font-bold"
               title="Forward 1 second (Right Arrow)"
             >
               +1s
@@ -2619,7 +2619,7 @@ export function EditorPage() {
                 }
                 handleSeek(totalDur);
               }}
-              className="p-1 hover:text-white transition text-slate-400"
+              className="p-1 hover:text-foreground transition text-muted-foreground"
               title="Skip to End"
             >
               <SkipForward className="h-3.5 w-3.5" />
@@ -2634,7 +2634,7 @@ export function EditorPage() {
               max="200"
               value={zoomLevel}
               onChange={(e) => setZoomLevel(Number(e.target.value))}
-              className="w-20 accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+              className="w-20 accent-primary h-1 bg-surface-hover rounded-lg cursor-pointer"
             />
             <ZoomIn className="h-3.5 w-3.5" />
           </div>
@@ -2648,13 +2648,13 @@ export function EditorPage() {
             style={{ left: '50%' }}
           >
             <div className="h-4.5 w-4.5 bg-white rounded-full border-2 border-sky-400 shadow-glow flex items-center justify-center -translate-y-1">
-              <div className="h-1.5 w-1.5 bg-sky-500 rounded-full" />
+              <div className="h-1.5 w-1.5 bg-primary rounded-full" />
             </div>
           </div>
           {/* Timeline Fully Draggable Horizontal Container */}
           <div
             ref={timelineScrollRef}
-            className="flex-1 min-w-0 relative bg-[#070a11] overflow-x-scroll overflow-y-hidden p-0 flex flex-col cursor-grab active:cursor-grabbing timeline-scroll-container"
+            className="flex-1 min-w-0 relative bg-background overflow-x-scroll overflow-y-hidden p-0 flex flex-col cursor-grab active:cursor-grabbing timeline-scroll-container"
             onMouseDown={handleTimelineMouseDown}
             onMouseMove={handleTimelineMouseMove}
             onMouseUp={handleTimelineMouseUp}
@@ -2680,13 +2680,13 @@ export function EditorPage() {
                   }}
                 >
                   {/* Row 0: Time Ruler */}
-                  <div className="flex flex-row h-6 border-b border-white/10 bg-[#0c101d] select-none flex-shrink-0">
-                    <div className="w-40 flex-shrink-0 border-r border-white/10 bg-[#070a11] flex items-center justify-center text-[9px] font-mono text-slate-500 tracking-wider">
+                  <div className="flex flex-row h-6 border-b border-border bg-surface select-none flex-shrink-0">
+                    <div className="w-40 flex-shrink-0 border-r border-border bg-background flex items-center justify-center text-[9px] font-mono text-muted-foreground tracking-wider">
                       TRACKS
                     </div>
                     <div
                       onMouseDown={handleRulerMouseDown}
-                      className="relative flex-1 h-full cursor-ew-resize flex items-center text-[9px] font-mono text-slate-400"
+                      className="relative flex-1 h-full cursor-ew-resize flex items-center text-[9px] font-mono text-muted-foreground"
                     >
                       {Array.from({ length: Math.ceil(totalTimelineSecs / 5) + 1 }).map((_, i) => {
                         const sec = i * 5;
@@ -2698,7 +2698,7 @@ export function EditorPage() {
                         return (
                           <div
                             key={sec}
-                            className="absolute border-l border-white/20 pl-1 h-full flex items-center"
+                            className="absolute border-l border-border-strong pl-1 h-full flex items-center"
                             style={{ left: `${leftPx}px` }}
                           >
                             <span>{label}</span>
@@ -2711,29 +2711,29 @@ export function EditorPage() {
                   {/* Tracks Row Grid Container */}
                   <div className="flex flex-col divide-y divide-white/5 flex-1">
                     {/* Row 1: Music Track */}
-                    <div className="flex flex-row h-8 items-center bg-[#0a0d16]/30">
+                    <div className="flex flex-row h-8 items-center bg-surface">
                       <div
-                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-[#070a11] border-r border-white/10 border-b border-white/5 select-none hover:bg-slate-800/50 cursor-pointer text-xs font-semibold gap-1.5"
+                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
                         onClick={(e) => { e.stopPropagation(); setActiveTab('audio'); }}
                       >
                         <span className="text-sm">🎵</span>
                         <span className="text-[10px] font-medium tracking-wide">Music</span>
                       </div>
-                      <div className="relative flex-1 h-full border-b border-white/5">
-                        <div className="h-5 rounded bg-slate-900/40 border border-white/5 w-full absolute top-1.5" />
+                      <div className="relative flex-1 h-full border-b border-border">
+                        <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
                       </div>
                     </div>
 
                     {/* Row 2: Text Track */}
-                    <div className="flex flex-row h-8 items-center bg-[#0a0d16]/30">
+                    <div className="flex flex-row h-8 items-center bg-surface">
                       <div
-                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-[#070a11] border-r border-white/10 border-b border-white/5 select-none hover:bg-slate-800/50 cursor-pointer text-xs font-semibold gap-1.5"
+                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
                         onClick={(e) => { e.stopPropagation(); setActiveTab('text'); }}
                       >
                         <span className="text-sm">T</span>
                         <span className="text-[10px] font-medium tracking-wide">Text</span>
                       </div>
-                      <div className="relative flex-1 h-full border-b border-white/5 px-0 flex items-center">
+                      <div className="relative flex-1 h-full border-b border-border px-0 flex items-center">
                         {textOverlays.map((overlay) => {
                           const leftPx = (overlay.startTime ?? 0) * pxPerSec;
                           const widthPx = 5 * pxPerSec; // default 5s duration for text overlays
@@ -2766,7 +2766,7 @@ export function EditorPage() {
                                 setActiveTab('captions');
                                 handleSeek(cap.start);
                               }}
-                              className="absolute h-5 rounded bg-sky-500/25 border border-sky-500/35 text-[8px] px-1.5 truncate flex items-center font-mono cursor-pointer top-1.5 z-10"
+                              className="absolute h-5 rounded bg-primary/25 border border-sky-500/35 text-[8px] px-1.5 truncate flex items-center font-mono cursor-pointer top-1.5 z-10"
                               style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
                             >
                               💬 {cap.text}
@@ -2774,29 +2774,29 @@ export function EditorPage() {
                           );
                         })}
                         {textOverlays.length === 0 && captions.length === 0 && (
-                          <div className="h-5 rounded bg-slate-900/40 border border-white/5 w-full absolute top-1.5" />
+                          <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
                         )}
                       </div>
                     </div>
 
                     {/* Row 3: Sticker Track */}
-                    <div className="flex flex-row h-8 items-center bg-[#0a0d16]/30">
+                    <div className="flex flex-row h-8 items-center bg-surface">
                       <div
-                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-[#070a11] border-r border-white/10 border-b border-white/5 select-none hover:bg-slate-800/50 cursor-pointer text-xs font-semibold gap-1.5"
+                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
                         onClick={(e) => { e.stopPropagation(); setActiveTab('effects'); }}
                       >
                         <span className="text-sm">🖼️</span>
                         <span className="text-[10px] font-medium tracking-wide">Sticker</span>
                       </div>
-                      <div className="relative flex-1 h-full border-b border-white/5">
-                        <div className="h-5 rounded bg-slate-900/40 border border-white/5 w-full absolute top-1.5" />
+                      <div className="relative flex-1 h-full border-b border-border">
+                        <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
                       </div>
                     </div>
 
                     {/* Row 4: Video Track */}
-                    <div className="flex flex-row h-14 items-center bg-slate-950/60 border-y border-sky-500/20">
+                    <div className="flex flex-row h-14 items-center bg-background/60 border-y border-sky-500/20">
                       <div
-                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-[#070a11] border-r border-white/10 select-none hover:bg-sky-500/10 cursor-pointer text-xs font-semibold gap-1.5"
+                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border select-none hover:bg-primary/10 cursor-pointer text-xs font-semibold gap-1.5"
                         onClick={(e) => { e.stopPropagation(); setActiveTab('media'); }}
                       >
                         <span className="text-sm">🎞️</span>
@@ -2831,8 +2831,8 @@ export function EditorPage() {
                               onDragEnd={handleDragEnd}
                               className={`h-12 rounded-md border flex items-center overflow-hidden cursor-pointer flex-shrink-0 transition absolute ${
                                 isSelected
-                                  ? 'border-sky-400 ring-2 ring-sky-400/50 bg-sky-500/25 z-20 shadow-glow scale-[1.01]'
-                                  : 'border-white/15 bg-slate-900 hover:border-sky-400/60 z-10'
+                                  ? 'border-sky-400 ring-2 ring-sky-400/50 bg-primary/25 z-20 shadow-glow scale-[1.01]'
+                                  : 'border-border-strong bg-surface hover:border-sky-400/60 z-10'
                               } ${isLocked ? 'opacity-70 border-dashed border-amber-500/30' : ''}`}
                               style={{ left: `${clip.timelineStart * pxPerSec + 4}px`, width: `${Math.max(12, clipWidthPx - 8)}px` }}
                             >
@@ -2857,7 +2857,7 @@ export function EditorPage() {
                                 ))}
                               </div>
 
-                              <span className="px-2 font-mono text-[9px] text-white font-semibold truncate bg-black/80 py-0.5 rounded-l absolute right-2 bottom-1 pointer-events-none flex items-center gap-1">
+                              <span className="px-2 font-mono text-[9px] text-foreground font-semibold truncate bg-black/80 py-0.5 rounded-l absolute right-2 bottom-1 pointer-events-none flex items-center gap-1">
                                 {isLocked && <Lock className="h-2.5 w-2.5 text-amber-400 flex-shrink-0" />}
                                 {isMuted && <VolumeX className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />}
                                 {clip.name} ({formatTimecode(clip.duration)})
@@ -2893,8 +2893,8 @@ export function EditorPage() {
                                 }}
                                 className={`h-7 w-7 rounded-full flex items-center justify-center flex-shrink-0 border transition-all duration-200 shadow-lg z-40 absolute ${
                                   transitionId 
-                                    ? 'bg-sky-500 text-slate-950 font-bold hover:bg-sky-400 border-sky-400 ring-2 ring-sky-400/30 shadow-[0_0_10px_rgba(56,189,248,0.5)] scale-105' 
-                                    : 'bg-[#111726]/95 text-sky-400 border-sky-500/40 hover:bg-sky-500 hover:text-slate-950 hover:border-sky-400 hover:scale-110'
+                                    ? 'bg-primary text-primary-foreground font-bold hover:bg-sky-400 border-sky-400 ring-2 ring-sky-400/30 shadow-[0_0_10px_rgba(56,189,248,0.5)] scale-105' 
+                                    : 'bg-surface text-primary border-sky-500/40 hover:bg-primary hover:text-primary-foreground hover:border-sky-400 hover:scale-110'
                                 }`}
                                 style={{ left: `${(clip.timelineStart + clip.duration) * pxPerSec - 14}px` }}
                                 title={transitionId ? `Transition: ${transitionId}` : 'Add Transition'}
@@ -2910,16 +2910,16 @@ export function EditorPage() {
                     </div>
 
                     {/* Row 5: Audio Track */}
-                    <div className="flex flex-row h-8 items-center bg-[#0a0d16]/30">
+                    <div className="flex flex-row h-8 items-center bg-surface">
                       <div
-                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-[#070a11] border-r border-white/10 border-t border-white/5 select-none hover:bg-slate-800/50 cursor-pointer text-xs font-semibold gap-1.5"
+                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-t border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
                         onClick={(e) => { e.stopPropagation(); toggleMute(); }}
                       >
                         <Volume2 className="h-3.5 w-3.5" />
                         <span className="text-[10px] font-medium tracking-wide">Audio</span>
                       </div>
-                      <div className="relative flex-1 h-full border-t border-white/5 bg-slate-900/50">
-                        <div className="h-5 rounded bg-slate-900/40 border border-white/5 w-full absolute top-1.5" />
+                      <div className="relative flex-1 h-full border-t border-border bg-surface/50">
+                        <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
                       </div>
                     </div>
                   </div>
@@ -2997,7 +2997,7 @@ export function EditorPage() {
 
       {/* RENDER TOAST ALERT NOTIFICATION */}
       {toast && (
-        <div className="absolute bottom-24 right-4 bg-slate-900 border border-sky-400/30 text-sky-400 text-xs px-3.5 py-2 rounded-xl shadow-glow z-[150] flex items-center gap-1.5 animate-bounce">
+        <div className="absolute bottom-24 right-4 bg-surface border border-sky-400/30 text-primary text-xs px-3.5 py-2 rounded-xl shadow-glow z-[150] flex items-center gap-1.5 animate-bounce">
           <span>⚡</span>
           <span>{toast}</span>
         </div>

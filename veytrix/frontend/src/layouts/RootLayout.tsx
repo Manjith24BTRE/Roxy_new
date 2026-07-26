@@ -2,19 +2,21 @@ import React from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { SiteHeader } from './SiteHeader';
 import { SiteFooter } from './SiteFooter';
-import '../styles/styles.css';
+import '../styles.css';
 
 export function RootLayout() {
   const location = useLocation();
   const isEditor = location.pathname.startsWith('/editor');
 
+  const isWorkspace = ['/home', '/dashboard', '/projects', '/profile', '/settings', '/help', '/report-problem'].includes(location.pathname);
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#0a0d14] text-slate-100 font-sans">
-      {!isEditor && <SiteHeader />}
+    <div className="min-h-screen flex flex-col bg-background text-foreground font-sans">
+      {!isEditor && !isWorkspace && <SiteHeader />}
       <main className="flex-1 flex flex-col">
         <Outlet />
       </main>
-      {!isEditor && <SiteFooter />}
+      {!isEditor && !isWorkspace && <SiteFooter />}
     </div>
   );
 }

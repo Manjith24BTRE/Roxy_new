@@ -225,25 +225,25 @@ export function QuickEditPlayground() {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#070a11] text-slate-100 overflow-hidden font-sans select-none">
+    <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden font-sans select-none">
       
       {/* HEADER SECTION */}
-      <header className="h-12 border-b border-white/10 bg-[#0c101d] px-4 flex items-center justify-between flex-shrink-0">
+      <header className="h-12 border-b border-border bg-surface px-4 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => navigate('/editor')}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white px-2.5 py-1.5 rounded-md hover:bg-slate-800 transition cursor-pointer"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-md hover:bg-surface-hover transition cursor-pointer"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Standard Editor</span>
           </button>
           <div className="h-4 w-px bg-white/10" />
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-semibold text-slate-200">
+            <span className="font-mono text-xs font-semibold text-foreground">
               Veytrix AI / Quick Edit Module Playground
             </span>
-            <span className="rounded bg-sky-500/10 border border-sky-500/25 text-sky-400 text-[10px] font-mono px-2 py-0.5 animate-pulse">
+            <span className="rounded bg-primary/10 border border-sky-500/25 text-primary text-[10px] font-mono px-2 py-0.5 animate-pulse">
               Playground Live
             </span>
           </div>
@@ -252,7 +252,7 @@ export function QuickEditPlayground() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="px-3 py-1.5 text-xs rounded-md bg-[#1d2438] border border-white/5 hover:border-white/15 text-slate-200 transition cursor-pointer"
+            className="px-3 py-1.5 text-xs rounded-md bg-surface border border-border hover:border-border-strong text-foreground transition cursor-pointer"
           >
             Export Project XML
           </button>
@@ -263,9 +263,9 @@ export function QuickEditPlayground() {
       <div className="flex-1 grid grid-cols-[280px_1fr_300px] overflow-hidden min-h-0">
         
         {/* LEFT COLUMN: Sidebar with sub-modules */}
-        <aside className="border-r border-white/10 bg-[#090d16] flex flex-col overflow-hidden">
+        <aside className="border-r border-border bg-surface flex flex-col overflow-hidden">
           {/* Sidebar Tab switches */}
-          <div className="flex border-b border-white/10 bg-[#0c101d] p-1 gap-1">
+          <div className="flex border-b border-border bg-surface p-1 gap-1">
             {[
               { id: 'text', label: 'Text', icon: Film },
               { id: 'captions', label: 'Captions', icon: Wand2 },
@@ -278,8 +278,8 @@ export function QuickEditPlayground() {
                 onClick={() => setActiveLeftTab(tab.id as any)}
                 className={`flex-1 py-1.5 text-[10px] font-semibold rounded-md transition cursor-pointer text-center ${
                   activeLeftTab === tab.id
-                    ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
-                    : 'text-slate-400 hover:bg-slate-800'
+                    ? 'bg-primary/10 text-primary border border-sky-500/20'
+                    : 'text-muted-foreground hover:bg-surface-hover'
                 }`}
               >
                 {tab.label}
@@ -330,7 +330,7 @@ export function QuickEditPlayground() {
         </aside>
 
         {/* CENTER COLUMN: Preview Monitor */}
-        <main className="flex flex-col overflow-hidden border-r border-white/10 bg-[#05070c]">
+        <main className="flex flex-col overflow-hidden border-r border-border bg-background">
           <PreviewPlayer
             isPlaying={isPlaying}
             onPlayToggle={() => setIsPlaying(!isPlaying)}
@@ -346,7 +346,7 @@ export function QuickEditPlayground() {
         </main>
 
         {/* RIGHT COLUMN: Right Properties Panel */}
-        <aside className="overflow-hidden flex flex-col bg-[#090d16]">
+        <aside className="overflow-hidden flex flex-col bg-surface">
           <PropertiesPanel
             posX={posX}
             onPosXChange={setPosX}
@@ -383,7 +383,7 @@ export function QuickEditPlayground() {
       </div>
 
       {/* BOTTOM FOOTER: Multi-track Timeline */}
-      <footer className="h-56 flex-shrink-0 bg-[#080b13] border-t border-white/10">
+      <footer className="h-56 flex-shrink-0 bg-surface border-t border-border">
         <Timeline
           currentTime={currentTime}
           onTimeChange={setCurrentTime}

@@ -42,9 +42,9 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
 
   // Timeline Clips
   const [clips, setClips] = useState<TimelineClip[]>([
-    { id: 'v1', name: 'Intro Clip.mp4', start: 0, duration: 8, trackId: 'video', color: 'bg-sky-500/25 border-sky-400/50 text-sky-300' },
-    { id: 'v2', name: 'A-Roll Interview.mp4', start: 8, duration: 15, trackId: 'video', color: 'bg-sky-500/25 border-sky-400/50 text-sky-300' },
-    { id: 'v3', name: 'Outro B-Roll.mp4', start: 23, duration: 7, trackId: 'video', color: 'bg-sky-500/25 border-sky-400/50 text-sky-300' },
+    { id: 'v1', name: 'Intro Clip.mp4', start: 0, duration: 8, trackId: 'video', color: 'bg-primary/25 border-sky-400/50 text-sky-300' },
+    { id: 'v2', name: 'A-Roll Interview.mp4', start: 8, duration: 15, trackId: 'video', color: 'bg-primary/25 border-sky-400/50 text-sky-300' },
+    { id: 'v3', name: 'Outro B-Roll.mp4', start: 23, duration: 7, trackId: 'video', color: 'bg-primary/25 border-sky-400/50 text-sky-300' },
     
     { id: 'a1', name: 'Background Beat.mp3', start: 0, duration: 30, trackId: 'audio', color: 'bg-emerald-500/25 border-emerald-400/50 text-emerald-300' },
     
@@ -345,16 +345,16 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
   const totalTimelineWidth = 35 * scaleFactor;
 
   return (
-    <div className="flex flex-col h-full bg-[#080b13] border-t border-white/10 text-slate-200 relative">
+    <div className="flex flex-col h-full bg-surface border-t border-border text-foreground relative">
       
       {/* Timeline Control Bar */}
-      <div className="h-10 border-b border-white/5 px-4 flex items-center justify-between bg-[#0b0e1a] text-xs">
+      <div className="h-10 border-b border-border px-4 flex items-center justify-between bg-surface text-xs">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handleUndo}
             disabled={historyIndex === 0}
-            className="p-1.5 rounded hover:bg-slate-800 disabled:opacity-40 disabled:hover:bg-transparent transition cursor-pointer"
+            className="p-1.5 rounded hover:bg-surface-hover disabled:opacity-40 disabled:hover:bg-transparent transition cursor-pointer"
             title="Undo"
           >
             <RotateCcw className="h-3.5 w-3.5" />
@@ -363,7 +363,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
             type="button"
             onClick={handleRedo}
             disabled={historyIndex === history.length - 1}
-            className="p-1.5 rounded hover:bg-slate-800 disabled:opacity-40 disabled:hover:bg-transparent transition cursor-pointer"
+            className="p-1.5 rounded hover:bg-surface-hover disabled:opacity-40 disabled:hover:bg-transparent transition cursor-pointer"
             title="Redo"
           >
             <RotateCcw className="h-3.5 w-3.5 transform -scale-x-100" />
@@ -373,7 +373,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
             type="button"
             onClick={handleSplit}
             disabled={!selectedClipId}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-900 border border-white/10 hover:bg-slate-800 disabled:opacity-50 transition cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-surface border border-border hover:bg-surface-hover disabled:opacity-50 transition cursor-pointer"
             title="Split Clip at Playhead"
           >
             <Scissors className="h-3 w-3" />
@@ -383,7 +383,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
             type="button"
             onClick={handleDuplicate}
             disabled={!selectedClipId}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-900 border border-white/10 hover:bg-slate-800 disabled:opacity-50 transition cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-surface border border-border hover:bg-surface-hover disabled:opacity-50 transition cursor-pointer"
             title="Duplicate Selected Clip"
           >
             <Copy className="h-3 w-3" />
@@ -403,7 +403,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
             type="button"
             onClick={handleRippleDelete}
             disabled={!selectedClipId}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-sky-500/15 border border-sky-500/20 text-sky-400 hover:bg-sky-500/25 disabled:opacity-50 transition cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary/15 border border-sky-500/20 text-primary hover:bg-primary/25 disabled:opacity-50 transition cursor-pointer"
             title="Ripple Delete Selected Clip"
           >
             <Trash2 className="h-3 w-3" />
@@ -413,18 +413,18 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
 
         <div className="flex items-center gap-3">
           {selectedClipId && (
-            <div className="flex items-center gap-1 bg-slate-900 border border-white/10 rounded-lg p-0.5">
+            <div className="flex items-center gap-1 bg-surface border border-border rounded-lg p-0.5">
               <button
                 type="button"
                 onClick={() => handleTrim('left', -0.5)}
-                className="px-1.5 py-0.5 rounded text-[10px] hover:bg-slate-800 cursor-pointer"
+                className="px-1.5 py-0.5 rounded text-[10px] hover:bg-surface-hover cursor-pointer"
               >
                 ◀ Trim
               </button>
               <button
                 type="button"
                 onClick={() => handleTrim('left', 0.5)}
-                className="px-1.5 py-0.5 rounded text-[10px] hover:bg-slate-800 cursor-pointer"
+                className="px-1.5 py-0.5 rounded text-[10px] hover:bg-surface-hover cursor-pointer"
               >
                 Trim ▶
               </button>
@@ -432,14 +432,14 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
               <button
                 type="button"
                 onClick={() => handleTrim('right', -0.5)}
-                className="px-1.5 py-0.5 rounded text-[10px] hover:bg-slate-800 cursor-pointer"
+                className="px-1.5 py-0.5 rounded text-[10px] hover:bg-surface-hover cursor-pointer"
               >
                 ◀ Trim
               </button>
               <button
                 type="button"
                 onClick={() => handleTrim('right', 0.5)}
-                className="px-1.5 py-0.5 rounded text-[10px] hover:bg-slate-800 cursor-pointer"
+                className="px-1.5 py-0.5 rounded text-[10px] hover:bg-surface-hover cursor-pointer"
               >
                 Trim ▶
               </button>
@@ -449,13 +449,13 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
           <button
             type="button"
             onClick={handleAddMarker}
-            className="flex items-center gap-1 px-2 py-1 rounded bg-slate-900 border border-white/10 hover:bg-slate-800 text-slate-300 transition cursor-pointer"
+            className="flex items-center gap-1 px-2 py-1 rounded bg-surface border border-border hover:bg-surface-hover text-foreground transition cursor-pointer"
           >
             <Bookmark className="h-3.5 w-3.5 text-amber-400" />
             <span>Add Marker</span>
           </button>
 
-          <div className="flex items-center gap-1.5 text-slate-400">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
             <ZoomOut className="h-3.5 w-3.5" />
             <input
               type="range"
@@ -463,7 +463,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
               max="250"
               value={zoom}
               onChange={(e) => setZoom(Number(e.target.value))}
-              className="w-20 accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+              className="w-20 accent-primary h-1 bg-surface-hover rounded-lg cursor-pointer"
             />
             <ZoomIn className="h-3.5 w-3.5" />
           </div>
@@ -473,22 +473,22 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
       {/* Main Track Workspace */}
       <div className="flex-1 flex overflow-hidden">
         {/* LEFT Track Header panel */}
-        <div className="w-48 border-r border-white/10 bg-[#060911] flex flex-col divide-y divide-white/5 flex-shrink-0">
-          <div className="h-6 bg-[#090d17] px-3 flex items-center text-[9px] font-mono text-slate-500 uppercase tracking-widest">
+        <div className="w-48 border-r border-border bg-background flex flex-col divide-y divide-white/5 flex-shrink-0">
+          <div className="h-6 bg-background px-3 flex items-center text-[9px] font-mono text-muted-foreground uppercase tracking-widest">
             Track Details
           </div>
 
           {(['video', 'audio', 'text', 'effect'] as const).map((trackId) => (
-            <div key={trackId} className="h-[44px] px-3 flex items-center justify-between bg-[#080c15]">
+            <div key={trackId} className="h-[44px] px-3 flex items-center justify-between bg-background">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono font-bold capitalize text-slate-300">{trackId}</span>
+                <span className="text-[10px] font-mono font-bold capitalize text-foreground">{trackId}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => toggleTrackLock(trackId)}
-                  className={`p-1 rounded hover:bg-slate-800 transition cursor-pointer ${
-                    lockedTracks[trackId] ? 'text-amber-500' : 'text-slate-500'
+                  className={`p-1 rounded hover:bg-surface-hover transition cursor-pointer ${
+                    lockedTracks[trackId] ? 'text-amber-500' : 'text-muted-foreground'
                   }`}
                 >
                   {lockedTracks[trackId] ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
@@ -496,8 +496,8 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
                 <button
                   type="button"
                   onClick={() => toggleTrackVisibility(trackId)}
-                  className={`p-1 rounded hover:bg-slate-800 transition cursor-pointer ${
-                    hiddenTracks[trackId] ? 'text-red-400' : 'text-slate-500'
+                  className={`p-1 rounded hover:bg-surface-hover transition cursor-pointer ${
+                    hiddenTracks[trackId] ? 'text-red-400' : 'text-muted-foreground'
                   }`}
                 >
                   {hiddenTracks[trackId] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
@@ -506,8 +506,8 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
                   <button
                     type="button"
                     onClick={() => toggleTrackMute(trackId)}
-                    className={`p-1 rounded hover:bg-slate-800 transition cursor-pointer ${
-                      mutedTracks[trackId] ? 'text-red-400' : 'text-slate-500'
+                    className={`p-1 rounded hover:bg-surface-hover transition cursor-pointer ${
+                      mutedTracks[trackId] ? 'text-red-400' : 'text-muted-foreground'
                     }`}
                   >
                     {mutedTracks[trackId] ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
@@ -519,18 +519,18 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
         </div>
 
         {/* RIGHT scrollable Track list panel */}
-        <div className="flex-1 overflow-auto relative select-none bg-[#05070e]" style={{ cursor: 'crosshair' }}>
+        <div className="flex-1 overflow-auto relative select-none bg-background" style={{ cursor: 'crosshair' }}>
           <div className="relative h-full flex flex-col justify-between" style={{ width: `${totalTimelineWidth}px` }}>
             
             {/* Time Ruler and Markers */}
-            <div className="h-6 border-b border-white/10 bg-[#090d17] relative flex items-center text-[9px] font-mono text-slate-500">
+            <div className="h-6 border-b border-border bg-background relative flex items-center text-[9px] font-mono text-muted-foreground">
               {Array.from({ length: 8 }).map((_, i) => {
                 const sec = i * 5;
                 const leftPx = sec * scaleFactor;
                 return (
                   <div
                     key={sec}
-                    className="absolute border-l border-white/20 pl-1.5 h-full flex items-center"
+                    className="absolute border-l border-border-strong pl-1.5 h-full flex items-center"
                     style={{ left: `${leftPx}px` }}
                   >
                     <span>00:{sec.toString().padStart(2, '0')}</span>
@@ -546,7 +546,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
                   onClick={() => onTimeChange(marker.time)}
                 >
                   <Bookmark className="h-3 w-3 text-amber-500 fill-current" />
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-slate-950 border border-amber-500/30 text-[8px] px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-25 text-amber-400">
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-background border border-amber-500/30 text-[8px] px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-25 text-amber-400">
                     {marker.label}
                   </div>
                 </div>
@@ -572,7 +572,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
                     key={trackId}
                     className={`h-[44px] relative flex items-center border-y border-transparent ${
                       isHidden ? 'opacity-20 pointer-events-none' : ''
-                    } ${isLocked ? 'bg-slate-900/10' : 'bg-transparent'}`}
+                    } ${isLocked ? 'bg-surface/10' : 'bg-transparent'}`}
                   >
                     {clips
                       .filter((c) => c.trackId === trackId)
@@ -636,7 +636,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
 
       {/* RENDER TOAST ALERT NOTIFICATION */}
       {toast && (
-        <div className="absolute bottom-12 right-4 bg-slate-900 border border-sky-400/30 text-sky-400 text-xs px-3.5 py-2 rounded-xl shadow-glow z-50 flex items-center gap-1.5">
+        <div className="absolute bottom-12 right-4 bg-surface border border-sky-400/30 text-primary text-xs px-3.5 py-2 rounded-xl shadow-glow z-50 flex items-center gap-1.5">
           <span>⚡</span>
           <span>{toast}</span>
         </div>
