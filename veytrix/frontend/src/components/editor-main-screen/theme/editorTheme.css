@@ -1,0 +1,19 @@
+.veytrix-editor {
+  --editor-bg: #0B1020;
+  --editor-panel: #131C32;
+  --editor-surface: #1D2438;
+  --editor-border: rgba(255, 255, 255, 0.05);
+  --editor-text: #F5F8FC;
+  --editor-text-muted: #8B9BB4;
+  --editor-accent: #38BDF8;
+
+  /* Aliasing to existing global Tailwind semantic classes */
+  --background: var(--editor-bg);
+  --surface: var(--editor-panel);
+  --surface-hover: var(--editor-surface);
+  --border: var(--editor-border);
+  --border-strong: rgba(255, 255, 255, 0.1);
+  --foreground: var(--editor-text);
+  --muted-foreground: var(--editor-text-muted);
+  --primary: var(--editor-accent);
+}

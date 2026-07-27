@@ -1,3 +1,4 @@
+import './theme/editorTheme.css';
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -7,25 +8,25 @@ import {
   FolderPlus, Maximize2, RotateCcw, Image as ImageIcon,
   Languages, Crop, Lock, Unlock
 } from 'lucide-react';
-import { VeytrixLogo } from '../../../components/VeytrixLogo';
-import { useProjectMedia } from '../../../contexts/ProjectMediaContext';
+import { VeytrixLogo } from '../VeytrixLogo';
+import { useProjectMedia } from '../../contexts/ProjectMediaContext';
 
 // Quick AI Edit Imports
-import { AspectRatio } from '../../../../aspect-ratio/AspectRatio';
-import { Audio } from '../../../../audio/Audio';
-import { TextPanel, TextOverlay } from '../../../../text/TextPanel';
-import { Captions, CaptionItem } from '../../../../captions/Captions';
-import { Effects } from '../../../../effects/Effects';
+import { AspectRatio } from './tools/aspect-ratio/AspectRatio';
+import { Audio } from './tools/audio/Audio';
+import { TextPanel, TextOverlay } from './tools/text/TextPanel';
+import { Captions, CaptionItem } from './tools/captions/Captions';
+import { Effects } from './tools/effects/Effects';
 // Force IDE cache refresh for folder casing
-import { SAMPLE_FILTERS, getInterpolatedFilter } from '../../../../filters/samples';
-import { EFFECT_PRESETS, EffectPreset, AppliedEffect, EffectKeyframe, getInterpolatedEffectProps } from '../../../../effects/effectsPreset';
+import { SAMPLE_FILTERS, getInterpolatedFilter } from './tools/filters/samples';
+import { EFFECT_PRESETS, EffectPreset, AppliedEffect, EffectKeyframe, getInterpolatedEffectProps } from './tools/effects/effectsPreset';
 
 
 
 // Context Menu
-import { TimelineContextMenu } from '../components/Timeline/TimelineContextMenu';
+import { TimelineContextMenu } from './components/Timeline/TimelineContextMenu';
 
-export function EditorPage() {
+export function EditorMainScreen() {
   const navigate = useNavigate();
   const { mediaFiles, activeMediaId, setActiveMediaId } = useProjectMedia();
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
@@ -1251,7 +1252,7 @@ export function EditorPage() {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden font-sans select-none">
+    <div className="veytrix-editor h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden font-sans select-none">
       {/* ---------------- TOP BAR ---------------- */}
       <header className="h-12 border-b border-border bg-surface px-4 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -1263,7 +1264,7 @@ export function EditorPage() {
             <ArrowLeft className="h-4 w-4" />
             <span>Dashboard</span>
           </button>
-          <div className="h-4 w-px bg-white/10" />
+          <div className="h-4 w-px bg-surface/10" />
           <div className="flex items-center gap-2">
             <VeytrixLogo className="h-5 w-5" />
             <span className="font-mono text-xs font-semibold text-foreground">
@@ -3175,7 +3176,7 @@ export function EditorPage() {
                     {['top-left', 'top-right', 'bottom-left', 'bottom-right'].map((corner) => (
                       <div
                         key={corner}
-                        className={`absolute h-3 w-3 bg-white border-2 border-sky-400 rounded-sm pointer-events-auto cursor-nwse-resize shadow-md ${
+                        className={`absolute h-3 w-3 bg-surface border-2 border-sky-400 rounded-sm pointer-events-auto cursor-nwse-resize shadow-md ${
                           corner === 'top-left' ? '-top-1.5 -left-1.5' :
                           corner === 'top-right' ? '-top-1.5 -right-1.5' :
                           corner === 'bottom-left' ? '-bottom-1.5 -left-1.5' :
@@ -3193,7 +3194,7 @@ export function EditorPage() {
                     {['top', 'bottom', 'left', 'right'].map((edge) => (
                       <div
                         key={edge}
-                        className={`absolute bg-white border border-sky-400 rounded-sm pointer-events-auto ${
+                        className={`absolute bg-surface border border-sky-400 rounded-sm pointer-events-auto ${
                           edge === 'top' ? '-top-1 left-1/2 -translate-x-1/2 w-4 h-1.5 cursor-ns-resize' :
                           edge === 'bottom' ? '-bottom-1 left-1/2 -translate-x-1/2 w-4 h-1.5 cursor-ns-resize' :
                           edge === 'left' ? '-left-1 top-1/2 -translate-y-1/2 h-4 w-1.5 cursor-ew-resize' :
@@ -3333,7 +3334,7 @@ export function EditorPage() {
             <button type="button" className="p-1 hover:text-foreground transition" title="Redo">
               <RotateCcw className="h-3.5 w-3.5 transform -scale-x-100" />
             </button>
-            <div className="h-3.5 w-px bg-white/10 mx-1" />
+            <div className="h-3.5 w-px bg-surface/10 mx-1" />
             <button
               type="button"
               onClick={handleTrimActiveClip}
@@ -3377,7 +3378,7 @@ export function EditorPage() {
             <button
               type="button"
               onClick={togglePlay}
-              className="h-6 w-6 rounded-md bg-white/10 hover:bg-white/20 text-foreground flex items-center justify-center transition"
+              className="h-6 w-6 rounded-md bg-surface/10 hover:bg-surface/20 text-foreground flex items-center justify-center transition"
               title={isPlaying ? 'Pause' : 'Play'}
             >
               {isPlaying ? <Pause className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 fill-current translate-x-0.5" />}
@@ -3430,10 +3431,10 @@ export function EditorPage() {
         <div className="flex-1 flex overflow-hidden relative">
           {/* FIXED CENTER PLAYHEAD LINE (CAPCUT STYLE) */}
           <div
-            className="absolute top-0 bottom-0 w-0.5 bg-white z-40 pointer-events-none shadow-glow flex flex-col items-center"
+            className="absolute top-0 bottom-0 w-0.5 bg-surface z-40 pointer-events-none shadow-glow flex flex-col items-center"
             style={{ left: '50%' }}
           >
-            <div className="h-4.5 w-4.5 bg-white rounded-full border-2 border-sky-400 shadow-glow flex items-center justify-center -translate-y-1">
+            <div className="h-4.5 w-4.5 bg-surface rounded-full border-2 border-sky-400 shadow-glow flex items-center justify-center -translate-y-1">
               <div className="h-1.5 w-1.5 bg-primary rounded-full" />
             </div>
           </div>
