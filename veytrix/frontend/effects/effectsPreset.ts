@@ -22,6 +22,23 @@ import { CINEMATIC_EFFECTS } from './cinematic';
 import { LENS_EFFECTS } from './lens';
 import { LIGHT_EFFECTS } from './light';
 import { DISTORTION_EFFECTS } from './distortion';
+import { RETRO_EFFECTS } from './retro';
+import { VHS_EFFECTS } from './vhs';
+import { CRT_EFFECTS } from './crt';
+import { NEON_EFFECTS } from './neon';
+import { FIRE_EFFECTS } from './fire';
+import { SMOKE_EFFECTS } from './smoke';
+import { WEATHER_EFFECTS } from './weather';
+import { PARTICLES_EFFECTS } from './particles';
+import { NATURE_EFFECTS } from './nature';
+import { DREAM_EFFECTS } from './dream';
+import { HORROR_EFFECTS } from './horror';
+import { SCIFI_EFFECTS } from './scifi';
+import { GAMING_EFFECTS } from './gaming';
+import { COSMIC_EFFECTS } from './cosmic';
+import { THREED_EFFECTS } from './threeD';
+import { ARTISTIC_EFFECTS } from './artistic';
+import { AI_EFFECTS } from './ai';
 
 const CATEGORIES_INFO: Record<
   string,
@@ -187,9 +204,9 @@ const CATEGORIES_INFO: Record<
 const CATEGORIES = Object.keys(CATEGORIES_INFO);
 
 function generatePresets(): EffectPreset[] {
-  const list: EffectPreset[] = [...BASIC_EFFECTS, ...CAMERA_EFFECTS, ...BLUR_EFFECTS, ...GLITCH_EFFECTS, ...CINEMATIC_EFFECTS, ...LENS_EFFECTS, ...LIGHT_EFFECTS, ...DISTORTION_EFFECTS];
+  const list: EffectPreset[] = [...BASIC_EFFECTS, ...CAMERA_EFFECTS, ...BLUR_EFFECTS, ...GLITCH_EFFECTS, ...CINEMATIC_EFFECTS, ...LENS_EFFECTS, ...LIGHT_EFFECTS, ...DISTORTION_EFFECTS, ...RETRO_EFFECTS, ...VHS_EFFECTS, ...CRT_EFFECTS, ...NEON_EFFECTS, ...FIRE_EFFECTS, ...SMOKE_EFFECTS, ...WEATHER_EFFECTS, ...PARTICLES_EFFECTS, ...NATURE_EFFECTS, ...DREAM_EFFECTS, ...HORROR_EFFECTS, ...SCIFI_EFFECTS, ...GAMING_EFFECTS, ...COSMIC_EFFECTS, ...THREED_EFFECTS, ...ARTISTIC_EFFECTS, ...AI_EFFECTS];
   CATEGORIES.forEach((cat) => {
-    if (cat === 'Basic' || cat === 'Camera' || cat === 'Blur' || cat === 'Glitch' || cat === 'Cinematic' || cat === 'Lens' || cat === 'Light' || cat === 'Distortion') return; // Skip generating Basic/Camera/Blur/Glitch/Cinematic/Lens/Light/Distortion categories programmatically
+    if (cat === 'Basic' || cat === 'Camera' || cat === 'Blur' || cat === 'Glitch' || cat === 'Cinematic' || cat === 'Lens' || cat === 'Light' || cat === 'Distortion' || cat === 'Retro' || cat === 'VHS' || cat === 'CRT' || cat === 'Neon' || cat === 'Fire' || cat === 'Smoke' || cat === 'Weather' || cat === 'Particles' || cat === 'Nature' || cat === 'Dream' || cat === 'Horror' || cat === 'Sci-Fi' || cat === 'Gaming' || cat === 'Cosmic' || cat === '3D' || cat === 'Artistic' || cat === 'AI') return; // Skip generating Basic/Camera/Blur/Glitch/Cinematic/Lens/Light/Distortion/Retro/VHS/CRT/Neon/Fire/Smoke/Weather/Particles/Nature/Dream/Horror/Sci-Fi/Gaming/Cosmic/3D/Artistic/AI categories programmatically
     const info = CATEGORIES_INFO[cat];
     for (let i = 1; i <= 40; i++) {
       const presetId = `${cat.toLowerCase().replace('&', 'and').replace(' ', '-')}-preset-${i}`;
@@ -266,11 +283,13 @@ export interface AppliedEffect {
   pixelSize?: number;
   colorShift?: number;
   glitchFrequency?: number;
+  glitchAmount?: number;
   brightness?: number;
   contrast?: number;
   saturation?: number;
   temperature?: number;
   tint?: number;
+  blur?: number;
   glowAmount?: number;
   grainAmount?: number;
   flareSize?: number;
@@ -302,6 +321,163 @@ export interface AppliedEffect {
   stretchAmount?: number;
   twistAmount?: number;
   flowDirection?: number;
+  dustAmount?: number;
+  scratchAmount?: number;
+  warmth?: number;
+  fade?: number;
+  trackingAmount?: number;
+  horizontalShift?: number;
+  verticalShift?: number;
+  tapeDamage?: number;
+  staticDensity?: number;
+  waveStrength?: number;
+  curvature?: number;
+  scanlineThickness?: number;
+  bloomAmount?: number;
+  glassOpacity?: number;
+  glowStrength?: number;
+  glowSoftness?: number;
+  glowThreshold?: number;
+  edgeGlow?: number;
+  hue?: number;
+  blendAmount?: number;
+  glowColor?: string;
+  glowRadius?: number;
+  flameHeight?: number;
+  flameWidth?: number;
+  flameSpeed?: number;
+  heatDistortion?: number;
+  emberDensity?: number;
+  sparkAmount?: number;
+  smokeDensity?: number;
+  windStrength?: number;
+  flameDirection?: string;
+  turbulence?: number;
+  spread?: number;
+  softness?: number;
+  fireColor?: string;
+  flowSpeed?: number;
+  swirlAmount?: number;
+  size?: number;
+  fadeIn?: number;
+  fadeOut?: number;
+  layerAmount?: number;
+  animationSpeed?: number;
+  smokeColor?: string;
+  weatherType?: string;
+  particleDensity?: number;
+  windSpeed?: number;
+  windDirection?: number;
+  particleSize?: number;
+  particleSpeed?: number;
+  environmentLight?: number;
+  atmosphericDepth?: number;
+  rainAmount?: number;
+  snowAmount?: number;
+  lightningFrequency?: number;
+  cloudCoverage?: number;
+  shadowStrength?: number;
+  motionBlur?: number;
+  colorTint?: string;
+  particleCount?: number;
+  sizeVariation?: number;
+  gravity?: number;
+  lifetime?: number;
+  spawnRate?: number;
+  rotationSpeed?: number;
+  randomness?: number;
+  colorVariation?: number;
+  particlesColor?: string;
+  environmentDensity?: number;
+  leafDensity?: number;
+  leafSize?: number;
+  birdCount?: number;
+  butterflyCount?: number;
+  fireflyCount?: number;
+  flowerDensity?: number;
+  grassMovement?: number;
+  waterSpeed?: number;
+  waterStrength?: number;
+  cloudDensity?: number;
+  cloudSpeed?: number;
+  sunlightIntensity?: number;
+  lightRays?: number;
+  bloom?: number;
+  natureColorTint?: string;
+  softFocus?: number;
+  hazeDensity?: number;
+  sparkleAmount?: number;
+  bokehSize?: number;
+  highlightStrength?: number;
+  dreamColorTint?: string;
+  darkness?: number;
+  cameraShake?: number;
+  filmGrain?: number;
+  horrorColorTint?: string;
+  hologramOpacity?: number;
+  energyStrength?: number;
+  plasmaAmount?: number;
+  electricArcDensity?: number;
+  laserBrightness?: number;
+  hudOpacity?: number;
+  scanlineStrength?: number;
+  rgbShift?: number;
+  neonGlow?: number;
+  motionTrails?: number;
+  lensFlare?: number;
+  scifiColorTint?: string;
+  rgbStrength?: number;
+  crosshairSize?: number;
+  speedLines?: number;
+  sparkDensity?: number;
+  flashIntensity?: number;
+  gamingColorTint?: string;
+  galaxyDensity?: number;
+  starCount?: number;
+  starBrightness?: number;
+  nebulaDensity?: number;
+  nebulaColor?: string;
+  cosmicDust?: number;
+  planetSize?: number;
+  auroraStrength?: number;
+  energyWaves?: number;
+  gravityDistortion?: number;
+  blackHoleStrength?: number;
+  wormholeRotation?: number;
+  meteorSpeed?: number;
+  depthAmount?: number;
+  perspective?: number;
+  parallaxStrength?: number;
+  cameraDistance?: number;
+  cameraOrbit?: number;
+  cameraTilt?: number;
+  cameraRoll?: number;
+  threeDrotationX?: number;
+  threeDrotationY?: number;
+  threeDrotationZ?: number;
+  zoom?: number;
+  fov?: number;
+  ambientLight?: number;
+  directionalLight?: number;
+  threeDColorTint?: string;
+  brushSize?: number;
+  brushDetail?: number;
+  strokeStrength?: number;
+  textureAmount?: number;
+  paintThickness?: number;
+  edgeDetail?: number;
+  outlineStrength?: number;
+  canvasTexture?: number;
+  paperTexture?: number;
+  colorVibrance?: number;
+  aiScanSpeed?: number;
+  detectionBoxSize?: number;
+  neuralLineDensity?: number;
+  circuitOpacity?: number;
+  scanlineIntensity?: number;
+  hologramStrength?: number;
+  noiseReduction?: number;
+  aiColorTint?: string;
 }
 
 export function getInterpolatedEffectProps(effect: AppliedEffect, localTime: number) {
@@ -370,7 +546,150 @@ export function getInterpolatedEffectProps(effect: AppliedEffect, localTime: num
     refractionAmount: effect.refractionAmount ?? 50,
     stretchAmount: effect.stretchAmount ?? 50,
     twistAmount: effect.twistAmount ?? 50,
-    flowDirection: effect.flowDirection ?? 50
+    flowDirection: effect.flowDirection ?? 50,
+    dustAmount: effect.dustAmount ?? 50,
+    scratchAmount: effect.scratchAmount ?? 50,
+    warmth: effect.warmth ?? 50,
+    fade: effect.fade ?? 50,
+    trackingAmount: effect.trackingAmount ?? 50,
+    horizontalShift: effect.horizontalShift ?? 50,
+    verticalShift: effect.verticalShift ?? 50,
+    tapeDamage: effect.tapeDamage ?? 50,
+    staticDensity: effect.staticDensity ?? 50,
+    waveStrength: effect.waveStrength ?? 50,
+    curvature: effect.curvature ?? 50,
+    scanlineThickness: effect.scanlineThickness ?? 50,
+    bloomAmount: effect.bloomAmount ?? 50,
+    glassOpacity: effect.glassOpacity ?? 50,
+    glowStrength: effect.glowStrength ?? 50,
+    glowSoftness: effect.glowSoftness ?? 50,
+    glowThreshold: effect.glowThreshold ?? 50,
+    edgeGlow: effect.edgeGlow ?? 50,
+    hue: effect.hue ?? 0,
+    blendAmount: effect.blendAmount ?? 50,
+    glowRadius: effect.glowRadius ?? 50,
+    flameHeight: effect.flameHeight ?? 50,
+    flameWidth: effect.flameWidth ?? 50,
+    flameSpeed: effect.flameSpeed ?? 50,
+    heatDistortion: effect.heatDistortion ?? 50,
+    emberDensity: effect.emberDensity ?? 50,
+    sparkAmount: effect.sparkAmount ?? 50,
+    smokeDensity: effect.smokeDensity ?? 50,
+    windStrength: effect.windStrength ?? 50,
+    turbulence: effect.turbulence ?? 50,
+    spread: effect.spread ?? 50,
+    softness: effect.softness ?? 50,
+    flowSpeed: effect.flowSpeed ?? 50,
+    swirlAmount: effect.swirlAmount ?? 50,
+    size: effect.size ?? 50,
+    fadeIn: effect.fadeIn ?? 50,
+    fadeOut: effect.fadeOut ?? 50,
+    layerAmount: effect.layerAmount ?? 50,
+    animationSpeed: effect.animationSpeed ?? 50,
+    particleDensity: effect.particleDensity ?? 50,
+    windSpeed: effect.windSpeed ?? 50,
+    windDirection: effect.windDirection ?? 50,
+    particleSize: effect.particleSize ?? 50,
+    particleSpeed: effect.particleSpeed ?? 50,
+    environmentLight: effect.environmentLight ?? 50,
+    atmosphericDepth: effect.atmosphericDepth ?? 50,
+    rainAmount: effect.rainAmount ?? 50,
+    snowAmount: effect.snowAmount ?? 50,
+    lightningFrequency: effect.lightningFrequency ?? 50,
+    cloudCoverage: effect.cloudCoverage ?? 50,
+    shadowStrength: effect.shadowStrength ?? 50,
+    motionBlur: effect.motionBlur ?? 50,
+    particleCount: effect.particleCount ?? 50,
+    sizeVariation: effect.sizeVariation ?? 50,
+    gravity: effect.gravity ?? 50,
+    lifetime: effect.lifetime ?? 50,
+    spawnRate: effect.spawnRate ?? 50,
+    rotationSpeed: effect.rotationSpeed ?? 50,
+    randomness: effect.randomness ?? 50,
+    colorVariation: effect.colorVariation ?? 50,
+    environmentDensity: effect.environmentDensity ?? 50,
+    leafDensity: effect.leafDensity ?? 50,
+    leafSize: effect.leafSize ?? 50,
+    birdCount: effect.birdCount ?? 50,
+    butterflyCount: effect.butterflyCount ?? 50,
+    fireflyCount: effect.fireflyCount ?? 50,
+    flowerDensity: effect.flowerDensity ?? 50,
+    grassMovement: effect.grassMovement ?? 50,
+    waterSpeed: effect.waterSpeed ?? 50,
+    waterStrength: effect.waterStrength ?? 50,
+    cloudDensity: effect.cloudDensity ?? 50,
+    cloudSpeed: effect.cloudSpeed ?? 50,
+    sunlightIntensity: effect.sunlightIntensity ?? 50,
+    lightRays: effect.lightRays ?? 50,
+    bloom: effect.bloom ?? 50,
+    softFocus: effect.softFocus ?? 50,
+    hazeDensity: effect.hazeDensity ?? 50,
+    sparkleAmount: effect.sparkleAmount ?? 50,
+    bokehSize: effect.bokehSize ?? 50,
+    highlightStrength: effect.highlightStrength ?? 50,
+    darkness: effect.darkness ?? 50,
+    cameraShake: effect.cameraShake ?? 50,
+    filmGrain: effect.filmGrain ?? 50,
+    hologramOpacity: effect.hologramOpacity ?? 50,
+    energyStrength: effect.energyStrength ?? 50,
+    plasmaAmount: effect.plasmaAmount ?? 50,
+    electricArcDensity: effect.electricArcDensity ?? 50,
+    laserBrightness: effect.laserBrightness ?? 50,
+    hudOpacity: effect.hudOpacity ?? 50,
+    scanlineStrength: effect.scanlineStrength ?? 50,
+    rgbShift: effect.rgbShift ?? 50,
+    neonGlow: effect.neonGlow ?? 50,
+    motionTrails: effect.motionTrails ?? 50,
+    lensFlare: effect.lensFlare ?? 50,
+    glitchAmount: effect.glitchAmount ?? 50,
+    rgbStrength: effect.rgbStrength ?? 50,
+    crosshairSize: effect.crosshairSize ?? 50,
+    speedLines: effect.speedLines ?? 50,
+    sparkDensity: effect.sparkDensity ?? 50,
+    flashIntensity: effect.flashIntensity ?? 50,
+    galaxyDensity: effect.galaxyDensity ?? 50,
+    starCount: effect.starCount ?? 50,
+    starBrightness: effect.starBrightness ?? 50,
+    nebulaDensity: effect.nebulaDensity ?? 50,
+    cosmicDust: effect.cosmicDust ?? 50,
+    planetSize: effect.planetSize ?? 50,
+    auroraStrength: effect.auroraStrength ?? 50,
+    energyWaves: effect.energyWaves ?? 50,
+    gravityDistortion: effect.gravityDistortion ?? 50,
+    blackHoleStrength: effect.blackHoleStrength ?? 50,
+    wormholeRotation: effect.wormholeRotation ?? 50,
+    meteorSpeed: effect.meteorSpeed ?? 50,
+    depthAmount: effect.depthAmount ?? 50,
+    perspective: effect.perspective ?? 50,
+    parallaxStrength: effect.parallaxStrength ?? 50,
+    cameraDistance: effect.cameraDistance ?? 50,
+    cameraOrbit: effect.cameraOrbit ?? 50,
+    cameraTilt: effect.cameraTilt ?? 50,
+    cameraRoll: effect.cameraRoll ?? 50,
+    threeDrotationX: effect.threeDrotationX ?? 50,
+    threeDrotationY: effect.threeDrotationY ?? 50,
+    threeDrotationZ: effect.threeDrotationZ ?? 50,
+    zoom: effect.zoom ?? 50,
+    fov: effect.fov ?? 50,
+    ambientLight: effect.ambientLight ?? 50,
+    directionalLight: effect.directionalLight ?? 50,
+    brushSize: effect.brushSize ?? 50,
+    brushDetail: effect.brushDetail ?? 50,
+    strokeStrength: effect.strokeStrength ?? 50,
+    textureAmount: effect.textureAmount ?? 50,
+    paintThickness: effect.paintThickness ?? 50,
+    edgeDetail: effect.edgeDetail ?? 50,
+    outlineStrength: effect.outlineStrength ?? 50,
+    canvasTexture: effect.canvasTexture ?? 50,
+    paperTexture: effect.paperTexture ?? 50,
+    colorVibrance: effect.colorVibrance ?? 50,
+    aiScanSpeed: effect.aiScanSpeed ?? 50,
+    detectionBoxSize: effect.detectionBoxSize ?? 50,
+    neuralLineDensity: effect.neuralLineDensity ?? 50,
+    circuitOpacity: effect.circuitOpacity ?? 50,
+    scanlineIntensity: effect.scanlineIntensity ?? 50,
+    hologramStrength: effect.hologramStrength ?? 50,
+    noiseReduction: effect.noiseReduction ?? 50
   };
 
   if (!effect.keyframes || effect.keyframes.length === 0) {
