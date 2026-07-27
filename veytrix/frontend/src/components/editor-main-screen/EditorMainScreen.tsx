@@ -6,7 +6,7 @@ import {
   Wand2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   ZoomIn, ZoomOut, Scissors, Split, Plus, Search,
   FolderPlus, Maximize2, RotateCcw, Image as ImageIcon,
-  Languages, Crop, Lock, Unlock
+  Languages, Crop, Lock, Unlock, Gauge
 } from 'lucide-react';
 import { VeytrixLogo } from '../VeytrixLogo';
 import { useProjectMedia } from '../../contexts/ProjectMediaContext';
@@ -17,6 +17,7 @@ import { Audio } from './tools/audio/Audio';
 import { TextPanel, TextOverlay } from './tools/text/TextPanel';
 import { Captions, CaptionItem } from './tools/captions/Captions';
 import { Effects } from './tools/effects/Effects';
+import { SpeedTool, SpeedControls } from './tools/speed';
 // Force IDE cache refresh for folder casing
 import { SAMPLE_FILTERS, getInterpolatedFilter } from './tools/filters/samples';
 import { EFFECT_PRESETS, EffectPreset, AppliedEffect, EffectKeyframe, getInterpolatedEffectProps } from './tools/effects/effectsPreset';
@@ -32,7 +33,7 @@ export function EditorMainScreen() {
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [activeTab, setActiveTab] = useState<'media' | 'ratio' | 'audio' | 'text' | 'captions' | 'effects'>('media');
+  const [activeTab, setActiveTab] = useState<'media' | 'ratio' | 'audio' | 'text' | 'captions' | 'effects' | 'speed'>('media');
   const [zoomLevel, setZoomLevel] = useState(120);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -110,6 +111,34 @@ export function EditorMainScreen() {
       currentStart += c.duration;
       return updated;
     });
+  };
+
+  const handleUpdateClipSpeed = (clipId: string, newSpeed: number) => {
+    setTimelineClips((prevClips) => {
+      const updated = prevClips.map((c) => {
+        if (c.id === clipId) {
+          const baseDur = c.baseDuration || (c.duration * (c.speed || 1));
+          const newDur = Math.round((baseDur / newSpeed) * 100) / 100;
+          return {
+            ...c,
+            speed: newSpeed,
+            baseDuration: baseDur,
+            duration: newDur,
+            effectiveDuration: newDur,
+            playbackRate: newSpeed
+          };
+        }
+        return c;
+      });
+      return recalculateSequence(updated);
+    });
+
+    const clip = timelineClips.find((c) => c.id === clipId);
+    if (clip && videoRefs.current[clip.id]) {
+      videoRefs.current[clip.id]!.playbackRate = newSpeed;
+    }
+
+    showToast(`Clip speed set to ${newSpeed}x`);
   };
 
   const handleSplitClip = (clipId: string) => {
@@ -1002,7 +1031,7 @@ export function EditorMainScreen() {
     return null;
   };
 
-  const handleSeek = (time: number) => {
+  const handleSeek = (time: number, scrollViewport = false) => {
     if (timelineClips.length === 0) {
       setCurrentTime(time);
       return;
@@ -1012,7 +1041,7 @@ export function EditorMainScreen() {
     const clampedTime = Math.min(totalDur, Math.max(0, time));
     
     setCurrentTime(clampedTime);
-    if (timelineScrollRef.current) {
+    if (scrollViewport && timelineScrollRef.current) {
       const pxPerSec = (zoomLevel / 100) * 35;
       timelineScrollRef.current.scrollLeft = clampedTime * pxPerSec;
     }
@@ -1137,16 +1166,15 @@ export function EditorMainScreen() {
     setIsDraggingTimeline(false);
   };
 
-  // Timeline Shift + Wheel Scroll
+  // Timeline Shift + Wheel Scroll (Horizontal scroll & Trackpad swipe only)
   const handleTimelineWheel = (e: React.WheelEvent) => {
     if (timelineScrollRef.current) {
       if (e.shiftKey) {
-        timelineScrollRef.current.scrollLeft += e.deltaY;
+        timelineScrollRef.current.scrollLeft += (e.deltaY || e.deltaX);
       } else if (Math.abs(e.deltaX) > 0) {
         timelineScrollRef.current.scrollLeft += e.deltaX;
-      } else {
-        timelineScrollRef.current.scrollLeft += e.deltaY;
       }
+      // Vertical mouse wheel with no Shift is disabled for horizontal scrolling per spec
     }
   };
 
@@ -1307,19 +1335,20 @@ export function EditorMainScreen() {
               { id: 'text', label: 'Text', icon: Type },
               { id: 'captions', label: 'Captions', icon: Languages },
               { id: 'effects', label: 'Effects', icon: Wand2 },
+              { id: 'speed', label: 'Speed', icon: Gauge },
             ].map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex-1 flex flex-col items-center justify-center gap-1 py-1.5 px-1 min-w-[44px] text-[9px] font-semibold rounded-md transition cursor-pointer ${
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-0.5 min-w-0 text-[8px] font-semibold rounded-md transition cursor-pointer overflow-hidden ${
                   activeTab === tab.id
                     ? 'bg-primary/15 text-primary border border-sky-500/25'
                     : 'text-muted-foreground hover:bg-surface-hover'
                 }`}
               >
-                <tab.icon className="h-3.5 w-3.5" />
-                <span>{tab.label}</span>
+                <tab.icon className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="truncate">{tab.label}</span>
               </button>
             ))}
           </div>
@@ -1447,6 +1476,14 @@ export function EditorMainScreen() {
                 onReorderAppliedEffects={handleReorderAppliedEffects}
                 onAddEffectKeyframe={handleAddEffectKeyframe}
                 onDeleteEffectKeyframe={handleDeleteEffectKeyframe}
+              />
+            )}
+
+            {activeTab === 'speed' && (
+              <SpeedTool
+                activeClip={timelineClips.find(c => c.mediaId === activeMediaId) || timelineClips[0] || null}
+                onUpdateClipSpeed={handleUpdateClipSpeed}
+                onResetClipSpeed={(clipId) => handleUpdateClipSpeed(clipId, 1.0)}
               />
             )}
           </div>
@@ -3358,7 +3395,7 @@ export function EditorMainScreen() {
               type="button"
               onClick={() => {
                 setActiveMediaId(mediaFiles[0]?.id || null);
-                handleSeek(0);
+                handleSeek(0, true);
               }}
               className="p-1 hover:text-foreground transition text-muted-foreground"
               title="Skip to Start"
@@ -3404,7 +3441,7 @@ export function EditorMainScreen() {
                 if (lastClip) {
                   setActiveMediaId(lastClip.mediaId);
                 }
-                handleSeek(totalDur);
+                handleSeek(totalDur, true);
               }}
               className="p-1 hover:text-foreground transition text-muted-foreground"
               title="Skip to End"
@@ -3429,13 +3466,13 @@ export function EditorMainScreen() {
 
         {/* Timeline Tracks Grid */}
         <div className="flex-1 flex overflow-hidden relative">
-          {/* FIXED CENTER PLAYHEAD LINE (CAPCUT STYLE) */}
+          {/* FIXED CENTER PLAYHEAD LINE (WHITE PLAYHEAD) */}
           <div
-            className="absolute top-0 bottom-0 w-0.5 bg-surface z-40 pointer-events-none shadow-glow flex flex-col items-center"
+            className="absolute top-0 bottom-0 w-[2px] bg-white z-40 pointer-events-none shadow-[0_0_8px_rgba(255,255,255,0.8)] flex flex-col items-center"
             style={{ left: '50%' }}
           >
-            <div className="h-4.5 w-4.5 bg-surface rounded-full border-2 border-sky-400 shadow-glow flex items-center justify-center -translate-y-1">
-              <div className="h-1.5 w-1.5 bg-primary rounded-full" />
+            <div className="w-4 h-5 bg-white rounded-t-sm rounded-b-md border border-white shadow-[0_0_10px_rgba(255,255,255,0.9)] flex items-center justify-center -translate-y-1">
+              <div className="w-1.5 h-1.5 bg-sky-500 rounded-full" />
             </div>
           </div>
           {/* Timeline Fully Draggable Horizontal Container */}
@@ -3592,7 +3629,14 @@ export function EditorMainScreen() {
                       <div className="relative flex-1 h-full px-0 flex items-center">
                         {timelineClips.reduce<React.ReactNode[]>((acc, clip, idx) => {
                           const clipWidthPx = clip.duration * pxPerSec;
-                          const numThumbnails = Math.max(1, Math.floor(clipWidthPx / 48));
+                          const isFirst = idx === 0;
+                          const isLast = idx === timelineClips.length - 1;
+                          const startGapPx = isFirst ? 4 : 16;
+                          const endGapPx = isLast ? 4 : 16;
+                          const clipLeftPx = clip.timelineStart * pxPerSec + startGapPx;
+                          const clipComputedWidth = Math.max(12, clipWidthPx - (startGapPx + endGapPx));
+
+                          const numThumbnails = Math.max(1, Math.floor(clipComputedWidth / 48));
                           const isLocked = !!lockedClips[clip.id];
                           const isMuted = !!mutedClips[clip.id];
                           const isSelected = clip.mediaId === activeMediaId;
@@ -3621,7 +3665,7 @@ export function EditorMainScreen() {
                                   ? 'border-sky-400 ring-2 ring-sky-400/50 bg-primary/25 z-20 shadow-glow scale-[1.01]'
                                   : 'border-border-strong bg-surface hover:border-sky-400/60 z-10'
                               } ${isLocked ? 'opacity-70 border-dashed border-amber-500/30' : ''}`}
-                              style={{ left: `${clip.timelineStart * pxPerSec + 4}px`, width: `${Math.max(12, clipWidthPx - 8)}px` }}
+                              style={{ left: `${clipLeftPx}px`, width: `${clipComputedWidth}px` }}
                             >
                               {/* Left Trim handle bar */}
                               {isSelected && !isLocked && (
@@ -3678,15 +3722,15 @@ export function EditorMainScreen() {
                                   setActiveTab('effects');
                                   showToast('Select a transition to apply between clips');
                                 }}
-                                className={`h-7 w-7 rounded-full flex items-center justify-center flex-shrink-0 border transition-all duration-200 shadow-lg z-40 absolute ${
+                                className={`h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 border transition-all duration-200 shadow-lg z-40 absolute ${
                                   transitionId 
                                     ? 'bg-primary text-primary-foreground font-bold hover:bg-sky-400 border-sky-400 ring-2 ring-sky-400/30 shadow-[0_0_10px_rgba(56,189,248,0.5)] scale-105' 
                                     : 'bg-surface text-primary border-sky-500/40 hover:bg-primary hover:text-primary-foreground hover:border-sky-400 hover:scale-110'
                                 }`}
-                                style={{ left: `${(clip.timelineStart + clip.duration) * pxPerSec - 14}px` }}
+                                style={{ left: `${(clip.timelineStart + clip.duration) * pxPerSec - 12}px` }}
                                 title={transitionId ? `Transition: ${transitionId}` : 'Add Transition'}
                               >
-                                <Plus className="h-4 w-4" />
+                                <Plus className="h-3.5 w-3.5" />
                               </button>
                             );
                           }

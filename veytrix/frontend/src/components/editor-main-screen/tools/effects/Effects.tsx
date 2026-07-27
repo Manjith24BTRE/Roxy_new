@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Star, Trash2, Copy, RotateCcw, Eye, EyeOff, Clock, Sparkles, Check, ArrowUp, ArrowDown, Plus, Key, Sliders } from 'lucide-react';
-import { SAMPLE_TRANSITIONS, TransitionSample } from './transitionSamples';
 import { Filters } from '../filters/Filters';
 import { Transitions } from '../transitions/Transitions';
 import { SAMPLE_TRANSITIONS_NEW } from '../transitions/Transitions.data';
@@ -48,25 +47,9 @@ const CATEGORIES = [
   { id: 'Blur', name: '💧 Blur' },
   { id: 'Glitch', name: '⚡ Glitch' },
   { id: 'Cinematic', name: '🎬 Cine' },
-  { id: 'Lens', name: '🔍 Lens' },
   { id: 'Light', name: '💡 Light' },
-  { id: 'Distortion', name: '🌀 Distort' },
   { id: 'Retro', name: '📻 Retro' },
-  { id: 'VHS', name: '📼 VHS' },
-  { id: 'CRT', name: '📺 CRT' },
-  { id: 'Neon', name: '🌈 Neon' },
-  { id: 'Fire', name: '🔥 Fire' },
-  { id: 'Smoke', name: '💨 Smoke' },
-  { id: 'Weather', name: '🌧️ Weather' },
-  { id: 'Particles', name: '✨ Particles' },
-  { id: 'Nature', name: '🍃 Nature' },
-  { id: 'Dream', name: '💭 Dream' },
-  { id: 'Horror', name: '🧟 Horror' },
-  { id: 'Sci-Fi', name: '🚀 Sci-Fi' },
-  { id: 'Gaming', name: '🎮 Gaming' },
-  { id: 'Comic', name: '💥 Comic' },
   { id: '3D', name: '👓 3D' },
-  { id: 'Artistic', name: '🎭 Artistic' },
   { id: 'AI', name: '🧠 AI' }
 ];
 

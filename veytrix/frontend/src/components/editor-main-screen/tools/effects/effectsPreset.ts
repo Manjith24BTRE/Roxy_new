@@ -19,25 +19,9 @@ import { CAMERA_EFFECTS } from './camera';
 import { BLUR_EFFECTS } from './blur';
 import { GLITCH_EFFECTS } from './glitch';
 import { CINEMATIC_EFFECTS } from './cinematic';
-import { LENS_EFFECTS } from './lens';
 import { LIGHT_EFFECTS } from './light';
-import { DISTORTION_EFFECTS } from './distortion';
 import { RETRO_EFFECTS } from './retro';
-import { VHS_EFFECTS } from './vhs';
-import { CRT_EFFECTS } from './crt';
-import { NEON_EFFECTS } from './neon';
-import { FIRE_EFFECTS } from './fire';
-import { SMOKE_EFFECTS } from './smoke';
-import { WEATHER_EFFECTS } from './weather';
-import { PARTICLES_EFFECTS } from './particles';
-import { NATURE_EFFECTS } from './nature';
-import { DREAM_EFFECTS } from './dream';
-import { HORROR_EFFECTS } from './horror';
-import { SCIFI_EFFECTS } from './scifi';
-import { GAMING_EFFECTS } from './gaming';
-import { COSMIC_EFFECTS } from './cosmic';
 import { THREED_EFFECTS } from './threeD';
-import { ARTISTIC_EFFECTS } from './artistic';
 import { AI_EFFECTS } from './ai';
 
 const CATEGORIES_INFO: Record<
@@ -204,9 +188,9 @@ const CATEGORIES_INFO: Record<
 const CATEGORIES = Object.keys(CATEGORIES_INFO);
 
 function generatePresets(): EffectPreset[] {
-  const list: EffectPreset[] = [...BASIC_EFFECTS, ...CAMERA_EFFECTS, ...BLUR_EFFECTS, ...GLITCH_EFFECTS, ...CINEMATIC_EFFECTS, ...LENS_EFFECTS, ...LIGHT_EFFECTS, ...DISTORTION_EFFECTS, ...RETRO_EFFECTS, ...VHS_EFFECTS, ...CRT_EFFECTS, ...NEON_EFFECTS, ...FIRE_EFFECTS, ...SMOKE_EFFECTS, ...WEATHER_EFFECTS, ...PARTICLES_EFFECTS, ...NATURE_EFFECTS, ...DREAM_EFFECTS, ...HORROR_EFFECTS, ...SCIFI_EFFECTS, ...GAMING_EFFECTS, ...COSMIC_EFFECTS, ...THREED_EFFECTS, ...ARTISTIC_EFFECTS, ...AI_EFFECTS];
+  const list: EffectPreset[] = [...BASIC_EFFECTS, ...CAMERA_EFFECTS, ...BLUR_EFFECTS, ...GLITCH_EFFECTS, ...CINEMATIC_EFFECTS, ...LIGHT_EFFECTS, ...RETRO_EFFECTS, ...THREED_EFFECTS, ...AI_EFFECTS];
   CATEGORIES.forEach((cat) => {
-    if (cat === 'Basic' || cat === 'Camera' || cat === 'Blur' || cat === 'Glitch' || cat === 'Cinematic' || cat === 'Lens' || cat === 'Light' || cat === 'Distortion' || cat === 'Retro' || cat === 'VHS' || cat === 'CRT' || cat === 'Neon' || cat === 'Fire' || cat === 'Smoke' || cat === 'Weather' || cat === 'Particles' || cat === 'Nature' || cat === 'Dream' || cat === 'Horror' || cat === 'Sci-Fi' || cat === 'Gaming' || cat === 'Cosmic' || cat === '3D' || cat === 'Artistic' || cat === 'AI') return; // Skip generating Basic/Camera/Blur/Glitch/Cinematic/Lens/Light/Distortion/Retro/VHS/CRT/Neon/Fire/Smoke/Weather/Particles/Nature/Dream/Horror/Sci-Fi/Gaming/Cosmic/3D/Artistic/AI categories programmatically
+    if (cat === 'Basic' || cat === 'Camera' || cat === 'Blur' || cat === 'Glitch' || cat === 'Cinematic' || cat === 'Light' || cat === 'Retro' || cat === '3D' || cat === 'AI') return; // Skip generating active categories programmatically
     const info = CATEGORIES_INFO[cat];
     for (let i = 1; i <= 40; i++) {
       const presetId = `${cat.toLowerCase().replace('&', 'and').replace(' ', '-')}-preset-${i}`;

@@ -1,0 +1,23 @@
+/* speed.css */
+/* Purpose: Dark glassmorphic styles for Speed Tool sliders and controls */
+
+.speed-slider-thumb::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #38bdf8;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.speed-slider-thumb::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  background: #7dd3fc;
+}
+
+.speed-preset-badge {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
