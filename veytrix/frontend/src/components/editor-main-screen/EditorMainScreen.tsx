@@ -1,5 +1,5 @@
 import './theme/editorTheme.css';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Save, Download, Film, Type, AudioWaveform,
@@ -17,7 +17,7 @@ import { Audio } from './tools/audio/Audio';
 import { TextPanel, TextOverlay } from './tools/text/TextPanel';
 import { Captions, CaptionItem } from './tools/captions/Captions';
 import { Effects } from './tools/effects/Effects';
-import { SpeedTool, SpeedControls } from './tools/speed';
+import { SpeedTool, clampPlaybackRate, getSourceDuration, getEffectiveDuration, timelineTimeToSourceTime, sourceTimeToTimelineTime } from './tools/speed';
 // Force IDE cache refresh for folder casing
 import { SAMPLE_FILTERS, getInterpolatedFilter } from './tools/filters/samples';
 import { EFFECT_PRESETS, EffectPreset, AppliedEffect, EffectKeyframe, getInterpolatedEffectProps } from './tools/effects/effectsPreset';
@@ -25,9 +25,19 @@ import { EFFECT_PRESETS, EffectPreset, AppliedEffect, EffectKeyframe, getInterpo
 
 
 // Context Menu
-import { TimelineContextMenu } from './components/Timeline/TimelineContextMenu';
+import { ClipActionsPanel } from './clip-actions/ClipActionsPanel';
+import { ClipTrimHandles } from './trim/ClipTrimHandles';
+import { EditorHistoryProvider, useEditorHistory, ProjectState } from './history';
 
 export function EditorMainScreen() {
+  return (
+    <EditorHistoryProvider>
+      <EditorMainScreenContent />
+    </EditorHistoryProvider>
+  );
+}
+
+function EditorMainScreenContent() {
   const navigate = useNavigate();
   const { mediaFiles, activeMediaId, setActiveMediaId } = useProjectMedia();
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
@@ -37,14 +47,14 @@ export function EditorMainScreen() {
   const [zoomLevel, setZoomLevel] = useState(120);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(0.8);
-  const [isMuted, setIsMuted] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [volume, setVolumeState] = useState(0.8);
+  const [isMuted, setIsMutedState] = useState(false);
+  // playbackSpeed state removed. per-clip playbackRate is used instead.
 
   // Context Menu and overrides states
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; clip: any } | null>(null);
-  const [lockedClips, setLockedClips] = useState<Record<string, boolean>>({});
-  const [mutedClips, setMutedClips] = useState<Record<string, boolean>>({});
+
+  const [lockedClips, setLockedClipsState] = useState<Record<string, boolean>>({});
+  const [mutedClips, setMutedClipsState] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (message: string) => {
@@ -55,7 +65,7 @@ export function EditorMainScreen() {
   };
 
   // Timeline Clips sequence tracking
-  const [timelineClips, setTimelineClips] = useState<any[]>([]);
+  const [timelineClips, setTimelineClipsState] = useState<any[]>([]);
 
 
 
@@ -64,6 +74,7 @@ export function EditorMainScreen() {
   const [selectedTransitionIndex, setSelectedTransitionIndex] = useState<number | null>(null);
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
+    beginTransaction('Move clip', getProjectState());
     setDraggedClipIndex(index);
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -72,7 +83,7 @@ export function EditorMainScreen() {
     e.preventDefault();
     if (draggedClipIndex === null || draggedClipIndex === overIndex) return;
 
-    setTimelineClips((prev) => {
+    setTimelineClips((prev: any[]) => {
       const updated = [...prev];
       const [draggedClip] = updated.splice(draggedClipIndex, 1);
       updated.splice(overIndex, 0, draggedClip);
@@ -83,14 +94,15 @@ export function EditorMainScreen() {
 
   const handleDragEnd = () => {
     setDraggedClipIndex(null);
+    commitTransaction(getProjectState());
     showToast('Clips reordered and snapped end-to-end');
   };
 
   const handleSelectTransition = (transitionId: string | null) => {
     setActiveTransitionId(transitionId);
     if (selectedTransitionIndex !== null) {
-      setTimelineClips((prev) =>
-        prev.map((clip, idx) => {
+      setTimelineClips((prev: any[]) =>
+        prev.map((clip: any, idx: number) => {
           if (idx === selectedTransitionIndex) {
             return {
               ...clip,
@@ -114,31 +126,59 @@ export function EditorMainScreen() {
   };
 
   const handleUpdateClipSpeed = (clipId: string, newSpeed: number) => {
-    setTimelineClips((prevClips) => {
-      const updated = prevClips.map((c) => {
+    const validatedSpeed = clampPlaybackRate(newSpeed);
+
+    let newCurrentTime = currentTime;
+    let playheadUpdated = false;
+
+    setTimelineClips((prevClips: any[]) => {
+      const clip = prevClips.find((c: any) => c.id === clipId);
+      if (!clip) return prevClips;
+
+      const isPlayheadInside = currentTime >= clip.timelineStart && currentTime <= clip.timelineStart + clip.duration;
+      let targetSourceTime = 0;
+      if (isPlayheadInside) {
+        targetSourceTime = timelineTimeToSourceTime(clip, currentTime);
+      }
+
+      const updated = prevClips.map((c: any) => {
         if (c.id === clipId) {
-          const baseDur = c.baseDuration || (c.duration * (c.speed || 1));
-          const newDur = Math.round((baseDur / newSpeed) * 100) / 100;
+          const sourceDur = getSourceDuration(c);
+          const newDur = sourceDur / validatedSpeed;
           return {
             ...c,
-            speed: newSpeed,
-            baseDuration: baseDur,
-            duration: newDur,
-            effectiveDuration: newDur,
-            playbackRate: newSpeed
+            playbackRate: validatedSpeed,
+            baseDuration: sourceDur,
+            duration: newDur
           };
         }
         return c;
       });
-      return recalculateSequence(updated);
+
+      const reflowed = recalculateSequence(updated);
+
+      if (isPlayheadInside) {
+        const updatedClip = reflowed.find((c) => c.id === clipId);
+        if (updatedClip) {
+          newCurrentTime = sourceTimeToTimelineTime(updatedClip, targetSourceTime);
+          playheadUpdated = true;
+        }
+      }
+
+      return reflowed;
     });
 
-    const clip = timelineClips.find((c) => c.id === clipId);
-    if (clip && videoRefs.current[clip.id]) {
-      videoRefs.current[clip.id]!.playbackRate = newSpeed;
+    if (playheadUpdated) {
+      setCurrentTime(newCurrentTime);
     }
 
-    showToast(`Clip speed set to ${newSpeed}x`);
+    const video = videoRefs.current[clipId];
+    if (video) {
+      video.playbackRate = validatedSpeed;
+      video.defaultPlaybackRate = validatedSpeed;
+    }
+
+    showToast(`Clip speed set to ${validatedSpeed}x`);
   };
 
   const handleSplitClip = (clipId: string) => {
@@ -149,15 +189,21 @@ export function EditorMainScreen() {
     const relativePlayhead = currentTime - clip.timelineStart;
 
     if (relativePlayhead > 0.2 && relativePlayhead < clip.duration - 0.2) {
+      const originalSourceDur = getSourceDuration(clip);
+      const leftSourceDur = relativePlayhead * (clip.playbackRate || 1);
+      const rightSourceDur = originalSourceDur - leftSourceDur;
+
       const leftPart = {
         ...clip,
+        baseDuration: leftSourceDur,
         duration: relativePlayhead
       };
       const rightPart = {
         ...clip,
         id: `${clip.id}-split-${Date.now()}`,
-        duration: clip.duration - relativePlayhead,
-        startOffset: clip.startOffset + relativePlayhead
+        startOffset: clip.startOffset + leftSourceDur,
+        baseDuration: rightSourceDur,
+        duration: clip.duration - relativePlayhead
       };
 
       const updated = [...timelineClips];
@@ -179,15 +225,22 @@ export function EditorMainScreen() {
       setTimelineClips((prev) => {
         const updated = prev.map((c) => {
           if (c.id === clipId) {
+            const currentPlaybackRate = c.playbackRate || 1;
             if (side === 'start') {
+              const trimmedSource = relativePlayhead * currentPlaybackRate;
+              const newSourceStart = c.startOffset + trimmedSource;
+              const newSourceDur = getSourceDuration(c) - trimmedSource;
               return {
                 ...c,
-                startOffset: c.startOffset + relativePlayhead,
+                startOffset: newSourceStart,
+                baseDuration: newSourceDur,
                 duration: c.duration - relativePlayhead
               };
             } else {
+              const newSourceDur = relativePlayhead * currentPlaybackRate;
               return {
                 ...c,
+                baseDuration: newSourceDur,
                 duration: relativePlayhead
               };
             }
@@ -444,58 +497,35 @@ export function EditorMainScreen() {
     }
   };
 
-  const handleTrimMouseDown = (e: React.MouseEvent, clipId: string, isLeftEdge: boolean) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const startX = e.clientX;
-    const clip = timelineClips.find(c => c.id === clipId);
-    if (!clip) return;
-    const initialDuration = clip.duration;
-    const initialStartOffset = clip.startOffset;
-
-    const pxPerSec = (zoomLevel / 100) * 35;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      const deltaTime = deltaX / pxPerSec;
-
-      setTimelineClips((prev) => {
-        const updated = prev.map((c) => {
-          if (c.id === clipId) {
-            if (isLeftEdge) {
-              const maxDelta = initialDuration - 0.5;
-              const finalDelta = Math.min(deltaTime, maxDelta);
-              return {
-                ...c,
-                startOffset: Math.max(0, initialStartOffset + finalDelta),
-                duration: Math.max(0.5, initialDuration - finalDelta)
-              };
-            } else {
-              return {
-                ...c,
-                duration: Math.max(0.5, initialDuration + deltaTime)
-              };
-            }
-          }
-          return c;
-        });
-        return recalculateSequence(updated);
-      });
-    };
-
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+  const handleTrimUpdate = (clipId: string, _newTimelineStart: number, newSourceStart: number, newDuration: number) => {
+    // During drag: update sourceStart and duration, then reflow sequential positions.
+    // We intentionally ignore _newTimelineStart from the hook because this is a
+    // sequential (VN-style) timeline where clip positions are derived from durations.
+    setTimelineClips((prev) => {
+      const updated = prev.map(c => 
+        c.id === clipId 
+          ? { ...c, startOffset: newSourceStart, duration: newDuration } 
+          : c
+      );
+      return recalculateSequence(updated);
+    });
   };
+
+  const handleTrimCommit = () => {
+    // On pointer up: ensure sequential reflow is committed and show toast.
+    setTimelineClipsState((prev) => recalculateSequence(prev));
+    const endState = getProjectState();
+    commitTransaction(endState);
+    showToast('Trimmed clip');
+  };
+
+  const isLoadedRef = useRef(false);
 
   // Synchronize mediaFiles with timelineClips End-to-End
   useEffect(() => {
     if (mediaFiles.length > 0) {
-      setTimelineClips((prev) => {
+      const beforeState = getProjectState();
+      setTimelineClipsState((prev) => {
         const existingIds = new Set(prev.map(c => c.mediaId));
         const newClips = mediaFiles
           .filter(m => !existingIds.has(m.id))
@@ -504,35 +534,45 @@ export function EditorMainScreen() {
             mediaId: m.id,
             name: m.name,
             duration: m.duration || 5,
+            baseDuration: m.duration || 5,
+            playbackRate: 1,
             durationFormatted: m.durationFormatted,
             thumbnails: m.thumbnails,
             url: m.url,
             startOffset: 0,
             timelineStart: 0
           }));
-        return recalculateSequence([...prev, ...newClips]);
+        
+        const reflowed = recalculateSequence([...prev, ...newClips]);
+        
+        if (isLoadedRef.current && newClips.length > 0) {
+          commitStateChange('Import clip', beforeState, { ...beforeState, timelineClips: reflowed });
+        }
+        
+        return reflowed;
       });
+      isLoadedRef.current = true;
     } else {
-      setTimelineClips([]);
+      setTimelineClipsState([]);
     }
   }, [mediaFiles]);
 
   // Quick AI Edit Modules State
-  const [aspectRatio, setAspectRatio] = useState('16/9');
-  const [textOverlays, setTextOverlays] = useState<TextOverlay[]>([]);
+  const [aspectRatio, setAspectRatioState] = useState('16/9');
+  const [textOverlays, setTextOverlaysState] = useState<TextOverlay[]>([]);
   const [activeOverlayId, setActiveOverlayId] = useState<string | null>(null);
-  const [captions, setCaptions] = useState<CaptionItem[]>([]);
-  const [activeFilterId, setActiveFilterId] = useState<string | null>(null);
+  const [captions, setCaptionsState] = useState<CaptionItem[]>([]);
+  const [activeFilterId, setActiveFilterIdState] = useState<string | null>(null);
   const [previewFilterId, setPreviewFilterId] = useState<string | null>(null);
-  const [filterIntensity, setFilterIntensity] = useState(80);
-  const [filterOpacity, setFilterOpacity] = useState(100);
-  const [filterBlendMode, setFilterBlendMode] = useState('normal');
-  const [filterEnabled, setFilterEnabled] = useState(true);
+  const [filterIntensity, setFilterIntensityState] = useState(80);
+  const [filterOpacity, setFilterOpacityState] = useState(100);
+  const [filterBlendMode, setFilterBlendModeState] = useState('normal');
+  const [filterEnabled, setFilterEnabledState] = useState(true);
   const [showBeforeOnly, setShowBeforeOnly] = useState(false);
-  const [activeEffectId, setActiveEffectId] = useState<string | null>(null);
+  const [activeEffectId, setActiveEffectIdState] = useState<string | null>(null);
   const [activeAppliedEffectId, setActiveAppliedEffectId] = useState<string | null>(null);
-  const [effectStrength, setEffectStrength] = useState(60);
-  const [effectSpeed, setEffectSpeed] = useState(50);
+  const [effectStrength, setEffectStrengthState] = useState(60);
+  const [effectSpeed, setEffectSpeedState] = useState(50);
   const [activeTransitionId, setActiveTransitionId] = useState<string | null>(null);
   const [captionStyle, setCaptionStyle] = useState({
     font: 'Outfit',
@@ -545,13 +585,416 @@ export function EditorMainScreen() {
 
   // Canvas Video Interactive Object Transform State
   const [isSelectedOnCanvas, setIsSelectedOnCanvas] = useState(true);
-  const [canvasPos, setCanvasPos] = useState({ x: 0, y: 0 });
-  const [canvasScale, setCanvasScale] = useState(1);
-  const [canvasRotation, setCanvasRotation] = useState(0);
+  const [canvasPos, setCanvasPosState] = useState({ x: 0, y: 0 });
+  const [canvasScale, setCanvasScaleState] = useState(1);
+  const [canvasRotation, setCanvasRotationState] = useState(0);
   const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 }); // Wait, let's define dragStart type properly as { x: number, y: number }
   const [isResizingCanvas, setIsResizingCanvas] = useState<string | null>(null);
   const [isRotatingCanvas, setIsRotatingCanvas] = useState(false);
+
+  const {
+    canUndo,
+    canRedo,
+    undo,
+    redo,
+    commit,
+    beginTransaction,
+    commitTransaction,
+    isInTransaction
+  } = useEditorHistory();
+
+  // Helper refs to avoid state capture issues
+  const isInTransactionRef = useRef(isInTransaction);
+  useEffect(() => {
+    isInTransactionRef.current = isInTransaction;
+  }, [isInTransaction]);
+
+  const getProjectState = useCallback((): ProjectState => {
+    return {
+      timelineClips,
+      aspectRatio,
+      textOverlays,
+      captions,
+      activeFilterId,
+      filterIntensity,
+      filterOpacity,
+      filterBlendMode,
+      filterEnabled,
+      activeEffectId,
+      effectStrength,
+      effectSpeed,
+      volume,
+      isMuted,
+      canvasPos,
+      canvasScale,
+      canvasRotation,
+      lockedClips,
+      mutedClips
+    };
+  }, [
+    timelineClips,
+    aspectRatio,
+    textOverlays,
+    captions,
+    activeFilterId,
+    filterIntensity,
+    filterOpacity,
+    filterBlendMode,
+    filterEnabled,
+    activeEffectId,
+    effectStrength,
+    effectSpeed,
+    volume,
+    isMuted,
+    canvasPos,
+    canvasScale,
+    canvasRotation,
+    lockedClips,
+    mutedClips
+  ]);
+
+  const getProjectStateRef = useRef(getProjectState);
+  useEffect(() => {
+    getProjectStateRef.current = getProjectState;
+  }, [getProjectState]);
+
+  const applyProjectState = useCallback((state: ProjectState) => {
+    setTimelineClipsState(state.timelineClips);
+    setAspectRatioState(state.aspectRatio);
+    setTextOverlaysState(state.textOverlays);
+    setCaptionsState(state.captions);
+    setActiveFilterIdState(state.activeFilterId);
+    setFilterIntensityState(state.filterIntensity);
+    setFilterOpacityState(state.filterOpacity);
+    setFilterBlendModeState(state.filterBlendMode);
+    setFilterEnabledState(state.filterEnabled);
+    setActiveEffectIdState(state.activeEffectId);
+    setEffectStrengthState(state.effectStrength);
+    setEffectSpeedState(state.effectSpeed);
+    setVolumeState(state.volume);
+    setIsMutedState(state.isMuted);
+    setCanvasPosState(state.canvasPos);
+    setCanvasScaleState(state.canvasScale);
+    setCanvasRotationState(state.canvasRotation);
+    setLockedClipsState(state.lockedClips);
+    setMutedClipsState(state.mutedClips);
+  }, []);
+
+  const applyProjectStateRef = useRef(applyProjectState);
+  useEffect(() => {
+    applyProjectStateRef.current = applyProjectState;
+  }, [applyProjectState]);
+
+  const commitStateChange = (label: string, before: ProjectState, after: ProjectState) => {
+    setTimeout(() => {
+      commit(label, before, after);
+    }, 0);
+  };
+
+  // State wrappers for history tracking
+  const setTimelineClips = useCallback((val: any[] | ((prev: any[]) => any[])) => {
+    const before = getProjectStateRef.current();
+    setTimelineClipsState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Update clips', before, { ...before, timelineClips: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setAspectRatio = useCallback((val: string | ((prev: string) => string)) => {
+    const before = getProjectStateRef.current();
+    setAspectRatioState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Change aspect ratio', before, { ...before, aspectRatio: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setTextOverlays = useCallback((val: TextOverlay[] | ((prev: TextOverlay[]) => TextOverlay[])) => {
+    const before = getProjectStateRef.current();
+    setTextOverlaysState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Edit text overlays', before, { ...before, textOverlays: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setCaptions = useCallback((val: CaptionItem[] | ((prev: CaptionItem[]) => CaptionItem[])) => {
+    const before = getProjectStateRef.current();
+    setCaptionsState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Edit captions', before, { ...before, captions: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setVolume = useCallback((val: number | ((prev: number) => number)) => {
+    const before = getProjectStateRef.current();
+    setVolumeState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Adjust volume', before, { ...before, volume: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setIsMuted = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
+    const before = getProjectStateRef.current();
+    setIsMutedState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange(resolved ? 'Mute audio' : 'Unmute audio', before, { ...before, isMuted: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setLockedClips = useCallback((val: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => {
+    const before = getProjectStateRef.current();
+    setLockedClipsState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Lock/Unlock clip', before, { ...before, lockedClips: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setMutedClips = useCallback((val: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => {
+    const before = getProjectStateRef.current();
+    setMutedClipsState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Mute/Unmute clip', before, { ...before, mutedClips: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setCanvasPos = useCallback((val: { x: number; y: number } | ((prev: { x: number; y: number }) => { x: number; y: number })) => {
+    const before = getProjectStateRef.current();
+    setCanvasPosState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Move clip', before, { ...before, canvasPos: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setCanvasScale = useCallback((val: number | ((prev: number) => number)) => {
+    const before = getProjectStateRef.current();
+    setCanvasScaleState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Scale clip', before, { ...before, canvasScale: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setCanvasRotation = useCallback((val: number | ((prev: number) => number)) => {
+    const before = getProjectStateRef.current();
+    setCanvasRotationState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Rotate clip', before, { ...before, canvasRotation: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setActiveFilterId = useCallback((val: string | null | ((prev: string | null) => string | null)) => {
+    const before = getProjectStateRef.current();
+    setActiveFilterIdState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Apply filter', before, { ...before, activeFilterId: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setFilterIntensity = useCallback((val: number | ((prev: number) => number)) => {
+    const before = getProjectStateRef.current();
+    setFilterIntensityState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Adjust filter intensity', before, { ...before, filterIntensity: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setFilterOpacity = useCallback((val: number | ((prev: number) => number)) => {
+    const before = getProjectStateRef.current();
+    setFilterOpacityState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Adjust filter opacity', before, { ...before, filterOpacity: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setFilterBlendMode = useCallback((val: string | ((prev: string) => string)) => {
+    const before = getProjectStateRef.current();
+    setFilterBlendModeState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Change filter blend mode', before, { ...before, filterBlendMode: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setFilterEnabled = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
+    const before = getProjectStateRef.current();
+    setFilterEnabledState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange(resolved ? 'Enable filter' : 'Disable filter', before, { ...before, filterEnabled: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setActiveEffectId = useCallback((val: string | null | ((prev: string | null) => string | null)) => {
+    const before = getProjectStateRef.current();
+    setActiveEffectIdState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Apply effect', before, { ...before, activeEffectId: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setEffectStrength = useCallback((val: number | ((prev: number) => number)) => {
+    const before = getProjectStateRef.current();
+    setEffectStrengthState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Adjust effect strength', before, { ...before, effectStrength: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setEffectSpeed = useCallback((val: number | ((prev: number) => number)) => {
+    const before = getProjectStateRef.current();
+    setEffectSpeedState((prev) => {
+      const resolved = typeof val === 'function' ? val(prev) : val;
+      if (!isInTransactionRef.current) {
+        commitStateChange('Adjust effect speed', before, { ...before, effectSpeed: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const handleUndoAction = () => {
+    const currentState = getProjectStateRef.current();
+    const restored = undo(currentState);
+    if (restored) {
+      applyProjectStateRef.current(restored);
+      showToast('Undo action');
+    }
+  };
+
+  const handleRedoAction = () => {
+    const currentState = getProjectStateRef.current();
+    const restored = redo(currentState);
+    if (restored) {
+      applyProjectStateRef.current(restored);
+      showToast('Redo action');
+    }
+  };
+
+  // Global Keyboard Listener for Undo/Redo Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        return; // Allow native field undo
+      }
+
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+      if (cmdOrCtrl && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        const currentState = getProjectStateRef.current();
+        if (e.shiftKey) {
+          const restored = redo(currentState);
+          if (restored) {
+            applyProjectStateRef.current(restored);
+            showToast('Redo action');
+          }
+        } else {
+          const restored = undo(currentState);
+          if (restored) {
+            applyProjectStateRef.current(restored);
+            showToast('Undo action');
+          }
+        }
+      } else if (cmdOrCtrl && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        const currentState = getProjectStateRef.current();
+        const restored = redo(currentState);
+        if (restored) {
+          applyProjectStateRef.current(restored);
+          showToast('Redo action');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [undo, redo]);
+
+  const handleAsideFocusIn = (e: React.FocusEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+      beginTransaction(`Edit ${target.getAttribute('placeholder') || 'properties'}`, getProjectState());
+    }
+  };
+
+  const handleAsideFocusOut = (e: React.FocusEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+      commitTransaction(getProjectState());
+    }
+  };
+
+  const handleAsideMouseDown = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' && target.getAttribute('type') === 'range') {
+      beginTransaction('Adjust slider', getProjectState());
+    }
+  };
+
+  const handleAsideMouseUp = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' && target.getAttribute('type') === 'range') {
+      commitTransaction(getProjectState());
+    }
+  };
 
   // Timeline Mouse Drag Scroll State
   const timelineScrollRef = useRef<HTMLDivElement>(null);
@@ -594,11 +1037,6 @@ export function EditorMainScreen() {
     e.preventDefault();
     e.stopPropagation();
     setActiveMediaId(clip.id);
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      clip
-    });
   };
 
   const handleMenuAction = (actionId: string, clipId: string) => {
@@ -694,10 +1132,13 @@ export function EditorMainScreen() {
     timelineClips.forEach((clip) => {
       const video = videoRefs.current[clip.id];
       if (video) {
-        video.playbackRate = playbackSpeed;
+        const rate = clampPlaybackRate(clip.playbackRate ?? 1);
+        video.playbackRate = rate;
+        video.defaultPlaybackRate = rate;
+        video.preservesPitch = true;
       }
     });
-  }, [playbackSpeed, timelineClips]);
+  }, [timelineClips]);
 
   // Clean up videoRefs
   useEffect(() => {
@@ -760,7 +1201,7 @@ export function EditorMainScreen() {
     if (clip && activeClip?.id === clip.id) {
       const video = videoRefs.current[clipId];
       if (video && !video.seeking) {
-        const absoluteTime = (video.currentTime - clip.startOffset) + clip.timelineStart;
+        const absoluteTime = sourceTimeToTimelineTime(clip, video.currentTime);
         setCurrentTime(absoluteTime);
 
         // Keep timeline scroll in sync during manual seeks / pauses
@@ -824,11 +1265,11 @@ export function EditorMainScreen() {
                   v.pause();
                 }
               });
-              const targetLocalTime = (currentTime - activeClip.timelineStart) + activeClip.startOffset;
+              const targetLocalTime = timelineTimeToSourceTime(activeClip, currentTime);
               video.currentTime = targetLocalTime;
               video.play().catch(() => {});
             } else if (!video.seeking) {
-              const absoluteTime = (video.currentTime - activeClip.startOffset) + activeClip.timelineStart;
+              const absoluteTime = sourceTimeToTimelineTime(activeClip, video.currentTime);
               setCurrentTime(absoluteTime);
 
               // Center the playhead smoothly by scrolling the container
@@ -896,7 +1337,7 @@ export function EditorMainScreen() {
               v.pause();
             }
           });
-          const targetLocalTime = (currentTime - activeClip.timelineStart) + activeClip.startOffset;
+          const targetLocalTime = timelineTimeToSourceTime(activeClip, currentTime);
           activeVid.currentTime = targetLocalTime;
           activeVid.play().catch(() => {});
         } else {
@@ -1058,8 +1499,8 @@ export function EditorMainScreen() {
       const localTime = Math.max(
         targetActiveClip.startOffset,
         Math.min(
-          targetActiveClip.startOffset + targetActiveClip.duration - 0.05,
-          (clampedTime - targetActiveClip.timelineStart) + targetActiveClip.startOffset
+          targetActiveClip.startOffset + getSourceDuration(targetActiveClip) - 0.05,
+          timelineTimeToSourceTime(targetActiveClip, clampedTime)
         )
       );
 
@@ -1094,9 +1535,7 @@ export function EditorMainScreen() {
     setIsMuted(!isMuted);
   };
 
-  const handleSpeedChange = (speed: number) => {
-    setPlaybackSpeed(speed);
-  };
+  // handleSpeedChange removed because per-clip speed is used
 
   const toggleFullscreen = () => {
     const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
@@ -1119,6 +1558,7 @@ export function EditorMainScreen() {
   // Canvas Mouse Move & Mouse Up Handlers for Drag / Resize / Rotate
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
+    beginTransaction('Transform clip', getProjectState());
     setIsSelectedOnCanvas(true);
     setIsDraggingCanvas(true);
     setDragStart({ x: e.clientX - canvasPos.x, y: e.clientY - canvasPos.y });
@@ -1144,6 +1584,7 @@ export function EditorMainScreen() {
     setIsDraggingCanvas(false);
     setIsResizingCanvas(null);
     setIsRotatingCanvas(false);
+    commitTransaction(getProjectState());
   };
 
   // Timeline Mouse Drag Scroll Handlers
@@ -1252,8 +1693,8 @@ export function EditorMainScreen() {
       const localTime = Math.max(
         activeClip.startOffset,
         Math.min(
-          activeClip.startOffset + activeClip.duration - 0.05,
-          (clampedTime - activeClip.timelineStart) + activeClip.startOffset
+          activeClip.startOffset + getSourceDuration(activeClip) - 0.05,
+          timelineTimeToSourceTime(activeClip, clampedTime)
         )
       );
 
@@ -1326,7 +1767,13 @@ export function EditorMainScreen() {
       <div className="flex-1 grid grid-cols-[280px_1fr_300px] overflow-hidden">
 
         {/* LEFT PANEL: Media Library & Quick AI Edit Modules */}
-        <aside className="border-r border-border bg-surface flex flex-col overflow-hidden">
+        <aside
+          onFocus={handleAsideFocusIn}
+          onBlur={handleAsideFocusOut}
+          onMouseDown={handleAsideMouseDown}
+          onMouseUp={handleAsideMouseUp}
+          className="border-r border-border bg-surface flex flex-col overflow-hidden"
+        >
           <div className="flex border-b border-border bg-surface p-1 gap-0.5 overflow-x-auto flex-shrink-0 scrollbar-none">
             {[
               { id: 'media', label: 'Media', icon: Film },
@@ -1483,7 +1930,8 @@ export function EditorMainScreen() {
               <SpeedTool
                 activeClip={timelineClips.find(c => c.mediaId === activeMediaId) || timelineClips[0] || null}
                 onUpdateClipSpeed={handleUpdateClipSpeed}
-                onResetClipSpeed={(clipId) => handleUpdateClipSpeed(clipId, 1.0)}
+                onStartSpeedChange={(label) => beginTransaction(label, getProjectState())}
+                onEndSpeedChange={() => commitTransaction(getProjectState())}
               />
             )}
           </div>
@@ -3201,6 +3649,7 @@ export function EditorMainScreen() {
                       className="absolute -top-7 left-1/2 -translate-x-1/2 h-5 w-5 rounded-full bg-sky-400 text-primary-foreground flex items-center justify-center cursor-grab pointer-events-auto shadow-md"
                       onMouseDown={(e) => {
                         e.stopPropagation();
+                        beginTransaction('Rotate clip', getProjectState());
                         setIsRotatingCanvas(true);
                         setDragStart({ x: e.clientX, y: e.clientY });
                       }}
@@ -3221,6 +3670,7 @@ export function EditorMainScreen() {
                         }`}
                         onMouseDown={(e) => {
                           e.stopPropagation();
+                          beginTransaction('Resize clip', getProjectState());
                           setIsResizingCanvas(corner);
                           setDragStart({ x: e.clientX, y: e.clientY });
                         }}
@@ -3239,6 +3689,7 @@ export function EditorMainScreen() {
                         }`}
                         onMouseDown={(e) => {
                           e.stopPropagation();
+                          beginTransaction('Resize clip', getProjectState());
                           setIsResizingCanvas(edge);
                           setDragStart({ x: e.clientX, y: e.clientY });
                         }}
@@ -3361,14 +3812,26 @@ export function EditorMainScreen() {
       </div>
 
       {/* ---------------- BOTTOM TIMELINE SECTION ---------------- */}
-      <footer className="h-64 border-t border-border bg-surface flex flex-col flex-shrink-0">
+      <footer className="h-[340px] border-t border-border bg-surface flex flex-col flex-shrink-0">
         {/* Toolbar */}
         <div className="h-9 border-b border-border px-4 flex items-center justify-between bg-surface text-muted-foreground select-none flex-shrink-0">
           <div className="flex items-center gap-2">
-            <button type="button" className="p-1 hover:text-foreground transition" title="Undo">
+            <button
+              type="button"
+              onClick={handleUndoAction}
+              disabled={!canUndo}
+              className="p-1 hover:text-foreground transition disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Undo"
+            >
               <RotateCcw className="h-3.5 w-3.5" />
             </button>
-            <button type="button" className="p-1 hover:text-foreground transition" title="Redo">
+            <button
+              type="button"
+              onClick={handleRedoAction}
+              disabled={!canRedo}
+              className="p-1 hover:text-foreground transition disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Redo"
+            >
               <RotateCcw className="h-3.5 w-3.5 transform -scale-x-100" />
             </button>
             <div className="h-3.5 w-px bg-surface/10 mx-1" />
@@ -3649,13 +4112,7 @@ export function EditorMainScreen() {
                                 setActiveMediaId(clip.mediaId);
                                 setIsSelectedOnCanvas(true);
                                 handleSeek(clip.timelineStart);
-                                setContextMenu({
-                                  x: e.clientX,
-                                  y: e.clientY,
-                                  clip
-                                });
                               }}
-                              onContextMenu={(e) => handleClipContextMenu(e, clip)}
                               draggable={!isLocked}
                               onDragStart={(e) => handleDragStart(e, idx)}
                               onDragOver={(e) => handleDragOver(e, idx)}
@@ -3669,12 +4126,21 @@ export function EditorMainScreen() {
                             >
                               {/* Left Trim handle bar */}
                               {isSelected && !isLocked && (
-                                <div
-                                  onMouseDown={(e) => handleTrimMouseDown(e, clip.id, true)}
-                                  className="absolute left-0 top-0 bottom-0 w-2.5 bg-sky-400 hover:bg-sky-300 cursor-ew-resize z-30 flex items-center justify-center rounded-l"
-                                >
-                                  <span className="text-[7px] text-black font-bold">|</span>
-                                </div>
+                                <ClipTrimHandles
+                                  clipId={clip.id}
+                                  timelineStart={clip.timelineStart}
+                                  sourceStart={clip.startOffset}
+                                  duration={clip.duration}
+                                  maxSourceDuration={mediaFiles.find(m => m.id === clip.mediaId)?.duration || Infinity}
+                                  pixelsPerSecond={pxPerSec}
+                                  playbackRate={clip.playbackRate || 1}
+                                  isLocked={isLocked}
+                                  onTrimStart={(edge) => beginTransaction(`Trim clip ${edge}`, getProjectState())}
+                                  onTrimUpdate={(newTimelineStart, newSourceStart, newDuration) => {
+                                    handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration);
+                                  }}
+                                  onTrimEnd={handleTrimCommit}
+                                />
                               )}
 
                               <div className="h-full flex-1 flex overflow-hidden opacity-90 px-2 pointer-events-none">
@@ -3693,16 +4159,6 @@ export function EditorMainScreen() {
                                 {isMuted && <VolumeX className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />}
                                 {clip.name} ({formatTimecode(clip.duration)})
                               </span>
-
-                              {/* Right Trim handle bar */}
-                              {isSelected && !isLocked && (
-                                <div
-                                  onMouseDown={(e) => handleTrimMouseDown(e, clip.id, false)}
-                                  className="absolute right-0 top-0 bottom-0 w-2.5 bg-sky-400 hover:bg-sky-300 cursor-ew-resize z-30 flex items-center justify-center rounded-r"
-                                >
-                                  <span className="text-[7px] text-black font-bold">|</span>
-                                </div>
-                              )}
                             </div>
                           );
 
@@ -3759,6 +4215,18 @@ export function EditorMainScreen() {
             })()}
           </div>
         </div>
+
+        {/* BOTTOM ACTION PANEL */}
+        <ClipActionsPanel 
+          clip={activeMediaId ? {
+            id: activeMediaId,
+            name: timelineClips.find(c => c.mediaId === activeMediaId)?.name || activeMediaId,
+            trackId: 'video'
+          } : null}
+          isLocked={!!lockedClips[timelineClips.find(c => c.mediaId === activeMediaId)?.id || '']}
+          isMuted={!!mutedClips[timelineClips.find(c => c.mediaId === activeMediaId)?.id || '']}
+          onAction={(actionId) => handleMenuAction(actionId, timelineClips.find(c => c.mediaId === activeMediaId)?.id || '')}
+        />
       </footer>
 
       {/* Camera Movements Keyframe Animations */}
@@ -3806,25 +4274,6 @@ export function EditorMainScreen() {
         }
       `}</style>
 
-      {/* RENDER CONTEXT MENU */}
-      {contextMenu && (
-        <TimelineContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          clip={{
-            id: contextMenu.clip.id,
-            name: contextMenu.clip.name,
-            start: 0,
-            duration: contextMenu.clip.duration || 5,
-            trackId: 'video',
-            color: ''
-          }}
-          isLocked={!!lockedClips[contextMenu.clip.id]}
-          isMuted={!!mutedClips[contextMenu.clip.id]}
-          onClose={() => setContextMenu(null)}
-          onAction={handleMenuAction}
-        />
-      )}
 
       {/* RENDER TOAST ALERT NOTIFICATION */}
       {toast && (

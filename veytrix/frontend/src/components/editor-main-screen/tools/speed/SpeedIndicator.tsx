@@ -3,16 +3,14 @@
 
 import React, { memo } from 'react';
 import { Gauge, Zap } from 'lucide-react';
-import { formatSpeed, formatDuration, calculateEffectiveDuration } from './speedUtils';
+import { formatSpeed, formatDuration } from './speedUtils';
 import { SpeedIndicatorProps } from './speedTypes';
 
 export const SpeedIndicator = memo<SpeedIndicatorProps>(({
   speed,
-  baseDuration = 10,
+  sourceDuration,
   effectiveDuration
 }) => {
-  const displayDuration = effectiveDuration ?? calculateEffectiveDuration(baseDuration, speed);
-
   return (
     <div className="flex items-center justify-between p-3.5 bg-surface/80 border border-border rounded-xl backdrop-blur-md shadow-sm select-none">
       <div className="flex items-center gap-3">
@@ -25,9 +23,9 @@ export const SpeedIndicator = memo<SpeedIndicatorProps>(({
           </div>
           <div className="text-xl font-bold font-mono text-foreground flex items-baseline gap-1.5">
             <span>{formatSpeed(speed)}</span>
-            {speed !== 1.0 && (
+            {speed !== 1 && (
               <span className="text-[10px] text-sky-400 bg-sky-500/15 border border-sky-400/30 px-1.5 py-0.2 rounded font-sans">
-                {speed > 1.0 ? 'Fast' : 'Slow'}
+                {speed > 1 ? 'Fast' : 'Slow'}
               </span>
             )}
           </div>
@@ -39,7 +37,7 @@ export const SpeedIndicator = memo<SpeedIndicatorProps>(({
           Duration
         </div>
         <div className="text-sm font-semibold font-mono text-foreground">
-          {formatDuration(displayDuration)}
+          {formatDuration(effectiveDuration)}
         </div>
       </div>
     </div>

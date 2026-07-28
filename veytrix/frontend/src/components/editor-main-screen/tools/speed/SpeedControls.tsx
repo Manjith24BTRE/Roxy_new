@@ -11,6 +11,8 @@ interface SpeedControlsProps {
   currentSpeed: number;
   onSpeedChange: (speed: number) => void;
   onResetSpeed: () => void;
+  onStartSpeedChange?: (label: string) => void;
+  onEndSpeedChange?: () => void;
   disabled?: boolean;
 }
 
@@ -18,6 +20,8 @@ export const SpeedControls = memo<SpeedControlsProps>(({
   currentSpeed,
   onSpeedChange,
   onResetSpeed,
+  onStartSpeedChange,
+  onEndSpeedChange,
   disabled = false
 }) => {
   const isDefault = Math.abs(currentSpeed - DEFAULT_SPEED) < 0.01;
@@ -28,6 +32,8 @@ export const SpeedControls = memo<SpeedControlsProps>(({
       <SpeedSlider
         value={currentSpeed}
         onChange={onSpeedChange}
+        onStartChange={() => onStartSpeedChange?.('Change speed')}
+        onEndChange={onEndSpeedChange}
         disabled={disabled}
       />
 

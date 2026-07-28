@@ -1,17 +1,10 @@
 // speedTypes.ts
-// Purpose: Type definitions for the Roxie Video Speed Tool.
+// Purpose: Type definitions for the VEYTRIX Video Speed Tool.
 
 export interface SpeedPreset {
   value: number;
   label: string;
   isDefault?: boolean;
-}
-
-export interface ClipSpeedState {
-  speed: number;
-  baseDuration: number;
-  effectiveDuration: number;
-  playbackRate: number;
 }
 
 export interface SpeedToolProps {
@@ -20,21 +13,22 @@ export interface SpeedToolProps {
     name: string;
     duration: number;
     baseDuration?: number;
-    speed?: number;
+    playbackRate?: number;
+    startOffset?: number;
     timelineStart?: number;
     mediaId?: string;
   } | null;
-  onUpdateClipSpeed: (clipId: string, newSpeed: number) => void;
-  onResetClipSpeed?: (clipId: string) => void;
+  onUpdateClipSpeed: (clipId: string, newRate: number) => void;
+  onStartSpeedChange?: (label: string) => void;
+  onEndSpeedChange?: () => void;
   disabled?: boolean;
 }
 
 export interface SpeedSliderProps {
   value: number;
   onChange: (speed: number) => void;
-  min?: number;
-  max?: number;
-  step?: number;
+  onStartChange?: () => void;
+  onEndChange?: () => void;
   disabled?: boolean;
 }
 
@@ -47,6 +41,6 @@ export interface SpeedPresetsProps {
 
 export interface SpeedIndicatorProps {
   speed: number;
-  baseDuration?: number;
-  effectiveDuration?: number;
+  sourceDuration: number;
+  effectiveDuration: number;
 }

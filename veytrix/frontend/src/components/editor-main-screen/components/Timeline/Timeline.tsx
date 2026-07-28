@@ -3,7 +3,8 @@ import {
   Play, Pause, Scissors, Copy, Trash2, Plus, RotateCcw, ZoomIn, 
   ZoomOut, Lock, Unlock, Eye, EyeOff, Volume2, VolumeX, Bookmark 
 } from 'lucide-react';
-import { TimelineContextMenu } from './TimelineContextMenu';
+import { ClipActionsPanel } from '../../clip-actions/ClipActionsPanel';
+import { ClipTrimHandles } from '../../trim/ClipTrimHandles';
 
 export interface TimelineClip {
   id: string;
@@ -37,7 +38,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
   // Individual Clip states (Context Menu targets)
   const [lockedClips, setLockedClips] = useState<Record<string, boolean>>({});
   const [mutedClips, setMutedClips] = useState<Record<string, boolean>>({});
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; clip: TimelineClip } | null>(null);
+
   const [toast, setToast] = useState<string | null>(null);
 
   // Timeline Clips
@@ -185,6 +186,22 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
     showToast('Ripple deleted clip');
   };
 
+  const handleTrimUpdate = (clipId: string, newTimelineStart: number, newSourceStart: number, newDuration: number) => {
+    setClips(prev => prev.map(c => c.id === clipId ? { ...c, start: newTimelineStart, duration: newDuration } : c));
+  };
+
+  const handleTrimEnd = () => {
+    setClips(currentClips => {
+      setHistory(prevHistory => {
+        const updatedHistory = prevHistory.slice(0, historyIndex + 1);
+        setHistoryIndex(updatedHistory.length);
+        return [...updatedHistory, currentClips];
+      });
+      return currentClips;
+    });
+    showToast('Trimmed clip');
+  };
+
   const handleTrim = (direction: 'left' | 'right', amount: number) => {
     if (!selectedClipId) return;
     const clip = clips.find((c) => c.id === selectedClipId);
@@ -222,16 +239,10 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
     setMutedTracks({ ...mutedTracks, [track]: !mutedTracks[track] });
   };
 
-  // Right-Click Context Menu Trigger
   const handleClipContextMenu = (e: React.MouseEvent, clip: TimelineClip) => {
     e.preventDefault();
     e.stopPropagation();
     setSelectedClipId(clip.id); // Also select it visually
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      clip
-    });
   };
 
   // Handle Context Menu item triggers
@@ -605,9 +616,18 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
                               {clip.name}
                             </span>
                             {isSelected && !clipIsLocked && (
-                              <div className="flex gap-0.5 items-center">
-                                <span className="w-1.5 h-3 bg-white/40 rounded-sm pointer-events-none" />
-                              </div>
+                              <ClipTrimHandles
+                                clipId={clip.id}
+                                timelineStart={clip.start}
+                                sourceStart={0}
+                                duration={clip.duration}
+                                pixelsPerSecond={scaleFactor}
+                                isLocked={clipIsLocked}
+                                onTrimUpdate={(newTimelineStart, newSourceStart, newDuration) => {
+                                  handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration);
+                                }}
+                                onTrimEnd={handleTrimEnd}
+                              />
                             )}
                           </div>
                         );
@@ -621,18 +641,13 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
         </div>
       </div>
 
-      {/* RENDER CONTEXT MENU */}
-      {contextMenu && (
-        <TimelineContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          clip={contextMenu.clip}
-          isLocked={!!lockedClips[contextMenu.clip.id]}
-          isMuted={!!mutedClips[contextMenu.clip.id]}
-          onClose={() => setContextMenu(null)}
-          onAction={handleMenuAction}
-        />
-      )}
+      {/* BOTTOM ACTION PANEL */}
+      <ClipActionsPanel 
+        clip={selectedClipId ? clips.find(c => c.id === selectedClipId) || null : null}
+        isLocked={!!(selectedClipId && lockedClips[selectedClipId])}
+        isMuted={!!(selectedClipId && mutedClips[selectedClipId])}
+        onAction={(actionId) => handleMenuAction(actionId, selectedClipId!)}
+      />
 
       {/* RENDER TOAST ALERT NOTIFICATION */}
       {toast && (

@@ -7,12 +7,13 @@ import { SpeedIndicator } from './SpeedIndicator';
 import { SpeedControls } from './SpeedControls';
 import { SpeedToolProps } from './speedTypes';
 import { DEFAULT_SPEED } from './speedConstants';
-import { formatDuration, calculateEffectiveDuration } from './speedUtils';
+import { formatDuration, getSourceDuration, getEffectiveDuration, clampPlaybackRate } from './speedUtils';
 
 export const SpeedPanel = memo<SpeedToolProps>(({
   activeClip,
   onUpdateClipSpeed,
-  onResetClipSpeed
+  onStartSpeedChange,
+  onEndSpeedChange
 }) => {
   if (!activeClip) {
     return (
@@ -28,20 +29,20 @@ export const SpeedPanel = memo<SpeedToolProps>(({
     );
   }
 
-  const currentSpeed = activeClip.speed ?? DEFAULT_SPEED;
-  const baseDuration = activeClip.baseDuration || activeClip.duration * currentSpeed || 5;
-  const effectiveDuration = calculateEffectiveDuration(baseDuration, currentSpeed);
+  const currentRate = clampPlaybackRate(activeClip.playbackRate ?? DEFAULT_SPEED);
+  const sourceDuration = getSourceDuration({
+    baseDuration: activeClip.baseDuration,
+    duration: activeClip.duration,
+    playbackRate: currentRate
+  });
+  const effectiveDuration = getEffectiveDuration(sourceDuration, currentRate);
 
-  const handleSpeedChange = (newSpeed: number) => {
-    onUpdateClipSpeed(activeClip.id, newSpeed);
+  const handleSpeedChange = (newRate: number) => {
+    onUpdateClipSpeed(activeClip.id, newRate);
   };
 
   const handleReset = () => {
-    if (onResetClipSpeed) {
-      onResetClipSpeed(activeClip.id);
-    } else {
-      onUpdateClipSpeed(activeClip.id, DEFAULT_SPEED);
-    }
+    onUpdateClipSpeed(activeClip.id, DEFAULT_SPEED);
   };
 
   return (
@@ -61,16 +62,18 @@ export const SpeedPanel = memo<SpeedToolProps>(({
 
       {/* Speed Indicator Badge */}
       <SpeedIndicator
-        speed={currentSpeed}
-        baseDuration={baseDuration}
+        speed={currentRate}
+        sourceDuration={sourceDuration}
         effectiveDuration={effectiveDuration}
       />
 
       {/* Speed Controls */}
       <SpeedControls
-        currentSpeed={currentSpeed}
+        currentSpeed={currentRate}
         onSpeedChange={handleSpeedChange}
         onResetSpeed={handleReset}
+        onStartSpeedChange={onStartSpeedChange}
+        onEndSpeedChange={onEndSpeedChange}
       />
 
       {/* Duration Comparison Stats */}
@@ -79,7 +82,7 @@ export const SpeedPanel = memo<SpeedToolProps>(({
           <span className="flex items-center gap-1">
             <Info className="h-3 w-3 text-sky-400" /> Original Length:
           </span>
-          <span className="font-semibold text-foreground">{formatDuration(baseDuration)}</span>
+          <span className="font-semibold text-foreground">{formatDuration(sourceDuration)}</span>
         </div>
         <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono">
           <span>Adjusted Length:</span>
