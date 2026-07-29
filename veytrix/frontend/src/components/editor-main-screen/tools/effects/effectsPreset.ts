@@ -663,41 +663,51 @@ export function getInterpolatedEffectProps(effect: AppliedEffect, localTime: num
     noiseReduction: effect.noiseReduction ?? 50
   };
 
-  if (!effect.keyframes || effect.keyframes.length === 0) {
+  if (!effect || !effect.keyframes || effect.keyframes.length === 0) {
     return defaults;
   }
 
-  const sorted = [...effect.keyframes].sort((a, b) => a.time - b.time);
-  
+  const sorted = [...effect.keyframes]
+    .filter((k) => k && k.properties)
+    .sort((a, b) => a.time - b.time);
+
+  if (sorted.length === 0) {
+    return defaults;
+  }
+
   let prevKf = sorted[0];
   let nextKf = sorted[sorted.length - 1];
-  
+
   if (localTime <= prevKf.time) {
-    return { ...defaults, ...prevKf.properties };
+    return { ...defaults, ...(prevKf.properties || {}) };
   }
   if (localTime >= nextKf.time) {
-    return { ...defaults, ...nextKf.properties };
+    return { ...defaults, ...(nextKf.properties || {}) };
   }
-  
+
   for (let i = 0; i < sorted.length - 1; i++) {
-    if (localTime >= sorted[i].time && localTime <= sorted[i+1].time) {
+    if (localTime >= sorted[i].time && localTime <= sorted[i + 1].time) {
       prevKf = sorted[i];
-      nextKf = sorted[i+1];
+      nextKf = sorted[i + 1];
       break;
     }
   }
-  
-  const progress = (localTime - prevKf.time) / (nextKf.time - prevKf.time);
+
+  const duration = nextKf.time - prevKf.time;
+  const progress = duration > 0 ? (localTime - prevKf.time) / duration : 0;
   const lerp = (start: number, end: number) => start + (end - start) * progress;
-  
+
+  const prevProps = prevKf.properties || {};
+  const nextProps = nextKf.properties || {};
+
   const interpolated: any = { ...defaults };
-  const keys = new Set([...Object.keys(prevKf.properties), ...Object.keys(nextKf.properties)]);
-  
+  const keys = new Set([...Object.keys(prevProps), ...Object.keys(nextProps)]);
+
   keys.forEach((key) => {
-    const startVal = (prevKf.properties as any)[key] ?? defaults[key] ?? 0;
-    const endVal = (nextKf.properties as any)[key] ?? defaults[key] ?? 0;
+    const startVal = (prevProps as any)[key] ?? defaults[key] ?? 0;
+    const endVal = (nextProps as any)[key] ?? defaults[key] ?? 0;
     interpolated[key] = lerp(startVal, endVal);
   });
-  
+
   return interpolated;
 }

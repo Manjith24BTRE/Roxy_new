@@ -5,6 +5,10 @@ import {
 } from 'lucide-react';
 import { ClipActionsPanel } from '../../clip-actions/ClipActionsPanel';
 import { ClipTrimHandles } from '../../trim/ClipTrimHandles';
+import { useDuplicate } from '../../tools/duplicate';
+import { useCopyPaste } from '../../tools/copy-paste';
+import { useRename, RenameDialog } from '../../tools/rename';
+import { useReverse } from '../../tools/reverse';
 
 export interface TimelineClip {
   id: string;
@@ -72,6 +76,50 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
     }, 3000);
   };
 
+  const { duplicateClipTimeline } = useDuplicate({ showToast });
+
+  const { copy: copyTimelineClip, paste: pasteTimelineClip, hasClipboardPayload } = useCopyPaste({
+    getSelectedClip: () => {
+      if (!selectedClipId) return null;
+      return clips.find((c) => c.id === selectedClipId) || null;
+    },
+    onPasteTimeline: (updatedClips, pastedClips) => {
+      updateHistory(updatedClips);
+      if (pastedClips && pastedClips.length > 0) {
+        setSelectedClipId(pastedClips[0].id);
+      }
+    },
+    getClips: () => clips,
+    currentTime,
+    showToast,
+  });
+
+  const {
+    isOpen: isRenameOpen,
+    currentName: renameCurrentName,
+    openRename,
+    closeRename,
+    confirmRename,
+  } = useRename({
+    getClips: () => clips,
+    onRenameSuccess: (updatedClips) => {
+      updateHistory(updatedClips);
+    },
+    showToast,
+  });
+
+  const { toggleReverse: toggleTimelineReverse } = useReverse({
+    getSelectedClip: () => {
+      if (!selectedClipId) return null;
+      return clips.find((c) => c.id === selectedClipId) || null;
+    },
+    getClips: () => clips,
+    onUpdateClips: (updatedClips) => {
+      updateHistory(updatedClips);
+    },
+    showToast,
+  });
+
   const updateHistory = (newClips: TimelineClip[]) => {
     const updatedHistory = history.slice(0, historyIndex + 1);
     setHistory([...updatedHistory, newClips]);
@@ -129,22 +177,11 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
 
   const handleDuplicate = () => {
     if (!selectedClipId) return;
-    const clip = clips.find((c) => c.id === selectedClipId);
-    if (!clip || lockedTracks[clip.trackId] || lockedClips[clip.id]) {
-      if (clip && lockedClips[clip.id]) showToast('Cannot edit: Clip is locked!');
-      return;
+    const res = duplicateClipTimeline(clips, selectedClipId, { lockedTracks, lockedClips });
+    if (res) {
+      updateHistory(res.updatedClips);
+      setSelectedClipId(res.newClip.id);
     }
-
-    const newClip: TimelineClip = {
-      ...clip,
-      id: `${clip.id}-dup-${Date.now()}`,
-      name: `${clip.name} (Copy)`,
-      start: clip.start + clip.duration // Put it right after
-    };
-
-    updateHistory([...clips, newClip]);
-    setSelectedClipId(newClip.id);
-    showToast('Duplicated clip');
   };
 
   const handleDelete = () => {
@@ -256,17 +293,14 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
         setSelectedClipId(null);
         showToast(`Deleted: ${clip.name}`);
         break;
-      case 'duplicate':
-        const newClip: TimelineClip = {
-          ...clip,
-          id: `${clip.id}-dup-${Date.now()}`,
-          name: `${clip.name} (Copy)`,
-          start: clip.start + clip.duration
-        };
-        updateHistory([...clips, newClip]);
-        setSelectedClipId(newClip.id);
-        showToast(`Duplicated: ${clip.name}`);
+      case 'duplicate': {
+        const res = duplicateClipTimeline(clips, clipId, { lockedTracks, lockedClips }, `Duplicated: ${clip.name}`);
+        if (res) {
+          updateHistory(res.updatedClips);
+          setSelectedClipId(res.newClip.id);
+        }
         break;
+      }
       case 'split':
         if (currentTime > clip.start && currentTime < clip.start + clip.duration) {
           const firstPartDuration = currentTime - clip.start;
@@ -301,7 +335,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
         showToast(`${isCurrentlyMuted ? 'Unmuted' : 'Muted'} audio track of: ${clip.name}`);
         break;
       case 'reverse':
-        showToast(`Mock Action: Reversing stream coordinates for ${clip.name}`);
+        toggleTimelineReverse(clipId);
         break;
       case 'keyframes':
         showToast(`Opened Keyframes frame interpolation for ${clip.name}`);
@@ -313,17 +347,13 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
         showToast(`Mock Action: Add transition before ${clip.name}`);
         break;
       case 'copy':
-        showToast(`Copied clip coordinates to clipboard`);
+        copyTimelineClip();
         break;
       case 'paste':
-        showToast(`Pasted formatting attributes to ${clip.name}`);
+        pasteTimelineClip({ selectedClipId, currentTime });
         break;
       case 'rename':
-        const newName = prompt('Rename clip to:', clip.name);
-        if (newName) {
-          updateHistory(clips.map((c) => (c.id === clipId ? { ...c, name: newName } : c)));
-          showToast(`Renamed clip to: ${newName}`);
-        }
+        openRename(clipId || clip?.id, clip?.name);
         break;
       case 'speed':
         const sp = prompt('Adjust speed factor (e.g. 0.5x, 2.0x):', '1.0');
@@ -613,7 +643,8 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
                             <span className="text-[10px] font-semibold truncate leading-tight w-full pointer-events-none flex items-center gap-1">
                               {clipIsLocked && <Lock className="h-2.5 w-2.5 text-amber-400 flex-shrink-0" />}
                               {clipIsMuted && <VolumeX className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />}
-                              {clip.name}
+                              {(clip as any).isReversed && <RotateCcw className="h-2.5 w-2.5 text-sky-400 flex-shrink-0" />}
+                              {clip.name} {(clip as any).isReversed && <span className="text-[8px] font-mono text-sky-400 font-bold uppercase">(REV)</span>}
                             </span>
                             {isSelected && !clipIsLocked && (
                               <ClipTrimHandles
@@ -646,6 +677,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
         clip={selectedClipId ? clips.find(c => c.id === selectedClipId) || null : null}
         isLocked={!!(selectedClipId && lockedClips[selectedClipId])}
         isMuted={!!(selectedClipId && mutedClips[selectedClipId])}
+        hasClipboardPayload={hasClipboardPayload}
         onAction={(actionId) => handleMenuAction(actionId, selectedClipId!)}
       />
 
@@ -657,6 +689,13 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
         </div>
       )}
 
+      {/* RENAME DIALOG */}
+      <RenameDialog
+        isOpen={isRenameOpen}
+        currentName={renameCurrentName}
+        onRename={confirmRename}
+        onCancel={closeRename}
+      />
     </div>
   );
 }

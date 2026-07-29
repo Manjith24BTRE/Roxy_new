@@ -13,6 +13,7 @@ export interface ClipActionsPanelProps {
   } | null;
   isLocked?: boolean;
   isMuted?: boolean;
+  hasClipboardPayload?: boolean;
   onAction: (actionId: string, clipId: string) => void;
 }
 
@@ -20,6 +21,7 @@ export function ClipActionsPanel({
   clip,
   isLocked = false,
   isMuted = false,
+  hasClipboardPayload = false,
   onAction
 }: ClipActionsPanelProps) {
   if (!clip) {
@@ -32,13 +34,12 @@ export function ClipActionsPanel({
   // Action order: Copy, Paste, Duplicate, Split, Trim, Speed, Transition, Keyframes, Reverse, Freeze, Mute, Detach, Replace, Rename, Lock/Unlock, Delete
   const toolbarItems = [
     { id: 'copy', label: 'Copy', icon: Clipboard, disabled: isLocked },
-    { id: 'paste', label: 'Paste', icon: Clipboard, disabled: isLocked },
+    { id: 'paste', label: 'Paste', icon: Clipboard, disabled: isLocked || !hasClipboardPayload },
     { id: 'duplicate', label: 'Duplicate', icon: Copy, disabled: isLocked },
     { id: 'split', label: 'Split', icon: Scissors, disabled: isLocked },
     { id: 'trim', label: 'Trim', icon: ChevronRight, disabled: isLocked },
     { id: 'speed', label: 'Speed', icon: Gauge, disabled: isLocked },
     { id: 'add-transition', label: 'Transition', icon: CornerDownRight, disabled: isLocked },
-    { id: 'keyframes', label: 'Keyframes', icon: Key, disabled: isLocked || clip.trackId === 'audio' },
     { id: 'reverse', label: 'Reverse', icon: RotateCcw, disabled: isLocked || clip.trackId !== 'video' },
     { id: 'freeze-frame', label: 'Freeze', icon: Snowflake, disabled: isLocked || clip.trackId !== 'video' },
     { id: 'mute-audio', label: isMuted ? 'Unmute' : 'Mute', icon: VolumeX, disabled: isLocked || !isAudioEnabled, active: isMuted },

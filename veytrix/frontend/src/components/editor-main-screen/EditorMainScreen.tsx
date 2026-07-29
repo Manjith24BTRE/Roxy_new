@@ -24,8 +24,10 @@ import { SAMPLE_FILTERS, getInterpolatedFilter } from './tools/filters/samples';
 import { SAMPLE_TRANSITIONS_NEW } from './tools/transitions/Transitions.data';
 import { EFFECT_PRESETS, EffectPreset, AppliedEffect, EffectKeyframe, getInterpolatedEffectProps } from './tools/effects/effectsPreset';
 import { applyEffectPipeline, renderStateToCSS, createDefaultRenderState } from './tools/effects/renderers';
-
-
+import { useDuplicate } from './tools/duplicate';
+import { useCopyPaste } from './tools/copy-paste';
+import { useRename, RenameDialog } from './tools/rename';
+import { useReverse, reversedAudioEngine } from './tools/reverse';
 
 // Context Menu
 import { ClipActionsPanel } from './clip-actions/ClipActionsPanel';
@@ -70,7 +72,75 @@ function EditorMainScreenContent() {
   // Timeline Clips sequence tracking
   const [timelineClips, setTimelineClipsState] = useState<any[]>([]);
 
+  // Duplicate hook initialization
+  const { duplicateClipSequence, handleDuplicateEffect } = useDuplicate({ showToast });
 
+  // Rename hook initialization
+  const {
+    isOpen: isRenameOpen,
+    currentName: renameCurrentName,
+    openRename,
+    closeRename,
+    confirmRename,
+  } = useRename({
+    getClips: () => timelineClips,
+    onRenameSuccess: (updatedClips) => {
+      beginTransaction('Rename clip', getProjectState());
+      setTimelineClips(updatedClips);
+      commitTransaction(getProjectState());
+    },
+    showToast,
+  });
+
+  const activeSelectedClip = timelineClips.find(c => c.mediaId === activeMediaId || c.id === activeMediaId) || timelineClips[0] || null;
+  const activeClipLocalTime = activeSelectedClip ? Math.max(0, currentTime - activeSelectedClip.timelineStart) : 0;
+
+  // Reverse hook initialization
+  const { toggleReverse } = useReverse({
+    getSelectedClip: () => activeSelectedClip,
+    getClips: () => timelineClips,
+    getMediaSource: (clip) => getClipMediaSource(clip),
+    onUpdateClips: (updatedClips) => {
+      beginTransaction('Reverse clip', getProjectState());
+      setTimelineClips(updatedClips);
+      commitTransaction(getProjectState());
+
+      if (isPlaying) {
+        reversedAudioEngine.stopReversedAudio();
+        const activeClip = updatedClips.find(
+          (c) => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration
+        ) || updatedClips[0];
+        if (activeClip && activeClip.isReversed) {
+          const relTime = Math.max(0, currentTime - activeClip.timelineStart);
+          const clipVol = isMuted || mutedClips[activeClip.id] ? 0 : volume;
+          const mediaSource = getClipMediaSource(activeClip);
+          reversedAudioEngine.playReversedAudio(
+            activeClip.id,
+            mediaSource,
+            relTime,
+            activeClip.duration,
+            clipVol,
+            activeClip.playbackRate || activeClip.speed || 1
+          );
+        }
+      }
+    },
+    showToast,
+  });
+
+  // Copy & Paste hook initialization
+  const { copy: copyClip, paste: pasteClip, hasClipboardPayload } = useCopyPaste({
+    getSelectedClip: () => {
+      const clip = timelineClips.find(c => c.mediaId === activeMediaId || c.id === activeMediaId) || timelineClips[0];
+      return clip || null;
+    },
+    onPasteSequence: (updatedClips) => {
+      setTimelineClips(updatedClips);
+    },
+    getClips: () => timelineClips,
+    currentTime,
+    showToast,
+  });
 
   // Drag and drop index tracking
   const [draggedClipIndex, setDraggedClipIndex] = useState<number | null>(null);
@@ -407,13 +477,7 @@ function EditorMainScreenContent() {
 
   const handleDuplicateAppliedEffect = (clipId: string, effectId: string) => {
     const clip = timelineClips.find(c => c.id === clipId);
-    if (clip && clip.appliedEffects) {
-      const target = clip.appliedEffects.find((e: any) => e.id === effectId);
-      if (target) {
-        showToast(`Cannot duplicate: "${target.name}" is already applied to this clip`);
-        return;
-      }
-    }
+    handleDuplicateEffect(clip, effectId);
   };
 
   const handleReorderAppliedEffects = (clipId: string, startIndex: number, endIndex: number) => {
@@ -489,19 +553,10 @@ function EditorMainScreenContent() {
   };
 
   const handleDuplicateClip = (clipId: string) => {
-    const clipIndex = timelineClips.findIndex(c => c.id === clipId);
-    if (clipIndex === -1) return;
-    const clip = timelineClips[clipIndex];
-    const copy = {
-      ...clip,
-      id: `${clip.id}-dup-${Date.now()}`,
-      name: `${clip.name} (Copy)`
-    };
-
-    const updated = [...timelineClips];
-    updated.splice(clipIndex + 1, 0, copy);
-    setTimelineClips(recalculateSequence(updated));
-    showToast('Duplicated clip');
+    const updated = duplicateClipSequence(timelineClips, clipId, recalculateSequence);
+    if (updated) {
+      setTimelineClips(updated);
+    }
   };
 
   const handleDeleteClip = (clipId: string) => {
@@ -1101,28 +1156,27 @@ function EditorMainScreenContent() {
         showToast(`${isCurrentlyMuted ? 'Unmuted' : 'Muted'} audio track of: ${clip.name}`);
         break;
       case 'reverse':
-        showToast(`Mock Action: Reversing video stream for ${clip.name}`);
-        break;
-      case 'keyframes':
-        handleAddKeyframeAtPlayhead(clipId);
+        toggleReverse(clipId);
         break;
       case 'trim':
         handleTrimToPlayhead(clipId, 'start');
         break;
       case 'add-transition':
-        showToast(`Opened transition selection dialog for ${clip.name}`);
+        setEffectsSubTab('transitions');
+        setActiveTab('effects');
+        showToast(`Select a transition to apply to ${clip.name}`);
         break;
       case 'copy':
-        showToast(`Copied clip coordinates to clipboard`);
+        copyClip();
         break;
       case 'paste':
-        showToast(`Pasted attributes to: ${clip.name}`);
+        beginTransaction('Paste clip', getProjectState());
+        if (pasteClip({ selectedClipId: clipId, recalculateSequence })) {
+          commitTransaction(getProjectState());
+        }
         break;
       case 'rename':
-        const newName = prompt('Rename clip to:', clip.name);
-        if (newName) {
-          showToast(`Renamed clip to: ${newName}`);
-        }
+        openRename(clipId || clip?.id, clip?.name);
         break;
       case 'speed':
         const sp = prompt('Adjust speed factor (e.g. 0.5x, 2.0x):', '1.0');
@@ -1331,64 +1385,120 @@ function EditorMainScreenContent() {
     }
   };
 
+  const currentTimeRef = useRef(currentTime);
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
+
   // Smooth 60 FPS playhead tracking and auto-follow scrolling loop
   useEffect(() => {
     let animationFrameId: number;
+    let lastTime = performance.now();
 
-    const updateLoop = () => {
+    const updateLoop = (now: number) => {
+      const deltaSec = Math.min(0.1, (now - lastTime) / 1000);
+      lastTime = now;
+
       if (isPlaying) {
         const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
+        const curTime = currentTimeRef.current;
+
         const activeClip = timelineClips.find(
-          (c) => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration
-        ) || (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
+          (c) => curTime >= c.timelineStart && curTime < c.timelineStart + c.duration
+        ) || (curTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
 
         if (activeClip) {
           const video = videoRefs.current[activeClip.id];
-          if (video) {
-            // Ensure this active clip is playing
-            if (video.paused && !video.seeking) {
-              // Pause other clips to be sure
-              timelineClips.forEach((c) => {
-                const v = videoRefs.current[c.id];
-                if (v && c.id !== activeClip.id) {
-                  v.pause();
-                }
-              });
-              const targetLocalTime = timelineTimeToSourceTime(activeClip, currentTime);
-              video.currentTime = targetLocalTime;
-              video.play().catch(() => {});
-            } else if (!video.seeking) {
-              const absoluteTime = sourceTimeToTimelineTime(activeClip, video.currentTime);
-              setCurrentTime(absoluteTime);
 
-              // Center the playhead smoothly by scrolling the container
-              if (timelineScrollRef.current) {
-                const pxPerSec = (zoomLevel / 100) * 35;
-                timelineScrollRef.current.scrollLeft = absoluteTime * pxPerSec;
-              }
+          if (activeClip.isReversed) {
+            // REVERSED CLIP PLAYBACK ENGINE - Hardware throttled to prevent decoder thrashing
+            if (video && !video.paused) {
+              video.pause();
+            }
+            const speed = activeClip.playbackRate || activeClip.speed || 1;
+            const nextTime = curTime + deltaSec * speed;
 
-              // Check if boundary crossed or timeline finished
-              if (absoluteTime >= totalDur) {
-                video.pause();
-                setIsPlaying(false);
-                setCurrentTime(totalDur);
-                showToast('Video playback completed');
-                return;
-              }
+            if (nextTime >= totalDur) {
+              setIsPlaying(false);
+              currentTimeRef.current = totalDur;
+              setCurrentTime(totalDur);
+              if (video) video.pause();
+              reversedAudioEngine.stopReversedAudio();
+              showToast('Video playback completed');
+              return;
+            }
 
-              // Dynamic boundary switching
-              if (absoluteTime >= activeClip.timelineStart + activeClip.duration) {
-                const currentClipIndex = timelineClips.findIndex((c) => c.id === activeClip.id);
-                if (currentClipIndex !== -1 && currentClipIndex < timelineClips.length - 1) {
-                  const nextClip = timelineClips[currentClipIndex + 1];
-                  const nextVideo = videoRefs.current[nextClip.id];
-                  video.pause();
-                  if (nextVideo) {
-                    nextVideo.currentTime = nextClip.startOffset;
-                    nextVideo.play().catch(() => {});
+            currentTimeRef.current = nextTime;
+            setCurrentTime(nextTime);
+
+            if (video && !video.seeking) {
+              const targetSourceTime = timelineTimeToSourceTime(activeClip, nextTime);
+              if (Math.abs(video.currentTime - targetSourceTime) >= 0.033) {
+                if ('fastSeek' in video && typeof (video as any).fastSeek === 'function') {
+                  try {
+                    (video as any).fastSeek(targetSourceTime);
+                  } catch {
+                    video.currentTime = targetSourceTime;
                   }
-                  setActiveMediaId(nextClip.mediaId);
-                  setCurrentTime(nextClip.timelineStart);
+                } else {
+                  video.currentTime = targetSourceTime;
+                }
+              }
+            }
+
+            if (timelineScrollRef.current) {
+              const pxPerSec = (zoomLevel / 100) * 35;
+              timelineScrollRef.current.scrollLeft = nextTime * pxPerSec;
+            }
+          } else {
+            // FORWARD CLIP PLAYBACK ENGINE
+            if (video) {
+              if (video.paused && !video.seeking) {
+                timelineClips.forEach((c) => {
+                  const v = videoRefs.current[c.id];
+                  if (v && c.id !== activeClip.id) {
+                    v.pause();
+                  }
+                });
+                const targetLocalTime = timelineTimeToSourceTime(activeClip, curTime);
+                video.currentTime = targetLocalTime;
+                video.play().catch(() => {});
+              } else if (!video.seeking) {
+                const absoluteTime = sourceTimeToTimelineTime(activeClip, video.currentTime);
+                currentTimeRef.current = absoluteTime;
+                setCurrentTime(absoluteTime);
+
+                if (timelineScrollRef.current) {
+                  const pxPerSec = (zoomLevel / 100) * 35;
+                  timelineScrollRef.current.scrollLeft = absoluteTime * pxPerSec;
+                }
+
+                if (absoluteTime >= totalDur) {
+                  video.pause();
+                  setIsPlaying(false);
+                  currentTimeRef.current = totalDur;
+                  setCurrentTime(totalDur);
+                  showToast('Video playback completed');
+                  return;
+                }
+
+                if (absoluteTime >= activeClip.timelineStart + activeClip.duration) {
+                  const currentClipIndex = timelineClips.findIndex((c) => c.id === activeClip.id);
+                  if (currentClipIndex !== -1 && currentClipIndex < timelineClips.length - 1) {
+                    const nextClip = timelineClips[currentClipIndex + 1];
+                    const nextVideo = videoRefs.current[nextClip.id];
+                    video.pause();
+                    if (nextVideo) {
+                      const nextTarget = timelineTimeToSourceTime(nextClip, nextClip.timelineStart);
+                      nextVideo.currentTime = nextTarget;
+                      if (!nextClip.isReversed) {
+                        nextVideo.play().catch(() => {});
+                      }
+                    }
+                    setActiveMediaId(nextClip.mediaId);
+                    currentTimeRef.current = nextClip.timelineStart;
+                    setCurrentTime(nextClip.timelineStart);
+                  }
                 }
               }
             }
@@ -1400,13 +1510,31 @@ function EditorMainScreenContent() {
     };
 
     if (isPlaying) {
+      lastTime = performance.now();
       animationFrameId = requestAnimationFrame(updateLoop);
+    } else {
+      reversedAudioEngine.stopReversedAudio();
     }
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      reversedAudioEngine.stopReversedAudio();
     };
-  }, [isPlaying, timelineClips, zoomLevel, currentTime, setActiveMediaId]);
+  }, [isPlaying, timelineClips, zoomLevel, setActiveMediaId]);
+
+  const getClipMediaSource = (clip: any): File | Blob | string => {
+    if (!clip) return '';
+    const media = mediaFiles.find((m) => m.id === clip.mediaId || m.id === clip.id);
+    if (media && media.file) return media.file;
+    if (clip.url) return clip.url;
+    if (media && media.url) return media.url;
+    const vid = videoRefs.current[clip.id];
+    if (vid) {
+      if (vid.currentSrc) return vid.currentSrc;
+      if (vid.src) return vid.src;
+    }
+    return '';
+  };
 
   const togglePlay = () => {
     const nextPlaying = !isPlaying;
@@ -1415,23 +1543,118 @@ function EditorMainScreenContent() {
     const activeClip = timelineClips.find(
       (c) => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration
     ) || timelineClips[0];
+
     if (activeClip) {
       const activeVid = videoRefs.current[activeClip.id];
-      if (activeVid) {
-        if (nextPlaying) {
-          // Pause others just to be sure
-          timelineClips.forEach((c) => {
-            const v = videoRefs.current[c.id];
-            if (v && c.id !== activeClip.id) {
-              v.pause();
-            }
-          });
-          const targetLocalTime = timelineTimeToSourceTime(activeClip, currentTime);
-          activeVid.currentTime = targetLocalTime;
-          activeVid.play().catch(() => {});
+      if (nextPlaying) {
+        timelineClips.forEach((c) => {
+          const v = videoRefs.current[c.id];
+          if (v && c.id !== activeClip.id) {
+            v.pause();
+          }
+        });
+        const targetLocalTime = timelineTimeToSourceTime(activeClip, currentTime);
+        if (activeVid) activeVid.currentTime = targetLocalTime;
+
+        if (activeClip.isReversed) {
+          if (activeVid) activeVid.pause();
+          const relTime = Math.max(0, currentTime - activeClip.timelineStart);
+          const clipVol = isMuted || mutedClips[activeClip.id] ? 0 : volume;
+          const mediaSource = getClipMediaSource(activeClip);
+          reversedAudioEngine.playReversedAudio(
+            activeClip.id,
+            mediaSource,
+            relTime,
+            activeClip.duration,
+            clipVol,
+            activeClip.playbackRate || activeClip.speed || 1
+          );
         } else {
-          activeVid.pause();
+          reversedAudioEngine.stopReversedAudio();
+          if (activeVid) activeVid.play().catch(() => {});
         }
+      } else {
+        if (activeVid) activeVid.pause();
+        reversedAudioEngine.stopReversedAudio();
+      }
+    }
+  };
+
+  const handleSeek = (time: number, scrollViewport = false) => {
+    if (timelineClips.length === 0) {
+      setCurrentTime(time);
+      return;
+    }
+
+    const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
+    const clampedTime = Math.min(totalDur, Math.max(0, time));
+    
+    setCurrentTime(clampedTime);
+    if (scrollViewport && timelineScrollRef.current) {
+      const pxPerSec = (zoomLevel / 100) * 35;
+      timelineScrollRef.current.scrollLeft = clampedTime * pxPerSec;
+    }
+
+    const targetActiveClip = timelineClips.find(
+      (c) => clampedTime >= c.timelineStart && clampedTime < c.timelineStart + c.duration
+    ) || (clampedTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
+
+    if (targetActiveClip) {
+      if (activeMediaId !== targetActiveClip.mediaId) {
+        setActiveMediaId(targetActiveClip.mediaId);
+      }
+      
+      const localTime = Math.max(
+        targetActiveClip.startOffset,
+        Math.min(
+          targetActiveClip.startOffset + getSourceDuration(targetActiveClip) - 0.05,
+          timelineTimeToSourceTime(targetActiveClip, clampedTime)
+        )
+      );
+
+      // Pause all video elements except the target active one
+      timelineClips.forEach((c) => {
+        const v = videoRefs.current[c.id];
+        if (v && c.id !== targetActiveClip.id) {
+          v.pause();
+        }
+      });
+
+      const activeVid = videoRefs.current[targetActiveClip.id];
+      if (activeVid) {
+        if (!activeVid.seeking) {
+          if ('fastSeek' in activeVid && typeof (activeVid as any).fastSeek === 'function') {
+            try {
+              (activeVid as any).fastSeek(localTime);
+            } catch {
+              activeVid.currentTime = localTime;
+            }
+          } else {
+            activeVid.currentTime = localTime;
+          }
+        }
+      }
+
+      if (isPlaying) {
+        if (targetActiveClip.isReversed) {
+          if (activeVid) activeVid.pause();
+          const relTime = Math.max(0, clampedTime - targetActiveClip.timelineStart);
+          const clipVol = isMuted || mutedClips[targetActiveClip.id] ? 0 : volume;
+          const mediaSource = getClipMediaSource(targetActiveClip);
+          reversedAudioEngine.playReversedAudio(
+            targetActiveClip.id,
+            mediaSource,
+            relTime,
+            targetActiveClip.duration,
+            clipVol,
+            targetActiveClip.playbackRate || targetActiveClip.speed || 1
+          );
+        } else {
+          reversedAudioEngine.stopReversedAudio();
+          if (activeVid) activeVid.play().catch(() => {});
+        }
+      } else {
+        reversedAudioEngine.stopReversedAudio();
       }
     }
   };
@@ -1620,55 +1843,6 @@ function EditorMainScreenContent() {
     return { states, overlayColor };
   };
 
-  const handleSeek = (time: number, scrollViewport = false) => {
-    if (timelineClips.length === 0) {
-      setCurrentTime(time);
-      return;
-    }
-
-    const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
-    const clampedTime = Math.min(totalDur, Math.max(0, time));
-    
-    setCurrentTime(clampedTime);
-    if (scrollViewport && timelineScrollRef.current) {
-      const pxPerSec = (zoomLevel / 100) * 35;
-      timelineScrollRef.current.scrollLeft = clampedTime * pxPerSec;
-    }
-
-    const targetActiveClip = timelineClips.find(
-      (c) => clampedTime >= c.timelineStart && clampedTime < c.timelineStart + c.duration
-    ) || (clampedTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
-
-    if (targetActiveClip) {
-      if (activeMediaId !== targetActiveClip.mediaId) {
-        setActiveMediaId(targetActiveClip.mediaId);
-      }
-      
-      const localTime = Math.max(
-        targetActiveClip.startOffset,
-        Math.min(
-          targetActiveClip.startOffset + getSourceDuration(targetActiveClip) - 0.05,
-          timelineTimeToSourceTime(targetActiveClip, clampedTime)
-        )
-      );
-
-      // Pause all video elements except the target active one
-      timelineClips.forEach((c) => {
-        const v = videoRefs.current[c.id];
-        if (v && c.id !== targetActiveClip.id) {
-          v.pause();
-        }
-      });
-
-      const activeVid = videoRefs.current[targetActiveClip.id];
-      if (activeVid) {
-        activeVid.currentTime = localTime;
-        if (isPlaying) {
-          activeVid.play().catch(() => {});
-        }
-      }
-    }
-  };
 
   // Keep the duration state updated and clamp playhead if clips list changes
   useEffect(() => {
@@ -1872,6 +2046,14 @@ function EditorMainScreenContent() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}:${f.toString().padStart(2, '0')}`;
   };
 
+  const activeClipAtPlayhead = timelineClips.find(
+    (c) => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration
+  ) || timelineClips.find((c) => c.mediaId === activeMediaId || c.id === activeMediaId) || timelineClips[0] || null;
+
+  const displayVideoName = activeClipAtPlayhead
+    ? activeClipAtPlayhead.name
+    : (mediaFiles.find((m) => m.id === activeMediaId)?.name || 'untitled-project.vxp');
+
   return (
     <div className="veytrix-editor h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden font-sans select-none">
       {/* ---------------- TOP BAR ---------------- */}
@@ -1888,8 +2070,8 @@ function EditorMainScreenContent() {
           <div className="h-4 w-px bg-surface/10" />
           <div className="flex items-center gap-2">
             <VeytrixLogo className="h-5 w-5" />
-            <span className="font-mono text-xs font-semibold text-foreground">
-              veytrix / {activeMedia ? activeMedia.name : 'untitled-project.vxp'}
+            <span className="font-mono text-xs font-semibold text-foreground truncate max-w-[400px]">
+              veytrix / {displayVideoName}
             </span>
             <span className="rounded bg-primary/10 border border-sky-500/20 text-primary text-[10px] font-mono px-2 py-0.5">
               Draft
@@ -2129,6 +2311,13 @@ function EditorMainScreenContent() {
               }}
             >
               
+              {/* Preview Window Video Title Badge */}
+              {displayVideoName && (
+                <div className="absolute top-3 left-3 z-30 bg-black/80 backdrop-blur-md border border-white/10 text-white text-[11px] font-mono px-3 py-1 rounded-md shadow-lg pointer-events-none flex items-center gap-1.5 transition-all">
+                  <span className="truncate max-w-[280px]">{displayVideoName}</span>
+                </div>
+              )}
+
               {/* HTML5 Native Video Tag wrapped in transform container */}
               <div
                 className={`h-full w-full relative flex items-center justify-center cursor-move ${
@@ -2161,6 +2350,10 @@ function EditorMainScreenContent() {
                         let clipScaleY = 1;
                         let posX = 0;
                         let posY = 0;
+
+                        let kfFilterStr = '';
+                        let kfOpacityMultiplier = 1;
+
 
                         if (clip.appliedEffects && tState.display) {
                           clip.appliedEffects.forEach((eff: AppliedEffect) => {
@@ -2556,9 +2749,10 @@ function EditorMainScreenContent() {
                           ? renderedCSS.filterStr
                           : (renderedCSS.filterStr === 'none' ? globalFilterStr : `${globalFilterStr} ${renderedCSS.filterStr}`);
 
-                        const finalFilterStr = [rawFilterStr !== 'none' ? rawFilterStr : null, tState.filter || null].filter(Boolean).join(' ') || 'none';
+                        const combinedFilter = [rawFilterStr !== 'none' ? rawFilterStr : null, kfFilterStr || null, tState.filter || null].filter(Boolean).join(' ') || 'none';
+                        const finalFilterStr = combinedFilter;
 
-                        const finalOpacity = tState.opacity * renderedCSS.opacityVal * (filterEnabled && !showBeforeOnly ? filterOpacity / 100 : 1);
+                        const finalOpacity = tState.opacity * renderedCSS.opacityVal * kfOpacityMultiplier * (filterEnabled && !showBeforeOnly ? filterOpacity / 100 : 1);
                         const finalBlendMode = (filterEnabled && !showBeforeOnly) ? (filterBlendMode as any) : renderedCSS.mixBlendModeVal;
                         const finalTransform = `translate(${posX}px, ${posY}px) scale(${clipScale * clipScaleX}, ${clipScale * clipScaleY}) rotate(${clipRotation}deg) ${renderedCSS.transformStr} ${tState.transform}`;
 
@@ -3263,6 +3457,7 @@ function EditorMainScreenContent() {
           } : null}
           isLocked={!!lockedClips[timelineClips.find(c => c.mediaId === activeMediaId)?.id || '']}
           isMuted={!!mutedClips[timelineClips.find(c => c.mediaId === activeMediaId)?.id || '']}
+          hasClipboardPayload={hasClipboardPayload}
           onAction={(actionId) => handleMenuAction(actionId, timelineClips.find(c => c.mediaId === activeMediaId)?.id || '')}
         />
       </footer>
@@ -3320,6 +3515,14 @@ function EditorMainScreenContent() {
           <span>{toast}</span>
         </div>
       )}
+
+      {/* RENAME DIALOG */}
+      <RenameDialog
+        isOpen={isRenameOpen}
+        currentName={renameCurrentName}
+        onRename={confirmRename}
+        onCancel={closeRename}
+      />
     </div>
   );
 }
