@@ -6,7 +6,7 @@ import {
   Wand2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   ZoomIn, ZoomOut, Scissors, Split, Plus, Search,
   FolderPlus, Maximize2, RotateCcw, Image as ImageIcon,
-  Languages, Crop, Lock, Unlock, Gauge
+  Languages, Crop, Lock, Unlock, Gauge, Replace
 } from 'lucide-react';
 import { VeytrixLogo } from '../VeytrixLogo';
 import { useProjectMedia } from '../../contexts/ProjectMediaContext';
@@ -18,9 +18,12 @@ import { TextPanel, TextOverlay } from './tools/text/TextPanel';
 import { Captions, CaptionItem } from './tools/captions/Captions';
 import { Effects } from './tools/effects/Effects';
 import { SpeedTool, clampPlaybackRate, getSourceDuration, getEffectiveDuration, timelineTimeToSourceTime, sourceTimeToTimelineTime } from './tools/speed';
+import { ReplaceTool, ReplaceMediaPayload } from './tools/replace';
 // Force IDE cache refresh for folder casing
 import { SAMPLE_FILTERS, getInterpolatedFilter } from './tools/filters/samples';
+import { SAMPLE_TRANSITIONS_NEW } from './tools/transitions/Transitions.data';
 import { EFFECT_PRESETS, EffectPreset, AppliedEffect, EffectKeyframe, getInterpolatedEffectProps } from './tools/effects/effectsPreset';
+import { applyEffectPipeline, renderStateToCSS, createDefaultRenderState } from './tools/effects/renderers';
 
 
 
@@ -43,13 +46,13 @@ function EditorMainScreenContent() {
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [activeTab, setActiveTab] = useState<'media' | 'ratio' | 'audio' | 'text' | 'captions' | 'effects' | 'speed'>('media');
+  const [activeTab, setActiveTab] = useState<'media' | 'ratio' | 'audio' | 'text' | 'captions' | 'effects' | 'speed' | 'replace'>('media');
   const [zoomLevel, setZoomLevel] = useState(120);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(0.8);
   const [isMuted, setIsMutedState] = useState(false);
-  // playbackSpeed state removed. per-clip playbackRate is used instead.
+  const [effectsSubTab, setEffectsSubTab] = useState<'transitions' | 'filters' | 'effects'>('effects');
 
   // Context Menu and overrides states
 
@@ -100,10 +103,29 @@ function EditorMainScreenContent() {
 
   const handleSelectTransition = (transitionId: string | null) => {
     setActiveTransitionId(transitionId);
-    if (selectedTransitionIndex !== null) {
+    let targetIndex = selectedTransitionIndex;
+
+    if (targetIndex === null && timelineClips.length > 1) {
+      let minDistance = Infinity;
+      timelineClips.forEach((clip, idx) => {
+        if (idx < timelineClips.length - 1) {
+          const boundary = clip.timelineStart + clip.duration;
+          const dist = Math.abs(currentTime - boundary);
+          if (dist < minDistance) {
+            minDistance = dist;
+            targetIndex = idx;
+          }
+        }
+      });
+      if (targetIndex === null) {
+        targetIndex = 0;
+      }
+    }
+
+    if (targetIndex !== null && targetIndex >= 0 && targetIndex < timelineClips.length - 1) {
       setTimelineClips((prev: any[]) =>
         prev.map((clip: any, idx: number) => {
-          if (idx === selectedTransitionIndex) {
+          if (idx === targetIndex) {
             return {
               ...clip,
               appliedTransition: transitionId
@@ -112,7 +134,7 @@ function EditorMainScreenContent() {
           return clip;
         })
       );
-      showToast(`Applied ${transitionId || 'None'} transition at clip gap`);
+      showToast(transitionId ? `Applied ${transitionId} transition at clip gap` : 'Transition removed');
     }
   };
 
@@ -287,6 +309,27 @@ function EditorMainScreenContent() {
                        (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
 
     if (activeClip) {
+      const existingEffect = activeClip.appliedEffects?.find(
+        (e: AppliedEffect) => e.presetId === presetId || e.presetId === preset.id || e.name === preset.name
+      );
+
+      if (existingEffect) {
+        setTimelineClips((prev) =>
+          prev.map((c) => {
+            if (c.id === activeClip.id) {
+              const appliedEffects = c.appliedEffects ? c.appliedEffects.filter((e: any) => e.id !== existingEffect.id) : [];
+              return { ...c, appliedEffects };
+            }
+            return c;
+          })
+        );
+        if (activeAppliedEffectId === existingEffect.id) {
+          setActiveAppliedEffectId(null);
+        }
+        showToast(`Effect "${preset.name}" removed from clip`);
+        return;
+      }
+
       const newEffect: AppliedEffect = {
         id: `effect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         presetId: preset.id,
@@ -363,23 +406,14 @@ function EditorMainScreenContent() {
   };
 
   const handleDuplicateAppliedEffect = (clipId: string, effectId: string) => {
-    setTimelineClips((prev) =>
-      prev.map((c) => {
-        if (c.id === clipId && c.appliedEffects) {
-          const target = c.appliedEffects.find((e: any) => e.id === effectId);
-          if (target) {
-            const cloned: AppliedEffect = {
-              ...target,
-              id: `effect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              name: `${target.name} (Copy)`
-            };
-            return { ...c, appliedEffects: [...c.appliedEffects, cloned] };
-          }
-        }
-        return c;
-      })
-    );
-    showToast('Effect duplicated');
+    const clip = timelineClips.find(c => c.id === clipId);
+    if (clip && clip.appliedEffects) {
+      const target = clip.appliedEffects.find((e: any) => e.id === effectId);
+      if (target) {
+        showToast(`Cannot duplicate: "${target.name}" is already applied to this clip`);
+        return;
+      }
+    }
   };
 
   const handleReorderAppliedEffects = (clipId: string, startIndex: number, endIndex: number) => {
@@ -1101,10 +1135,65 @@ function EditorMainScreenContent() {
         showToast(`Mock Action: Created freeze frame at playhead for ${clip.name}`);
         break;
       case 'replace-media':
-        showToast(`Mock Action: Replacing assets for ${clip.name}...`);
+        const clipToReplace = timelineClips.find(c => c.id === clipId || c.mediaId === activeMediaId) || timelineClips[0];
+        if (!clipToReplace) {
+          showToast('Select a clip to replace.');
+          return;
+        }
+        setActiveMediaId(clipToReplace.mediaId);
+        setActiveTab('replace');
+        showToast(`Replace media source for ${clipToReplace.name}`);
         break;
       default:
         showToast(`Action trigger: ${actionId}`);
+    }
+  };
+
+  const handleReplaceMedia = (
+    clipId: string,
+    newMedia: ReplaceMediaPayload
+  ) => {
+    const targetClip = timelineClips.find(c => c.id === clipId || c.mediaId === clipId);
+    if (!targetClip) {
+      showToast('Select a clip to replace.');
+      return;
+    }
+
+    const beforeState = getProjectState();
+
+    try {
+      setTimelineClipsState((prevClips) => {
+        const updatedClips = prevClips.map((clip) => {
+          if (clip.id === targetClip.id) {
+            const newBaseDuration = newMedia.duration || clip.baseDuration || clip.duration || 5;
+            return {
+              ...clip, // Preserves clip.id, timelineStart, startOffset, playbackRate, appliedEffects, appliedTransition, keyframes, transforms, animations, volume, mute state, color adjustments, etc.
+              mediaId: newMedia.mediaId,
+              url: newMedia.url,
+              name: newMedia.name,
+              thumbnails: newMedia.thumbnails && newMedia.thumbnails.length > 0 ? newMedia.thumbnails : clip.thumbnails,
+              baseDuration: newBaseDuration,
+              duration: Math.min(clip.duration, newBaseDuration)
+            };
+          }
+          return clip;
+        });
+        return updatedClips;
+      });
+
+      setActiveMediaId(newMedia.mediaId);
+
+      const afterState = {
+        ...beforeState,
+        timelineClips: timelineClips.map(c => c.id === targetClip.id ? { ...c, mediaId: newMedia.mediaId, url: newMedia.url, name: newMedia.name } : c)
+      };
+
+      commitStateChange(`Replace media source for ${targetClip.name}`, beforeState, afterState);
+      showToast(`Replaced media source for "${targetClip.name}"`);
+    } catch (err) {
+      console.error('Failed to replace media:', err);
+      setTimelineClipsState(beforeState.timelineClips);
+      showToast('Failed to replace media. Original clip restored.');
     }
   };
 
@@ -1369,107 +1458,166 @@ function EditorMainScreenContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentTime, timelineClips, isPlaying]);
 
-  // Compute CSS filter/transform for rendering transitions live in preview window
-  const getTransitionStyleAndOverlay = () => {
-    for (let i = 0; i < timelineClips.length - 1; i++) {
-      const clip = timelineClips[i];
-      const t_boundary = clip.timelineStart + clip.duration;
-      if (clip.appliedTransition && Math.abs(currentTime - t_boundary) <= 0.4) {
-        const progress = (currentTime - (t_boundary - 0.4)) / 0.8; // Normalized 0 to 1
-        const type = clip.appliedTransition;
-        
-        // --- 200 NEW PREMIUM TRANSITIONS MAPPING ---
-        if (type.includes('fade') || type.includes('dissolve') || type.includes('blend') || type.includes('dip')) {
-          const opacity = Math.max(0, 1 - Math.sin(progress * Math.PI));
-          return { opacity, overlayColor: null, filter: null, transform: null };
-        }
-        if (type.includes('zoom') || type.includes('perspective') || type.includes('tunnel')) {
-          const scale = type.includes('out') ? 1 - Math.sin(progress * Math.PI) * 0.25 : 1 + Math.sin(progress * Math.PI) * 0.3;
-          return { transform: `scale(${scale})`, opacity: 1, overlayColor: null, filter: null };
-        }
-        if (type.includes('spin') || type.includes('rotate') || type.includes('flip') || type.includes('roll') || type.includes('barrel') || type.includes('helix')) {
-          const rotate = Math.sin(progress * Math.PI) * 180;
-          const rotateY = type.includes('flip') ? ` rotateY(${rotate}deg)` : '';
-          return { transform: `rotate(${rotate}deg)${rotateY}`, opacity: 1, overlayColor: null, filter: null };
-        }
-        if (type.includes('slide') || type.includes('push') || type.includes('swipe') || type.includes('card') || type.includes('gallery')) {
-          const translateVal = (progress - 0.5) * 120;
-          const isVert = type.includes('up') || type.includes('down');
-          const factor = (type.includes('left') || type.includes('up')) ? -1 : 1;
-          const transform = isVert ? `translateY(${translateVal * factor}px)` : `translateX(${translateVal * factor}px)`;
-          return { transform, opacity: 1, overlayColor: null, filter: null };
-        }
-        if (type.includes('blur')) {
-          const blurVal = Math.sin(progress * Math.PI) * 10;
-          const opacity = Math.max(0, 1 - Math.sin(progress * Math.PI) * 0.5);
-          return { filter: `blur(${blurVal}px)`, opacity, overlayColor: null, transform: null };
-        }
-        if (type.includes('glitch') || type.includes('static') || type.includes('loss') || type.includes('error') || type.includes('crash') || type.includes('storm')) {
-          const flashOpacity = Math.sin(progress * Math.PI) * 0.5;
-          const translateVal = (progress - 0.5) * 10;
-          return {
-            filter: 'hue-rotate(60deg) contrast(1.3)',
-            overlayColor: `rgba(255,255,255,${flashOpacity})`,
-            opacity: 1,
-            transform: `translateX(${translateVal}px)`
-          };
-        }
-        if (type.includes('light') || type.includes('flare') || type.includes('burn') || type.includes('glow') || type.includes('bloom') || type.includes('rays') || type.includes('burst') || type.includes('flash')) {
-          const flashOpacity = Math.sin(progress * Math.PI) * 0.9;
-          return {
-            filter: null,
-            overlayColor: `rgba(255,255,255,${flashOpacity})`,
-            opacity: 1,
-            transform: null
-          };
-        }
-        if (type.includes('whip') || type.includes('pan') || type.includes('camera') || type.includes('shake') || type.includes('handheld') || type.includes('drone') || type.includes('crane')) {
-          const blurVal = Math.sin(progress * Math.PI) * 10;
-          const translateVal = (progress - 0.5) * 80;
-          return { filter: `blur(${blurVal}px)`, transform: `translateX(${translateVal}px)`, opacity: 1, overlayColor: null };
-        }
+  // Compute CSS filter/transform/opacity for rendering transitions live in preview window
+  const getTransitionStatesForClips = () => {
+    const states: Record<string, { display: boolean; opacity: number; filter: string; transform: string; zIndex: number }> = {};
+    let overlayColor: string | null = null;
 
-        // --- OLD TRANSITIONS FALLBACK ---
-        if (type === 'fade-black' || type === 'cross-dissolve') {
-          const opacity = Math.max(0, 1 - Math.sin(progress * Math.PI));
-          return { opacity, overlayColor: null, filter: null, transform: null };
+    const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
+    const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) || 
+                       (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
+
+    timelineClips.forEach(c => {
+      states[c.id] = {
+        display: activeClip?.id === c.id,
+        opacity: 1,
+        filter: '',
+        transform: '',
+        zIndex: 1
+      };
+    });
+
+    for (let i = 0; i < timelineClips.length - 1; i++) {
+      const clipA = timelineClips[i];
+      const clipB = timelineClips[i + 1];
+      const t_boundary = clipA.timelineStart + clipA.duration;
+      const halfDur = 0.5;
+
+      if (clipA.appliedTransition && Math.abs(currentTime - t_boundary) <= halfDur) {
+        const progress = Math.max(0, Math.min(1, (currentTime - (t_boundary - halfDur)) / (halfDur * 2)));
+
+        const tItem = SAMPLE_TRANSITIONS_NEW.find(t => t.id === clipA.appliedTransition);
+        const keywordsStr = (tItem?.keywords || []).join(' ');
+        const typeStr = (clipA.appliedTransition + ' ' + (tItem?.name || '') + ' ' + (tItem?.category || '') + ' ' + keywordsStr + ' ' + (tItem?.direction || '')).toLowerCase();
+
+        states[clipA.id] = { ...states[clipA.id], display: true, zIndex: 10 };
+        states[clipB.id] = { ...states[clipB.id], display: true, zIndex: 11 };
+
+        // 1. Dip to Black / Dark
+        if (typeStr.includes('black') || typeStr.includes('dark')) {
+          if (progress <= 0.5) {
+            states[clipA.id].opacity = 1 - progress * 2;
+            states[clipB.id].opacity = 0;
+          } else {
+            states[clipA.id].opacity = 0;
+            states[clipB.id].opacity = (progress - 0.5) * 2;
+          }
+          overlayColor = `rgba(0, 0, 0, ${Math.sin(progress * Math.PI)})`;
         }
-        if (type === 'glitch-cut') {
-          const flashOpacity = Math.sin(progress * Math.PI) * 0.7;
-          return { filter: 'hue-rotate(90deg) contrast(1.5)', overlayColor: `rgba(255,255,255,${flashOpacity})`, opacity: 1, transform: null };
+        // 2. White Flash / Bright Cut
+        else if (typeStr.includes('white') || typeStr.includes('flash') || typeStr.includes('bright')) {
+          states[clipA.id].opacity = 1 - progress;
+          states[clipB.id].opacity = progress;
+          overlayColor = `rgba(255, 255, 255, ${Math.sin(progress * Math.PI) * 0.9})`;
         }
-        if (type === 'whip-pan') {
-          const blurVal = Math.sin(progress * Math.PI) * 12;
-          const translateVal = (progress - 0.5) * 120;
-          return { filter: `blur(${blurVal}px)`, transform: `translateX(${translateVal}px)`, opacity: 1, overlayColor: null };
+        // 3. Zoom Out / Pull Out / Shrink
+        else if (typeStr.includes('out') || typeStr.includes('pull') || typeStr.includes('shrink') || typeStr.includes('back')) {
+          states[clipA.id].transform = `scale(${1 - progress * 0.4})`;
+          states[clipB.id].transform = `scale(${1.4 - progress * 0.4})`;
+          states[clipA.id].opacity = 1 - progress;
+          states[clipB.id].opacity = progress;
         }
-        if (type === 'zoom-in') {
-          const scale = 1 + Math.sin(progress * Math.PI) * 0.25;
-          return { transform: `scale(${scale})`, opacity: 1, overlayColor: null, filter: null };
+        // 4. Zoom In / Crash Zoom / Push In / Punch / Snap Zoom
+        else if (typeStr.includes('zoom') || typeStr.includes('push') || typeStr.includes('crash') || typeStr.includes('snap') || typeStr.includes('punch') || typeStr.includes('dolly') || typeStr.includes('perspective') || typeStr.includes('tunnel')) {
+          states[clipA.id].transform = `scale(${1 + progress * 0.5})`;
+          states[clipB.id].transform = `scale(${0.5 + progress * 0.5})`;
+          states[clipA.id].opacity = 1 - progress;
+          states[clipB.id].opacity = progress;
         }
-        if (type === 'zoom-out') {
-          const scale = 1 - Math.sin(progress * Math.PI) * 0.2;
-          return { transform: `scale(${scale})`, opacity: 1, overlayColor: null, filter: null };
+        // 5. Slide / Push / Wipe / Swipe / Cover
+        else if (typeStr.includes('slide') || typeStr.includes('swipe') || typeStr.includes('wipe') || typeStr.includes('card') || typeStr.includes('gallery') || typeStr.includes('move')) {
+          const isVert = typeStr.includes('up') || typeStr.includes('down');
+          const isReverse = typeStr.includes('right') || typeStr.includes('down');
+          const factor = isReverse ? 1 : -1;
+
+          if (isVert) {
+            states[clipA.id].transform = `translateY(${progress * 100 * factor}%)`;
+            states[clipB.id].transform = `translateY(${(1 - progress) * -100 * factor}%)`;
+          } else {
+            states[clipA.id].transform = `translateX(${progress * 100 * factor}%)`;
+            states[clipB.id].transform = `translateX(${(1 - progress) * -100 * factor}%)`;
+          }
+          states[clipA.id].opacity = 1;
+          states[clipB.id].opacity = 1;
         }
-        if (type === 'spin-clockwise') {
-          const rotate = Math.sin(progress * Math.PI) * 180;
-          return { transform: `rotate(${rotate}deg)`, opacity: 1, overlayColor: null, filter: null };
+        // 6. Spin / Rotate / Roll / Orbit
+        else if (typeStr.includes('spin') || typeStr.includes('rotate') || typeStr.includes('roll') || typeStr.includes('barrel') || typeStr.includes('orbit') || typeStr.includes('helix')) {
+          const isCCW = typeStr.includes('ccw') || typeStr.includes('counter');
+          const dir = isCCW ? -1 : 1;
+          states[clipA.id].transform = `rotate(${progress * 180 * dir}deg) scale(${1 - progress * 0.3})`;
+          states[clipB.id].transform = `rotate(${(progress - 1) * 180 * dir}deg) scale(${0.7 + progress * 0.3})`;
+          states[clipA.id].opacity = 1 - progress;
+          states[clipB.id].opacity = progress;
         }
-        if (type === 'slide-left') {
-          const translateVal = (progress - 0.5) * 120;
-          return { transform: `translateX(${-translateVal}px)`, opacity: 1, overlayColor: null, filter: null };
+        // 7. Flip / Page Curl / Cube / 3D
+        else if (typeStr.includes('flip') || typeStr.includes('page') || typeStr.includes('cube')) {
+          states[clipA.id].transform = `perspective(800px) rotateY(${progress * 90}deg)`;
+          states[clipB.id].transform = `perspective(800px) rotateY(${(1 - progress) * -90}deg)`;
+          states[clipA.id].opacity = 1 - progress;
+          states[clipB.id].opacity = progress;
         }
-        if (type === 'slide-right') {
-          const translateVal = (progress - 0.5) * 120;
-          return { transform: `translateX(${translateVal}px)`, opacity: 1, overlayColor: null, filter: null };
+        // 8. Whip Pan / Fast Pan
+        else if (typeStr.includes('whip') || typeStr.includes('pan')) {
+          const blurPx = Math.sin(progress * Math.PI) * 20;
+          const translateVal = (progress - 0.5) * 240;
+          states[clipA.id].filter = `blur(${blurPx}px)`;
+          states[clipB.id].filter = `blur(${blurPx}px)`;
+          states[clipA.id].transform = `translateX(${-translateVal}px)`;
+          states[clipB.id].transform = `translateX(${240 - translateVal}px)`;
+          states[clipA.id].opacity = 1 - progress;
+          states[clipB.id].opacity = progress;
         }
-        if (type === 'page-flip') {
-          const rotateY = (progress - 0.5) * 180;
-          return { transform: `perspective(600px) rotateY(${rotateY}deg)`, opacity: 1, overlayColor: null, filter: null };
+        // 9. Camera Shake / Jitter / Rumble
+        else if (typeStr.includes('shake') || typeStr.includes('jitter') || typeStr.includes('rumble') || typeStr.includes('handheld')) {
+          const shakeX = Math.sin(progress * 80) * 20 * Math.sin(progress * Math.PI);
+          const shakeY = Math.cos(progress * 60) * 15 * Math.sin(progress * Math.PI);
+          states[clipA.id].transform = `translate(${shakeX}px, ${shakeY}px)`;
+          states[clipB.id].transform = `translate(${-shakeX}px, ${-shakeY}px)`;
+          states[clipA.id].opacity = 1 - progress;
+          states[clipB.id].opacity = progress;
         }
+        // 10. Blur / Defocus
+        else if (typeStr.includes('blur') || typeStr.includes('defocus') || typeStr.includes('soft')) {
+          const blurPx = Math.sin(progress * Math.PI) * 24;
+          states[clipA.id].filter = `blur(${blurPx}px)`;
+          states[clipB.id].filter = `blur(${blurPx}px)`;
+          states[clipA.id].opacity = 1 - progress;
+          states[clipB.id].opacity = progress;
+        }
+        // 11. Glitch / Signal Loss / CRT / VHS / Distortion
+        else if (typeStr.includes('glitch') || typeStr.includes('static') || typeStr.includes('loss') || typeStr.includes('error') || typeStr.includes('crash') || typeStr.includes('storm') || typeStr.includes('vhs') || typeStr.includes('crt') || typeStr.includes('distortion')) {
+          const glitchShift = (Math.sin(progress * 50) > 0.2 ? (Math.random() - 0.5) * 35 : 0);
+          const hue = Math.sin(progress * Math.PI) * 120;
+          states[clipA.id].filter = `hue-rotate(${hue}deg) contrast(1.5)`;
+          states[clipB.id].filter = `hue-rotate(${-hue}deg) contrast(1.5)`;
+          states[clipA.id].transform = `translateX(${glitchShift}px)`;
+          states[clipB.id].transform = `translateX(${-glitchShift}px)`;
+          states[clipA.id].opacity = 1 - progress;
+          states[clipB.id].opacity = progress;
+          overlayColor = `rgba(255, 255, 255, ${Math.sin(progress * Math.PI) * 0.4})`;
+        }
+        // 12. Light Leak / Glow / Burn / Bloom / Rays / Flare
+        else if (typeStr.includes('light') || typeStr.includes('flare') || typeStr.includes('leak') || typeStr.includes('burn') || typeStr.includes('glow') || typeStr.includes('bloom') || typeStr.includes('rays') || typeStr.includes('burst')) {
+          states[clipA.id].opacity = 1 - progress;
+          states[clipB.id].opacity = progress;
+          overlayColor = `rgba(255, 200, 100, ${Math.sin(progress * Math.PI) * 0.8})`;
+        }
+        // 13. Split / Slice / Shatter
+        else if (typeStr.includes('split') || typeStr.includes('slice') || typeStr.includes('shatter')) {
+          states[clipA.id].transform = `scale(${1 + progress * 0.2}) rotate(${progress * 6}deg)`;
+          states[clipB.id].transform = `scale(${1.2 - progress * 0.2}) rotate(${(1 - progress) * -6}deg)`;
+          states[clipA.id].opacity = 1 - progress;
+          states[clipB.id].opacity = progress;
+        }
+        // 14. Default Cross Dissolve
+        else {
+          states[clipA.id].opacity = 1 - progress;
+          states[clipB.id].opacity = progress;
+        }
+        break;
       }
     }
-    return null;
+    return { states, overlayColor };
   };
 
   const handleSeek = (time: number, scrollViewport = false) => {
@@ -1532,7 +1680,11 @@ function EditorMainScreenContent() {
   }, [timelineClips, currentTime]);
 
   const toggleMute = () => {
-    setIsMuted(!isMuted);
+    setIsMutedState((prev) => {
+      const next = !prev;
+      showToast(next ? 'Audio track muted' : 'Audio track unmuted');
+      return next;
+    });
   };
 
   // handleSpeedChange removed because per-clip speed is used
@@ -1787,7 +1939,12 @@ function EditorMainScreenContent() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => {
+                  if (tab.id === 'effects') {
+                    setEffectsSubTab('effects');
+                  }
+                  setActiveTab(tab.id as any);
+                }}
                 className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-0.5 min-w-0 text-[8px] font-semibold rounded-md transition cursor-pointer overflow-hidden ${
                   activeTab === tab.id
                     ? 'bg-primary/15 text-primary border border-sky-500/25'
@@ -1913,6 +2070,8 @@ function EditorMainScreenContent() {
                 showBeforeOnly={showBeforeOnly}
                 onShowBeforeOnlyChange={setShowBeforeOnly}
                 onHoverFilter={setPreviewFilterId}
+                effectsSubTab={effectsSubTab}
+                onSubTabChange={setEffectsSubTab}
                 activeAppliedEffectId={activeAppliedEffectId}
                 onSetActiveAppliedEffectId={setActiveAppliedEffectId}
                 onAddAppliedEffect={handleAddAppliedEffect}
@@ -1932,6 +2091,15 @@ function EditorMainScreenContent() {
                 onUpdateClipSpeed={handleUpdateClipSpeed}
                 onStartSpeedChange={(label) => beginTransaction(label, getProjectState())}
                 onEndSpeedChange={() => commitTransaction(getProjectState())}
+              />
+            )}
+
+            {activeTab === 'replace' && (
+              <ReplaceTool
+                activeClip={timelineClips.find(c => c.mediaId === activeMediaId) || timelineClips[0] || null}
+                mediaFiles={mediaFiles}
+                onReplaceMedia={handleReplaceMedia}
+                showToast={showToast}
               />
             )}
           </div>
@@ -1974,7 +2142,7 @@ function EditorMainScreenContent() {
                 onMouseDown={handleCanvasMouseDown}
               >
                 {(() => {
-                  const transitionData = getTransitionStyleAndOverlay();
+                  const { states: transitionStates, overlayColor: transitionOverlayColor } = getTransitionStatesForClips();
                   const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
                   const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) || 
                                      (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
@@ -1983,6 +2151,7 @@ function EditorMainScreenContent() {
                     <>
                       {timelineClips.map((clip) => {
                         const isClipActive = activeClip?.id === clip.id;
+                        const tState = transitionStates[clip.id] || { display: isClipActive, opacity: 1, filter: '', transform: '', zIndex: 1 };
                         const localTime = (currentTime - clip.timelineStart) + clip.startOffset;
 
                         // Dynamic transform interpolation from applied effects keyframes
@@ -1993,7 +2162,7 @@ function EditorMainScreenContent() {
                         let posX = 0;
                         let posY = 0;
 
-                        if (clip.appliedEffects && isClipActive) {
+                        if (clip.appliedEffects && tState.display) {
                           clip.appliedEffects.forEach((eff: AppliedEffect) => {
                             if (!eff.enabled || showBeforeOnly) return;
                             const props = getInterpolatedEffectProps(eff, localTime);
@@ -2373,11 +2542,31 @@ function EditorMainScreenContent() {
                           });
                         }
 
+                        const pipelineState = (!showBeforeOnly && clip.appliedEffects)
+                          ? applyEffectPipeline(clip.appliedEffects, localTime, clip.duration || 5, EFFECT_PRESETS)
+                          : createDefaultRenderState();
+
+                        const renderedCSS = renderStateToCSS(pipelineState);
+
+                        const targetFilterId = previewFilterId !== null ? previewFilterId : activeFilterId;
+                        const filterObj = SAMPLE_FILTERS.find((f: any) => f.id === targetFilterId);
+                        const globalFilterStr = (filterObj && filterEnabled && !showBeforeOnly) ? getInterpolatedFilter(filterObj.cssFilter, filterIntensity) : 'none';
+
+                        const rawFilterStr = globalFilterStr === 'none'
+                          ? renderedCSS.filterStr
+                          : (renderedCSS.filterStr === 'none' ? globalFilterStr : `${globalFilterStr} ${renderedCSS.filterStr}`);
+
+                        const finalFilterStr = [rawFilterStr !== 'none' ? rawFilterStr : null, tState.filter || null].filter(Boolean).join(' ') || 'none';
+
+                        const finalOpacity = tState.opacity * renderedCSS.opacityVal * (filterEnabled && !showBeforeOnly ? filterOpacity / 100 : 1);
+                        const finalBlendMode = (filterEnabled && !showBeforeOnly) ? (filterBlendMode as any) : renderedCSS.mixBlendModeVal;
+                        const finalTransform = `translate(${posX}px, ${posY}px) scale(${clipScale * clipScaleX}, ${clipScale * clipScaleY}) rotate(${clipRotation}deg) ${renderedCSS.transformStr} ${tState.transform}`;
+
                         return (
                           <div
                             key={clip.id}
                             className="absolute inset-0 pointer-events-none"
-                            style={{ display: isClipActive ? 'block' : 'none' }}
+                            style={{ display: tState.display ? 'block' : 'none', zIndex: tState.zIndex }}
                           >
                             <video
                               ref={(el) => {
@@ -2391,1168 +2580,30 @@ function EditorMainScreenContent() {
                               preload="auto"
                               className="h-full w-full object-contain mx-auto pointer-events-none transition-all duration-150 absolute inset-0"
                               style={{
-                                filter: (() => {
-                                  const targetFilterId = previewFilterId !== null ? previewFilterId : activeFilterId;
-                                  const filterObj = SAMPLE_FILTERS.find((f: any) => f.id === targetFilterId);
-                                  let filterStr = (filterObj && filterEnabled && !showBeforeOnly) ? getInterpolatedFilter(filterObj.cssFilter, filterIntensity) : 'none';
-
-                                  // Apply custom stacked effects filters
-                                  if (clip.appliedEffects) {
-                                    clip.appliedEffects.forEach((eff: AppliedEffect) => {
-                                      if (!eff.enabled || showBeforeOnly) return;
-                                      const props = getInterpolatedEffectProps(eff, localTime);
-                                      const preset = EFFECT_PRESETS.find(p => p.id === eff.presetId);
-                                      const speedFactor = eff.speed / 50;
-                                      const intFactor = eff.intensity / 100;
-                                      if (preset && preset.cssFilter) {
-                                        const interpolatedFilter = getInterpolatedFilter(preset.cssFilter, props.intensity);
-                                        filterStr = filterStr === 'none' ? interpolatedFilter : `${filterStr} ${interpolatedFilter}`;
-                                      }
-                                      if (props.blur && props.blur > 0) {
-                                        filterStr = filterStr === 'none' ? `blur(${props.blur}px)` : `${filterStr} blur(${props.blur}px)`;
-                                      }
-                                      if (props.glow && props.glow > 0) {
-                                        filterStr = filterStr === 'none' ? `drop-shadow(0 0 ${props.glow}px rgba(14,165,233,0.8))` : `${filterStr} drop-shadow(0 0 ${props.glow}px rgba(14,165,233,0.8))`;
-                                      }
-
-                                      // Specific basic filters focus
-                                      if (eff.presetId === 'basic-center-focus') {
-                                        const focusFilter = `contrast(1.1) brightness(1.05)`;
-                                        filterStr = filterStr === 'none' ? focusFilter : `${filterStr} ${focusFilter}`;
-                                      } else if (eff.presetId === 'camera-focus-pull') {
-                                        const pullBlur = Math.max(0, 8 - localTime * 4 * speedFactor) * intFactor;
-                                        if (pullBlur > 0) filterStr = filterStr === 'none' ? `blur(${pullBlur}px)` : `${filterStr} blur(${pullBlur}px)`;
-                                      } else if (eff.presetId === 'camera-rack-focus') {
-                                        const cycle = Math.sin(localTime * Math.PI * 0.8 * speedFactor);
-                                        const rackBlur = Math.max(0, cycle * 8) * intFactor;
-                                        if (rackBlur > 0) filterStr = filterStr === 'none' ? `blur(${rackBlur}px)` : `${filterStr} blur(${rackBlur}px)`;
-                                      } else if (eff.presetId === 'camera-focus-blur') {
-                                        const focusBlur = Math.max(0, 10 - localTime * 5 * speedFactor) * intFactor;
-                                        if (focusBlur > 0) filterStr = filterStr === 'none' ? `blur(${focusBlur}px)` : `${filterStr} blur(${focusBlur}px)`;
-                                      } else if (eff.presetId === 'camera-flash') {
-                                        const flashVal = Math.max(0, 1 - localTime * 3 * speedFactor) * intFactor;
-                                        if (flashVal > 0) filterStr = filterStr === 'none' ? `brightness(${1 + flashVal * 1.5}) contrast(${1 - flashVal * 0.2})` : `${filterStr} brightness(${1 + flashVal * 1.5}) contrast(${1 - flashVal * 0.2})`;
-                                      } else if (eff.presetId === 'camera-exposure-shift') {
-                                        const shift = Math.sin(localTime * 15 * speedFactor) * 0.15 * intFactor;
-                                        filterStr = filterStr === 'none' ? `brightness(${1 + shift})` : `${filterStr} brightness(${1 + shift})`;
-                                      } else if (eff.presetId.startsWith('blur-')) {
-                                        let blurRad = 0;
-                                        const p = eff.presetId;
-                                        if (p === 'blur-gaussian') {
-                                          blurRad = 15 * intFactor;
-                                        } else if (p === 'blur-motion' || p === 'blur-directional' || p === 'blur-horizontal' || p === 'blur-vertical' || p === 'blur-diagonal') {
-                                          blurRad = 18 * intFactor;
-                                        } else if (p === 'blur-zoom' || p === 'blur-radial') {
-                                          blurRad = 12 * intFactor;
-                                        } else if (p === 'blur-lens' || p === 'blur-cinema' || p === 'blur-pro-lens') {
-                                          blurRad = 16 * intFactor;
-                                        } else if (p === 'blur-bokeh' || p === 'blur-crystal' || p === 'blur-pixel' || p === 'blur-edge') {
-                                          blurRad = 18 * intFactor;
-                                        } else if (p === 'blur-background' || p === 'blur-center' || p === 'blur-mirror' || p === 'blur-trail' || p === 'blur-echo') {
-                                          blurRad = 15 * intFactor;
-                                        } else if (p === 'blur-foreground' || p === 'blur-portrait') {
-                                          blurRad = 12 * intFactor;
-                                        } else if (p === 'blur-depth') {
-                                          blurRad = 16 * intFactor;
-                                        } else if (p === 'blur-tilt-shift') {
-                                          blurRad = 14 * intFactor;
-                                        } else if (p === 'blur-soft-focus') {
-                                          blurRad = 8 * intFactor;
-                                          filterStr = filterStr === 'none' ? `brightness(1.08) saturate(1.1)` : `${filterStr} brightness(1.08) saturate(1.1)`;
-                                        } else if (p === 'blur-dream') {
-                                          blurRad = 10 * intFactor;
-                                          filterStr = filterStr === 'none' ? `brightness(1.1) saturate(1.15) hue-rotate(5deg)` : `${filterStr} brightness(1.1) saturate(1.15) hue-rotate(5deg)`;
-                                        } else if (p === 'blur-glow' || p === 'blur-light') {
-                                          blurRad = 9 * intFactor;
-                                          filterStr = filterStr === 'none' ? `brightness(1.15)` : `${filterStr} brightness(1.15)`;
-                                        } else if (p === 'blur-fog') {
-                                          blurRad = 12 * intFactor;
-                                          filterStr = filterStr === 'none' ? `contrast(0.9) opacity(0.85)` : `${filterStr} contrast(0.9) opacity(0.85)`;
-                                        } else if (p === 'blur-heat') {
-                                          blurRad = 6 * intFactor + Math.abs(Math.sin(localTime * 15 * speedFactor)) * 4;
-                                        } else if (p === 'blur-ripple') {
-                                          blurRad = 5 * intFactor + Math.abs(Math.sin(localTime * 8 * speedFactor)) * 4;
-                                        } else if (p === 'blur-focus') {
-                                          blurRad = Math.max(0, 15 - localTime * 5 * speedFactor) * intFactor;
-                                        } else if (p === 'blur-pulse') {
-                                          blurRad = Math.abs(Math.sin(localTime * Math.PI * speedFactor)) * 20 * intFactor;
-                                        } else if (p === 'blur-fade') {
-                                          blurRad = Math.max(0, 1 - localTime / (duration * 0.5)) * 25 * intFactor;
-                                        } else if (p === 'blur-sweep') {
-                                          const sweep = (localTime * speedFactor) % 2;
-                                          blurRad = Math.abs(Math.sin(sweep * Math.PI)) * 18 * intFactor;
-                                        } else if (p === 'blur-spin' || p === 'blur-whirl') {
-                                          blurRad = 15 * intFactor;
-                                        } else if (p === 'blur-wave') {
-                                          blurRad = 14 * intFactor;
-                                        } else if (p === 'blur-glass') {
-                                          blurRad = 16 * intFactor;
-                                          filterStr = filterStr === 'none' ? `saturate(0.95) contrast(1.05)` : `${filterStr} saturate(0.95) contrast(1.05)`;
-                                        } else if (p === 'blur-smooth' || p === 'blur-smart') {
-                                          blurRad = 10 * intFactor;
-                                        } else if (p === 'blur-night') {
-                                          blurRad = 16 * intFactor;
-                                          filterStr = filterStr === 'none' ? `contrast(0.9) brightness(0.92)` : `${filterStr} contrast(0.9) brightness(0.92)`;
-                                        } else if (p === 'blur-ghost' || p === 'blur-liquid') {
-                                          blurRad = 8 * intFactor + Math.abs(Math.sin(localTime * 4 * speedFactor)) * 4;
-                                        } else if (p === 'blur-bloom') {
-                                          blurRad = 14 * intFactor;
-                                          filterStr = filterStr === 'none' ? `brightness(1.15) contrast(1.08)` : `${filterStr} brightness(1.15) contrast(1.08)`;
-                                        } else if (p === 'blur-stretch' || p === 'blur-speed' || p === 'blur-action' || p === 'blur-velocity') {
-                                          blurRad = 15 * intFactor;
-                                        } else if (p === 'blur-extreme') {
-                                          blurRad = 35 * intFactor;
-                                        }
-
-                                        if (blurRad > 0) {
-                                          filterStr = filterStr === 'none' ? `blur(${blurRad}px)` : `${filterStr} blur(${blurRad}px)`;
-                                        }
-                                      } else if (eff.presetId.startsWith('glitch-')) {
-                                        const p = eff.presetId;
-                                        if (p === 'glitch-rgb-split' || p === 'glitch-rgb-shift' || p === 'glitch-color-offset' || p === 'glitch-rgb-flicker' || p === 'glitch-neon' || p === 'glitch-cyber-flash') {
-                                          const split = Math.sin(localTime * 35 * speedFactor) * 8 * intFactor;
-                                          filterStr = filterStr === 'none' ? `drop-shadow(${split}px 0 0 rgba(239,68,68,0.7)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.7))` : `${filterStr} drop-shadow(${split}px 0 0 rgba(239,68,68,0.7)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.7))`;
-                                        }
-                                        if (p === 'glitch-tv-static' || p === 'glitch-digital-noise' || p === 'glitch-static-flash' || p === 'glitch-noise-pulse' || p === 'glitch-data-explosion' || p === 'glitch-ultra') {
-                                          const noiseBright = 1 + (Math.sin(localTime * 60 * speedFactor) > 0.7 ? (Math.random() - 0.5) * 0.25 * intFactor : 0);
-                                          filterStr = filterStr === 'none' ? `brightness(${noiseBright}) contrast(${2 - noiseBright})` : `${filterStr} brightness(${noiseBright}) contrast(${2 - noiseBright})`;
-                                        }
-                                        if (p === 'glitch-crt-flicker' || p === 'glitch-signal-loss' || p === 'glitch-broken-signal' || p === 'glitch-system-crash') {
-                                          const flicker = Math.sin(localTime * 50 * speedFactor) > 0.85 ? 1.3 * intFactor : 1.0;
-                                          filterStr = filterStr === 'none' ? `brightness(${flicker})` : `${filterStr} brightness(${flicker})`;
-                                        }
-                                      } else if (eff.presetId.startsWith('cine-')) {
-                                        const p = eff.presetId;
-                                        if (p === 'cine-projector' || p === 'cine-film-burn' || p === 'cine-vintage-film') {
-                                          const flicker = 1 + (Math.sin(localTime * 50 * speedFactor) > 0.8 ? (Math.random() - 0.5) * 0.08 * intFactor : 0);
-                                          filterStr = filterStr === 'none' ? `brightness(${flicker})` : `${filterStr} brightness(${flicker})`;
-                                        }
-                                        if (p === 'cine-softness' || p === 'cine-soft-diffusion' || p === 'cine-dream' || p === 'cine-cinema-bloom') {
-                                          const blurAmount = 3 * intFactor;
-                                          filterStr = filterStr === 'none' ? `blur(${blurAmount}px)` : `${filterStr} blur(${blurAmount}px)`;
-                                        }
-                                      } else if (eff.presetId.startsWith('lens-')) {
-                                        const p = eff.presetId;
-                                        if (p === 'lens-chromatic' || p === 'lens-prism' || p === 'lens-crystal' || p === 'lens-ghost' || p === 'lens-reflection' || p === 'lens-circular') {
-                                          const split = 4 * intFactor;
-                                          filterStr = filterStr === 'none' ? `drop-shadow(${split}px 0 0 rgba(239,68,68,0.5)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.5))` : `${filterStr} drop-shadow(${split}px 0 0 rgba(239,68,68,0.5)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.5))`;
-                                        }
-                                        if (p === 'lens-optical-blur' || p === 'lens-foggy' || p === 'lens-soft-glass' || p === 'lens-macro-focus' || p === 'lens-rack-focus') {
-                                          const blurAmount = 4 * intFactor;
-                                          filterStr = filterStr === 'none' ? `blur(${blurAmount}px)` : `${filterStr} blur(${blurAmount}px)`;
-                                        }
-                                      } else if (eff.presetId.startsWith('light-')) {
-                                        const p = eff.presetId;
-                                        if (p === 'light-camera-flash') {
-                                          const flashVal = Math.max(0, 1 - localTime * 3 * speedFactor) * intFactor;
-                                          filterStr = filterStr === 'none' ? `brightness(${1 + flashVal * 1.5})` : `${filterStr} brightness(${1 + flashVal * 1.5})`;
-                                        }
-                                        if (p === 'light-flicker' || p === 'light-fire-glow' || p === 'light-candle') {
-                                          const flicker = 1 + (Math.sin(localTime * 40 * speedFactor) * 0.08 * intFactor);
-                                          filterStr = filterStr === 'none' ? `brightness(${flicker})` : `${filterStr} brightness(${flicker})`;
-                                        }
-                                        if (p === 'light-pulse') {
-                                          const pulse = 1 + (Math.sin(localTime * Math.PI * speedFactor) * 0.12 * intFactor);
-                                          filterStr = filterStr === 'none' ? `brightness(${pulse})` : `${filterStr} brightness(${pulse})`;
-                                        }
-                                      } else if (eff.presetId.startsWith('dist-')) {
-                                        const p = eff.presetId;
-                                        if (p === 'dist-prism' || p === 'dist-refraction' || p === 'dist-glass' || p === 'dist-liquid-glass' || p === 'dist-crystal') {
-                                          const split = 4 * intFactor;
-                                          filterStr = filterStr === 'none' ? `drop-shadow(${split}px 0 0 rgba(239,68,68,0.4)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.4))` : `${filterStr} drop-shadow(${split}px 0 0 rgba(239,68,68,0.4)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.4))`;
-                                        }
-                                      } else if (eff.presetId.startsWith('retro-')) {
-                                        const p = eff.presetId;
-                                        if (p === 'retro-projector' || p === 'retro-flicker' || p === 'retro-super8' || p === 'retro-8mm' || p === 'retro-16mm' || p === 'retro-old-camera' || p === 'retro-analog-cam' || p === 'retro-vintage-lens') {
-                                          const flicker = 1 + (Math.sin(localTime * 45 * speedFactor) > 0.85 ? (Math.random() - 0.5) * 0.08 * intFactor : 0);
-                                          filterStr = filterStr === 'none' ? `brightness(${flicker})` : `${filterStr} brightness(${flicker})`;
-                                        }
-                                        if (p === 'retro-blur' || p === 'retro-vintage-lens' || p === 'retro-soft') {
-                                          const blurVal = 2 * intFactor;
-                                          filterStr = filterStr === 'none' ? `blur(${blurVal}px)` : `${filterStr} blur(${blurVal}px)`;
-                                        }
-                                        if (p === 'retro-cam-flash' || p === 'retro-flash') {
-                                          const flashVal = Math.max(0, 1 - localTime * 2.5 * speedFactor) * intFactor;
-                                          filterStr = filterStr === 'none' ? `brightness(${1 + flashVal * 1.6})` : `${filterStr} brightness(${1 + flashVal * 1.6})`;
-                                        }
-                                        if (p === 'retro-color-shift') {
-                                          const split = 4 * intFactor;
-                                          filterStr = filterStr === 'none' ? `drop-shadow(${split}px 0 0 rgba(239,68,68,0.5)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.5))` : `${filterStr} drop-shadow(${split}px 0 0 rgba(239,68,68,0.5)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.5))`;
-                                        }
-                                      } else if (eff.presetId.startsWith('vhs-')) {
-                                        const p = eff.presetId;
-                                        if (p === 'vhs-analog-flicker') {
-                                          const flicker = 1 + (Math.sin(localTime * 65 * speedFactor) * 0.08 * intFactor);
-                                          filterStr = filterStr === 'none' ? `brightness(${flicker})` : `${filterStr} brightness(${flicker})`;
-                                        }
-                                        if (p === 'vhs-blur' || p === 'vhs-classic') {
-                                          const blurVal = 1.5 * intFactor;
-                                          filterStr = filterStr === 'none' ? `blur(${blurVal}px)` : `${filterStr} blur(${blurVal}px)`;
-                                        }
-                                        if (p === 'vhs-color-shift' || p === 'vhs-rgb-offset' || p === 'vhs-color-bleed') {
-                                          const split = 5 * intFactor;
-                                          filterStr = filterStr === 'none' ? `drop-shadow(${split}px 0 0 rgba(239,68,68,0.6)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.6))` : `${filterStr} drop-shadow(${split}px 0 0 rgba(239,68,68,0.6)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.6))`;
-                                        }
-                                      } else if (eff.presetId.startsWith('crt-')) {
-                                        const p = eff.presetId;
-                                        if (p === 'crt-flicker' || p === 'crt-tube-flicker') {
-                                          const flicker = 1 + (Math.sin(localTime * 85 * speedFactor) * 0.08 * intFactor);
-                                          filterStr = filterStr === 'none' ? `brightness(${flicker})` : `${filterStr} brightness(${flicker})`;
-                                        }
-                                        if (p === 'crt-analog-blur') {
-                                          const blurVal = 1.2 * intFactor;
-                                          filterStr = filterStr === 'none' ? `blur(${blurVal}px)` : `${filterStr} blur(${blurVal}px)`;
-                                        }
-                                        if (p === 'crt-chromatic-shift' || p === 'crt-rgb-offset' || p === 'crt-color-bleed') {
-                                          const split = 4 * intFactor;
-                                          filterStr = filterStr === 'none' ? `drop-shadow(${split}px 0 0 rgba(239,68,68,0.55)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.55))` : `${filterStr} drop-shadow(${split}px 0 0 rgba(239,68,68,0.55)) drop-shadow(${-split}px 0 0 rgba(14,165,233,0.55))`;
-                                        }
-                                      } else if (eff.presetId.startsWith('neon-') || eff.presetId === 'neon-light') {
-                                         const sat = (props.saturation ?? 50) / 50;
-                                         const bri = (props.brightness ?? 50) / 50;
-                                         const con = (props.contrast ?? 50) / 50;
-                                         const exp = (props.exposure ?? 50) / 50;
-                                         const hueShift = ((props.hue ?? 0) / 100) * 360;
-
-                                         filterStr = filterStr === 'none'
-                                           ? `saturate(${sat}) brightness(${bri * exp}) contrast(${con}) hue-rotate(${hueShift}deg)`
-                                           : `${filterStr} saturate(${sat}) brightness(${bri * exp}) contrast(${con}) hue-rotate(${hueShift}deg)`;
-                                       }
-                                    });
-                                  }
-
-                                  // Apply legacy effects visual styling (fallback)
-                                  if (activeEffectId) {
-                                    if (activeEffectId.includes('blur')) {
-                                      filterStr = filterStr === 'none' ? 'blur(4px)' : `${filterStr} blur(4px)`;
-                                    } else if (activeEffectId.includes('glitch')) {
-                                      filterStr = filterStr === 'none' ? 'hue-rotate(45deg) saturate(1.4) contrast(1.15)' : `${filterStr} hue-rotate(45deg) saturate(1.4) contrast(1.15)`;
-                                    } else if (activeEffectId.includes('light')) {
-                                      filterStr = filterStr === 'none' ? 'brightness(1.2) saturate(1.1)' : `${filterStr} brightness(1.2) saturate(1.1)`;
-                                    } else if (activeEffectId.includes('analog') || activeEffectId.includes('vhs') || activeEffectId.includes('retro')) {
-                                      filterStr = filterStr === 'none' ? 'sepia(0.3) contrast(1.1) brightness(0.95)' : `${filterStr} sepia(0.3) contrast(1.1) brightness(0.95)`;
-                                    }
-                                  }
-
-                                  if (isClipActive && transitionData?.filter) {
-                                    filterStr = filterStr === 'none' ? transitionData.filter : `${filterStr} ${transitionData.filter}`;
-                                  }
-
-                                  return filterStr;
-                                })(),
-                                opacity: (() => {
-                                  let baseOpacity = isClipActive && transitionData?.opacity !== undefined ? transitionData.opacity : 1;
-                                  if (filterEnabled && !showBeforeOnly) {
-                                    baseOpacity = baseOpacity * (filterOpacity / 100);
-                                  }
-                                  if (clip.appliedEffects) {
-                                    clip.appliedEffects.forEach((eff: AppliedEffect) => {
-                                      if (!eff.enabled || showBeforeOnly) return;
-                                      const props = getInterpolatedEffectProps(eff, localTime);
-                                      baseOpacity = baseOpacity * (props.opacity / 100);
-
-                                      // Basic effect overrides
-                                      const presetId = eff.presetId;
-                                      const duration = clip.duration || 5;
-                                      const intFactor = eff.intensity / 100;
-                                      const speedFactor = eff.speed / 50;
-
-                                      if (presetId === 'basic-fade-in') {
-                                        const fadeDuration = 1.0 / speedFactor;
-                                        if (localTime <= fadeDuration) {
-                                          baseOpacity = baseOpacity * (localTime / fadeDuration) * intFactor + baseOpacity * (1 - intFactor);
-                                        }
-                                      } else if (presetId === 'basic-fade-out') {
-                                        const fadeDuration = 1.0 / speedFactor;
-                                        if (duration - localTime <= fadeDuration) {
-                                          const diff = Math.max(0, duration - localTime);
-                                          baseOpacity = baseOpacity * (diff / fadeDuration) * intFactor + baseOpacity * (1 - intFactor);
-                                        }
-                                      } else if (presetId === 'basic-blink') {
-                                        const blinkTime = Math.floor(localTime * 8 * speedFactor) % 2;
-                                        if (blinkTime === 0) {
-                                          baseOpacity = baseOpacity * (1 - 0.7 * intFactor);
-                                        }
-                                      }
-                                    });
-                                  }
-                                  return baseOpacity;
-                                })(),
-                                mixBlendMode: (filterEnabled && !showBeforeOnly) ? (filterBlendMode as any) : 'normal',
-                                transform: `translate(${posX}px, ${posY}px) scale(${clipScale * clipScaleX}, ${clipScale * clipScaleY}) rotate(${clipRotation}deg)`,
+                                filter: finalFilterStr,
+                                opacity: finalOpacity,
+                                mixBlendMode: finalBlendMode,
+                                transform: finalTransform
                               }}
                               onTimeUpdate={() => handleTimeUpdate(clip.id)}
                               onEnded={() => handleClipEnded(clip.id)}
                             />
-
-                            {/* Render applied stacked effects sibling overlays */}
-                            {clip.appliedEffects?.map((eff: AppliedEffect) => {
-                              if (!eff.enabled || showBeforeOnly) return null;
-                              const preset = EFFECT_PRESETS.find(p => p.id === eff.presetId);
-                              if (!preset) return null;
-
-                              const props = getInterpolatedEffectProps(eff, localTime);
-                              const speedFactor = props.speed / 50;
-                              const intFactor = props.intensity / 100;
-                              
-                              const customStyles: React.CSSProperties = {
-                                mixBlendMode: eff.blendMode as any,
-                                opacity: props.opacity / 100,
-                                ...preset.overlayStyle,
-                                ...(preset.overlayClass ? {} : {
-                                  transform: `rotate(${props.angle}deg)`
-                                })
-                              };
-
-                              const p = eff.presetId;
-                              let overlayStyles: React.CSSProperties = { ...customStyles };
-
-                              if (p === 'cine-letterbox') {
-                                const size = ((eff.letterboxSize ?? 25) * (props.intensity / 100)) * 0.8;
-                                overlayStyles = {
-                                  ...overlayStyles,
-                                  boxShadow: `inset 0 ${size}px 0 #000, inset 0 -${size}px 0 #000`,
-                                  background: 'transparent'
-                                };
-                              } else if (p === 'cine-vignette') {
-                                const vign = (eff.vignetteAmount ?? 50) * (props.intensity / 100);
-                                overlayStyles = {
-                                  ...overlayStyles,
-                                  background: `radial-gradient(circle, transparent ${100 - vign}%, rgba(0,0,0,0.85) 150%)`
-                                };
-                              } else if (p === 'cine-spotlight') {
-                                overlayStyles = {
-                                  ...overlayStyles,
-                                  background: `radial-gradient(circle at 50% 50%, transparent 20%, rgba(0,0,0,0.7) 120%)`
-                                };
-                              } else if (p === 'cine-film-grain') {
-                                const grainShiftX = (Math.floor(localTime * 100) % 4) * 5;
-                                const grainShiftY = (Math.floor(localTime * 120) % 4) * 5;
-                                overlayStyles = {
-                                  ...overlayStyles,
-                                  background: `repeating-linear-gradient(${props.angle}deg, rgba(255,255,255,0.06) 0px, transparent 1px, rgba(0,0,0,0.06) 2px)`,
-                                  backgroundSize: '3px 3px',
-                                  transform: `translate(${grainShiftX}px, ${grainShiftY}px)`
-                                };
-                              } else if (p === 'cine-film-scratches') {
-                                const scratchOffset = (Math.floor(localTime * 15) % 10) * 8;
-                                overlayStyles = {
-                                  ...overlayStyles,
-                                  backgroundImage: `linear-gradient(90deg, transparent ${scratchOffset}%, rgba(255,255,255,0.12) ${scratchOffset}%, rgba(255,255,255,0.12) ${scratchOffset + 0.2}%, transparent ${scratchOffset + 1}%)`,
-                                  backgroundSize: '100% 100%'
-                                };
-                              } else if (p === 'cine-leak-gold' || p === 'cine-film-burn') {
-                                const leakPos = (localTime * 40 * (props.speed / 50)) % 100;
-                                overlayStyles = {
-                                  ...overlayStyles,
-                                  background: `linear-gradient(${props.angle}deg, rgba(245,158,11,0) ${leakPos - 20}%, rgba(245,158,11,0.25) ${leakPos}%, rgba(245,158,11,0) ${leakPos + 20}%)`
-                                };
-                              } else if (p === 'cine-leak-blue') {
-                                const leakPos = (localTime * 40 * (props.speed / 50)) % 100;
-                                overlayStyles = {
-                                  ...overlayStyles,
-                                  background: `linear-gradient(${props.angle}deg, rgba(14,165,233,0) ${leakPos - 20}%, rgba(14,165,233,0.25) ${leakPos}%, rgba(14,165,233,0) ${leakPos + 20}%)`
-                                };
-                              } else if (p === 'cine-leak-rainbow') {
-                                 const leakPos = (localTime * 35 * (props.speed / 50)) % 100;
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: `linear-gradient(${props.angle}deg, rgba(239,68,68,0) ${leakPos - 25}%, rgba(245,158,11,0.15) ${leakPos - 10}%, rgba(34,197,94,0.15) ${leakPos}%, rgba(14,165,233,0.15) ${leakPos + 10}%, rgba(239,68,68,0) ${leakPos + 25}%)`
-                                 };
-                               } else if (p.startsWith('lens-')) {
-                                 if (p === 'lens-vignette') {
-                                   const vign = (eff.vignetteAmount ?? 50) * (props.intensity / 100);
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: `radial-gradient(circle, transparent ${100 - vign}%, rgba(0,0,0,0.85) 150%)`
-                                   };
-                                 } else if (p === 'lens-focus-ring') {
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     border: '2px solid rgba(14,165,233,0.3)',
-                                     borderRadius: '50%',
-                                     width: '120px',
-                                     height: '120px',
-                                     margin: 'auto',
-                                     top: '0', bottom: '0', left: '0', right: '0',
-                                     boxShadow: '0 0 10px rgba(14,165,233,0.2)'
-                                   };
-                                 } else if (p === 'lens-split-diopter') {
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     borderLeft: '1px solid rgba(255,255,255,0.25)',
-                                     background: 'transparent'
-                                   };
-                                 } else if (p === 'lens-crack') {
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: 'repeating-linear-gradient(60deg, transparent, transparent 15px, rgba(255,255,255,0.08) 16px, transparent 17px)'
-                                   };
-                                 }
-                               } else if (p.startsWith('light-')) {
-                                 if (p === 'light-spotlight' || p === 'light-flashlight') {
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: `radial-gradient(circle at 50% 50%, transparent 20%, rgba(0,0,0,0.7) 120%)`
-                                   };
-                                 } else if (p === 'light-stage-light') {
-                                   const angleSweep = props.angle + Math.sin(localTime * 2 * speedFactor) * 20;
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: `linear-gradient(${angleSweep}deg, rgba(239,68,68,0.15) 30%, transparent 50%, rgba(14,165,233,0.15) 70%)`
-                                   };
-                                 } else if (p === 'light-sweep' || p === 'light-glow-sweep') {
-                                    const sweepPos = (localTime * 45 * (props.speed / 50)) % 120 - 10;
-                                    overlayStyles = {
-                                      ...overlayStyles,
-                                      background: `linear-gradient(${props.angle}deg, transparent ${sweepPos - 20}%, rgba(255,255,255,0.25) ${sweepPos}%, transparent ${sweepPos + 20}%)`
-                                    };
-                                  } else if (p === 'light-aurora') {
-                                    const greenPos = 50 + Math.sin(localTime * 1.5 * (props.speed / 50)) * 20;
-                                    overlayStyles = {
-                                      ...overlayStyles,
-                                      background: `linear-gradient(${props.angle}deg, rgba(34,197,94,0.12) ${greenPos}%, rgba(217,70,239,0.1) ${greenPos + 25}%)`
-                                    };
-                                  }
-                               } else if (p.startsWith('dist-')) {
-                                 if (p === 'dist-mirror') {
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     borderLeft: '1px dashed rgba(255,255,255,0.15)',
-                                     background: 'transparent'
-                                   };
-                                 } else if (p === 'dist-shockwave') {
-                                   const waveRadius = ((localTime * 40 * (props.speed / 50)) % 100) * 1.5;
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     borderRadius: '50%',
-                                     border: '2px solid rgba(255,255,255,0.2)',
-                                     width: `${waveRadius}px`,
-                                     height: `${waveRadius}px`,
-                                     margin: 'auto',
-                                     top: '0', bottom: '0', left: '0', right: '0',
-                                     transform: 'scale(1.2)'
-                                   };
-                                 } else if (p === 'dist-tunnel') {
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: `radial-gradient(circle, transparent 20%, rgba(0,0,0,0.8) 90%)`
-                                   };
-                                 }
-                               } else if (p.startsWith('retro-')) {
-                                 if (p === 'retro-frame') {
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     border: '25px solid #000',
-                                     borderRadius: '20px',
-                                     boxSizing: 'border-box'
-                                   };
-                                 } else if (p === 'retro-grain' || p === 'retro-dust' || p === 'retro-dirt') {
-                                   const grainShiftX = (Math.floor(localTime * 100) % 4) * 4;
-                                   const grainShiftY = (Math.floor(localTime * 120) % 4) * 4;
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: `repeating-linear-gradient(${props.angle}deg, rgba(255,255,255,0.06) 0px, transparent 1px, rgba(0,0,0,0.06) 2px)`,
-                                     backgroundSize: '4px 4px',
-                                     transform: `translate(${grainShiftX}px, ${grainShiftY}px)`
-                                   };
-                                 } else if (p === 'retro-leak' || p === 'retro-burned-edge') {
-                                   const leakPos = (localTime * 40 * (props.speed / 50)) % 100;
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: `linear-gradient(${props.angle}deg, rgba(245,158,11,0) ${leakPos - 20}%, rgba(245,158,11,0.22) ${leakPos}%, rgba(245,158,11,0) ${leakPos + 20}%)`
-                                   };
-                                 } else if (p === 'retro-rainbow-leak') {
-                                   const leakPos = (localTime * 35 * (props.speed / 50)) % 100;
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: `linear-gradient(${props.angle}deg, rgba(239,68,68,0) ${leakPos - 25}%, rgba(245,158,11,0.12) ${leakPos - 10}%, rgba(34,197,94,0.12) ${leakPos}%, rgba(14,165,233,0.12) ${leakPos + 10}%, rgba(239,68,68,0) ${leakPos + 25}%)`
-                                   };
-                                 }
-                               } else if (p.startsWith('vhs-')) {
-                                 if (p === 'vhs-scanlines' || p === 'vhs-crt-sync' || p === 'vhs-retro-tv') {
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: 'linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.2) 50%), linear-gradient(90deg, rgba(255,0,0,0.03), rgba(0,255,0,0.01), rgba(0,0,255,0.03))',
-                                     backgroundSize: '100% 4px, 3px 100%'
-                                   };
-                                 } else if (p === 'vhs-static' || p === 'vhs-noise' || p === 'vhs-color-noise' || p === 'vhs-dropout' || p === 'vhs-tape-damage' || p === 'vhs-dirty-tape' || p === 'vhs-dust') {
-                                   const noiseShiftX = (Math.floor(localTime * 140) % 6) * 6;
-                                   const noiseShiftY = (Math.floor(localTime * 160) % 6) * 6;
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: `repeating-radial-gradient(circle, rgba(255,255,255,0.07) 0px, transparent 1px, rgba(0,0,0,0.07) 2px)`,
-                                     backgroundSize: '6px 6px',
-                                     transform: `translate(${noiseShiftX}px, ${noiseShiftY}px)`
-                                   };
-                                 }
-                               } else if (p.startsWith('crt-')) {
-                                 if (p === 'crt-scanlines' || p === 'crt-classic' || p === 'crt-retro-monitor' || p === 'crt-arcade' || p === 'crt-broadcast' || p === 'crt-console' || p === 'crt-old-tv' || p === 'crt-vintage-display' || p === 'crt-studio' || p === 'crt-premium' || p === 'crt-master' || p === 'crt-sync-error') {
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: 'linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.18) 50%), linear-gradient(90deg, rgba(255,0,0,0.02), rgba(0,255,0,0.01), rgba(0,0,255,0.02))',
-                                     backgroundSize: '100% 3px, 3px 100%'
-                                   };
-                                 } else if (p === 'crt-rgb-mask' || p === 'crt-pixel-grid') {
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: 'repeating-linear-gradient(90deg, rgba(255,0,0,0.08) 0px, rgba(255,0,0,0.08) 1px, transparent 1px, transparent 3px), repeating-linear-gradient(90deg, rgba(0,0,255,0.08) 1px, rgba(0,0,255,0.08) 2px, transparent 2px, transparent 3px)',
-                                     backgroundSize: '3px 100%'
-                                   };
-                                 } else if (p === 'crt-static' || p === 'crt-noise' || p === 'crt-tv-noise' || p === 'crt-broken-signal' || p === 'crt-display-noise' || p === 'crt-dust' || p === 'crt-dirty-screen') {
-                                   const noiseShiftX = (Math.floor(localTime * 180) % 5) * 5;
-                                   const noiseShiftY = (Math.floor(localTime * 200) % 5) * 5;
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: `repeating-radial-gradient(circle, rgba(255,255,255,0.06) 0px, transparent 1px, rgba(0,0,0,0.06) 2px)`,
-                                     backgroundSize: '5px 5px',
-                                     transform: `translate(${noiseShiftX}px, ${noiseShiftY}px)`
-                                   };
-                                 } else if (p === 'crt-reflection' || p === 'crt-glass-screen') {
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     background: 'radial-gradient(circle at 50% 15%, rgba(255,255,255,0.15) 0%, transparent 60%), linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 50%)'
-                                   };
-                                 }
-                               } else if (p.startsWith('neon-') || p === 'neon-light') {
-                                 const glowCol = props.glowColor === 'rainbow' ? 'rainbow' : (props.glowColor || '#00f2fe');
-                                 const glowRad = ((props.glowRadius ?? 50) / 100) * 40 * intFactor;
-                                 const bloomRad = ((props.bloomRadius ?? 50) / 100) * 60 * intFactor;
-                                 const strength = ((props.glowStrength ?? 50) / 100);
-                                 const op = (props.opacity ?? 100) / 100;
-                                 const edge = ((props.edgeGlow ?? 50) / 100) * 15 * intFactor;
-
-                                 if (glowCol === 'rainbow') {
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     border: `${Math.max(1, edge)}px solid transparent`,
-                                     borderImage: 'linear-gradient(45deg, #ff007f, #7928ca, #00f2fe, #00ff66, #ffea00, #ff007f) 1',
-                                     boxShadow: `0 0 ${glowRad}px rgba(6,182,212,${strength}), inset 0 0 ${glowRad}px rgba(14,165,233,${strength}), 0 0 ${bloomRad}px rgba(244,63,94,${strength * 0.5})`,
-                                     opacity: op
-                                   };
-                                 } else {
-                                   overlayStyles = {
-                                     ...overlayStyles,
-                                     border: `${Math.max(1, edge)}px solid ${glowCol}`,
-                                     boxShadow: `0 0 ${glowRad}px ${glowCol}, inset 0 0 ${glowRad}px ${glowCol}, 0 0 ${bloomRad}px ${glowCol}`,
-                                     opacity: op
-                                   };
-                                 }
-                               } else if (p.startsWith('fire-')) {
-                                 const fireCol = props.fireColor || '#ff5500';
-                                 const flameH = (props.flameHeight ?? 50) + Math.sin(localTime * 10) * 12 * intFactor;
-                                 const wind = ((props.windStrength ?? 50) - 50) * 0.3 * intFactor;
-                                 const glowStr = (props.glowStrength ?? 50) / 100;
-                                 const op = (props.opacity ?? 100) / 100;
-
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: `radial-gradient(ellipse at ${50 + wind}% ${100 - flameH * 0.4}%, rgba(255,230,0,${glowStr * 0.4}) 0%, rgba(255,85,0,${glowStr * 0.8}) 40%, rgba(220,20,0,${glowStr * 0.4}) 70%, transparent 100%)`,
-                                   opacity: op,
-                                   mixBlendMode: (eff.blendMode as any) || 'screen'
-                                 };
-                               } else if (p.startsWith('smoke-')) {
-                                 const smokeCol = props.smokeColor || '#ffffff';
-                                 const op = (props.opacity ?? 80) / 100;
-                                 const wind = (localTime * 15 * (((props.windStrength ?? 50) - 50) / 50)) % 100;
-                                 const size = (props.size ?? 50) * 2;
-                                 const density = (props.smokeDensity ?? 50) / 100 * 0.3;
-
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: `radial-gradient(circle at ${50 + wind}% 50%, rgba(255,255,255,0.02) 0%, transparent 60%), repeating-radial-gradient(circle at ${30 + wind}% 40%, rgba(240,240,240,${density}) 0px, transparent ${size}px)`,
-                                   opacity: op,
-                                   filter: `blur(${(props.feather ?? 50) / 15}px) contrast(${(props.contrast ?? 50) / 50})`,
-                                   mixBlendMode: (eff.blendMode as any) || 'screen'
-                                 };
-                               } else if (p.startsWith('weather-')) {
-                                 const tint = props.colorTint || '#ffffff';
-                                 const op = (props.opacity ?? 100) / 100;
-                                 const speed = (props.particleSpeed ?? 50) / 50;
-                                 const density = (props.particleDensity ?? 50) / 100 * 0.4;
-                                 const windDir = (props.windDirection ?? 90);
-                                 const dx = Math.cos(windDir * Math.PI / 180) * localTime * 80 * speed;
-                                 const dy = Math.sin(windDir * Math.PI / 180) * localTime * 80 * speed;
-
-                                 // Rain/Snow overlay textures
-                                 let weatherBg = 'transparent';
-                                 if (p.includes('rain') || p.includes('thunder') || p.includes('drizzle') || p.includes('storm')) {
-                                   weatherBg = `repeating-linear-gradient(${windDir}deg, rgba(174, 219, 255, ${density}) 0px, rgba(174, 219, 255, ${density}) 2px, transparent 4px, transparent 40px)`;
-                                 } else if (p.includes('snow') || p.includes('blizzard') || p.includes('hail')) {
-                                   weatherBg = `repeating-radial-gradient(circle, rgba(255, 255, 255, ${density}) 0px, transparent 3px, rgba(255, 255, 255, ${density * 0.5}) 6px, transparent 30px)`;
-                                 } else if (p.includes('sunset') || p.includes('golden')) {
-                                   weatherBg = `linear-gradient(180deg, rgba(255, 100, 0, 0.2) 0%, rgba(255, 200, 0, 0.1) 60%, transparent 100%)`;
-                                 } else if (p.includes('sunrise')) {
-                                   weatherBg = `linear-gradient(180deg, rgba(255, 50, 150, 0.15) 0%, rgba(255, 180, 50, 0.1) 60%, transparent 100%)`;
-                                 } else if (p.includes('aurora')) {
-                                   weatherBg = `linear-gradient(90deg, rgba(0, 255, 150, 0.2) 0%, rgba(0, 150, 255, 0.15) 50%, rgba(0, 255, 150, 0.2) 100%)`;
-                                 } else if (p.includes('rainbow')) {
-                                   weatherBg = `radial-gradient(circle at 50% 100%, transparent 40%, rgba(255, 0, 0, 0.15) 45%, rgba(0, 255, 0, 0.15) 50%, rgba(0, 0, 255, 0.15) 55%, transparent 60%)`;
-                                 }
-
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: weatherBg,
-                                   transform: `translate(${dx % 80}px, ${dy % 80}px)`,
-                                   opacity: op,
-                                   filter: `brightness(${(props.brightness ?? 50)/50}) contrast(${(props.contrast ?? 50)/50})`,
-                                   mixBlendMode: (eff.blendMode as any) || 'screen'
-                                 };
-                               } else if (p.startsWith('particles-')) {
-                                 const partCol = props.particlesColor || '#ffffff';
-                                 const op = (props.opacity ?? 100) / 100;
-                                 const count = props.particleCount ?? 50;
-                                 const speed = (props.particleSpeed ?? 50) / 50;
-                                 const size = (props.particleSize ?? 50) / 5;
-                                 const wind = (localTime * 20 * ((props.windStrength ?? 50) - 50)/50) % 150;
-                                 const grav = (localTime * 15 * ((props.gravity ?? 50) - 50)/50) % 150;
-
-                                 let particleBg = 'transparent';
-                                 if (p.includes('spark') || p.includes('ember')) {
-                                   particleBg = `repeating-radial-gradient(circle at ${50 + wind}% ${50 - grav}%, ${partCol} 0px, rgba(255, 100, 0, 0.8) ${size * 0.4}px, transparent ${size}px, transparent ${size * 5}px)`;
-                                 } else if (p.includes('dust') || p.includes('fairy') || p.includes('magic')) {
-                                   particleBg = `repeating-radial-gradient(circle at ${40 + wind}% ${30 + grav}%, ${partCol} 0px, transparent ${size}px, transparent ${size * 4}px)`;
-                                 } else if (p.includes('bubble')) {
-                                   particleBg = `repeating-radial-gradient(circle at ${50 - wind}% ${50 - grav}%, rgba(255,255,255,0.1) 0px, rgba(255,255,255,0.4) ${size * 0.8}px, transparent ${size}px, transparent ${size * 6}px)`;
-                                 } else if (p.includes('heart')) {
-                                   particleBg = `repeating-radial-gradient(circle at ${30 + wind}% ${30 - grav}%, #ff4466 0px, transparent ${size}px, transparent ${size * 5}px)`;
-                                 } else {
-                                   particleBg = `repeating-radial-gradient(circle at ${50 + wind}% ${50 + grav}%, ${partCol} 0px, transparent ${size}px, transparent ${size * 5}px)`;
-                                 }
-
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: particleBg,
-                                   opacity: op,
-                                   filter: props.glowStrength ? `drop-shadow(0 0 ${props.glowStrength / 10}px ${partCol})` : undefined,
-                                   mixBlendMode: (eff.blendMode as any) || 'screen'
-                                 };
-                               } else if (p.startsWith('nature-')) {
-                                 const tint = props.natureColorTint || '#ffffff';
-                                 const op = (props.opacity ?? 100) / 100;
-                                 const speed = (props.windSpeed ?? 50) / 50;
-                                 const windDir = (props.windDirection ?? 90);
-                                 const dx = Math.cos(windDir * Math.PI / 180) * localTime * 60 * speed;
-                                 const dy = Math.sin(windDir * Math.PI / 180) * localTime * 60 * speed;
-
-                                 let natureBg = 'transparent';
-                                 if (p.includes('blossom') || p.includes('spring') || p.includes('flower')) {
-                                   natureBg = `repeating-radial-gradient(circle at ${40 + dx % 100}% ${30 + dy % 100}%, rgba(255, 182, 193, 0.4) 0px, transparent 15px, rgba(255, 105, 180, 0.3) 30px, transparent 80px)`;
-                                 } else if (p.includes('autumn') || p.includes('forest') || p.includes('leaf') || p.includes('jungle')) {
-                                   natureBg = `repeating-radial-gradient(circle at ${30 + dx % 100}% ${20 + dy % 100}%, rgba(255, 140, 0, 0.3) 0px, transparent 20px, rgba(139, 69, 19, 0.2) 40px, transparent 100px)`;
-                                 } else if (p.includes('water') || p.includes('river') || p.includes('lake') || p.includes('ocean')) {
-                                   natureBg = `repeating-linear-gradient(0deg, rgba(0, 191, 255, 0.15) 0px, transparent 10px, rgba(0, 255, 255, 0.1) 20px, transparent 40px)`;
-                                 } else if (p.includes('sun') || p.includes('golden') || p.includes('sunrise') || p.includes('light')) {
-                                   natureBg = `repeating-linear-gradient(45deg, rgba(255, 223, 0, 0.15) 0px, transparent 30px, rgba(255, 255, 255, 0.1) 60px, transparent 120px)`;
-                                 } else {
-                                   natureBg = `radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05) 0%, transparent 80%)`;
-                                 }
-
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: natureBg,
-                                   opacity: op,
-                                   filter: `brightness(${(props.brightness ?? 50)/50}) contrast(${(props.contrast ?? 50)/50})`,
-                                   mixBlendMode: (eff.blendMode as any) || 'normal'
-                                 };
-                               } else if (p.startsWith('dream-')) {
-                                 const tint = props.dreamColorTint || '#ffffff';
-                                 const op = (props.opacity ?? 100) / 100;
-                                 const glow = props.glowStrength ?? 50;
-                                 const soft = (props.softFocus ?? 50) / 5;
-                                 const speed = (eff.speed ?? 50) / 50;
-                                 
-                                 const shift = localTime * 8 * speed;
-                                 let dreamBg = '';
-                                 if (p.includes('pink') || p.includes('cotton') || p.includes('romantic')) {
-                                   dreamBg = `radial-gradient(circle at ${50 + Math.sin(shift) * 15}% ${40 + Math.cos(shift) * 15}%, rgba(255, 182, 193, 0.25) 0%, transparent 60%),
-                                              radial-gradient(circle at ${30 - Math.cos(shift) * 15}% ${60 - Math.sin(shift) * 15}%, rgba(255, 105, 180, 0.15) 0%, transparent 50%)`;
-                                 } else if (p.includes('golden') || p.includes('fairy')) {
-                                   dreamBg = `radial-gradient(circle at ${40 + Math.cos(shift) * 20}% ${30 + Math.sin(shift) * 20}%, rgba(255, 215, 0, 0.25) 0%, transparent 55%),
-                                              radial-gradient(circle at ${60 - Math.sin(shift) * 20}% ${70 - Math.cos(shift) * 20}%, rgba(255, 140, 0, 0.15) 0%, transparent 45%)`;
-                                 } else if (p.includes('blue') || p.includes('celestial') || p.includes('moonlight')) {
-                                   dreamBg = `radial-gradient(circle at ${50 + Math.cos(shift) * 12}% ${50 - Math.sin(shift) * 12}%, rgba(0, 191, 255, 0.2) 0%, transparent 70%),
-                                              radial-gradient(circle at ${20 + Math.sin(shift) * 15}% ${30 + Math.cos(shift) * 15}%, rgba(138, 43, 226, 0.15) 0%, transparent 50%)`;
-                                 } else {
-                                   dreamBg = `radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 80%)`;
-                                 }
-
-                                 const sparkDensity = props.sparkleAmount ?? 50;
-                                 if (sparkDensity > 10) {
-                                   dreamBg += `, repeating-radial-gradient(circle at ${25 + (shift % 50)}% ${35 + ((shift * 0.7) % 50)}%, rgba(255,255,255,0.4) 0px, transparent 4px, transparent 120px)`;
-                                 }
-
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: dreamBg,
-                                   opacity: op,
-                                   backdropFilter: soft > 0 ? `blur(${soft}px)` : undefined,
-                                   filter: `brightness(${(props.brightness ?? 50)/50}) contrast(${(props.contrast ?? 50)/50}) saturate(${(props.saturation ?? 50)/50}) drop-shadow(0 0 ${glow / 5}px ${tint})`,
-                                   mixBlendMode: (eff.blendMode as any) || 'screen'
-                                 };
-                               } else if (p.startsWith('horror-')) {
-                                 const tint = props.horrorColorTint || '#00ff88';
-                                 const op = (props.opacity ?? 100) / 100;
-                                 const darkness = props.darkness ?? 50;
-                                 const shake = props.cameraShake ?? 0;
-                                 const flicker = props.flickerSpeed ?? 50;
-
-                                 let transformStr = undefined;
-                                 if (shake > 0) {
-                                   const dx = Math.sin(localTime * 45) * (shake / 12);
-                                   const dy = Math.cos(localTime * 40) * (shake / 12);
-                                   transformStr = `translate(${dx}px, ${dy}px)`;
-                                 }
-
-                                 let flickerOpacity = 1.0;
-                                 if (flicker > 0) {
-                                   const freq = 10 + (flicker / 2);
-                                   const val = Math.sin(localTime * freq) * Math.cos(localTime * (freq * 0.7));
-                                   if (val > 0.75) {
-                                     flickerOpacity = 0.25;
-                                   } else if (val < -0.85) {
-                                     flickerOpacity = 0.05;
-                                   }
-                                 }
-
-                                 const darkVal = darkness / 100;
-                                 let horrorBg = `radial-gradient(circle, transparent 20%, rgba(0,0,0,${0.65 + darkVal * 0.35}) 90%)`;
-                                 
-                                 if (p.includes('blood') || p.includes('demon') || p.includes('ritual')) {
-                                   horrorBg += `, radial-gradient(circle at 50% 50%, rgba(139, 0, 0, 0.25) 0%, transparent 80%)`;
-                                 } else {
-                                   horrorBg += `, radial-gradient(circle at 50% 50%, rgba(0, 100, 80, 0.15) 0%, transparent 80%)`;
-                                 }
-
-                                 const fog = props.smokeDensity ?? 50;
-                                 if (fog > 10) {
-                                   const fogShift = localTime * 4;
-                                   horrorBg += `, repeating-linear-gradient(${45 + fogShift}deg, rgba(255,255,255,0.02) 0px, transparent 20px, rgba(0,0,0,0.15) 40px, transparent 100px)`;
-                                 }
-
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: horrorBg,
-                                   opacity: op * flickerOpacity,
-                                   transform: transformStr,
-                                   filter: `brightness(${(props.brightness ?? 50)/50}) contrast(${(props.contrast ?? 50)/50}) saturate(${(props.saturation ?? 50)/50})`,
-                                   mixBlendMode: (eff.blendMode as any) || 'multiply'
-                                 };
-                               } else if (p.startsWith('scifi-')) {
-                                 const tint = props.scifiColorTint || '#00e1ff';
-                                 const op = (props.opacity ?? 100) / 100;
-                                 const glow = props.neonGlow ?? 50;
-                                 const scanlines = props.scanlineStrength ?? 50;
-                                 
-                                 const shift = localTime * 12;
-                                 let scifiBg = '';
-                                 if (p.includes('cyberpunk') || p.includes('neon') || p.includes('tron')) {
-                                   scifiBg = `radial-gradient(circle at ${50 + Math.sin(shift / 2) * 15}% ${50 + Math.cos(shift / 2) * 15}%, rgba(255, 0, 128, 0.15) 0%, transparent 60%),
-                                              radial-gradient(circle at ${30 - Math.cos(shift / 2) * 15}% ${70 - Math.sin(shift / 2) * 15}%, rgba(0, 225, 255, 0.15) 0%, transparent 60%)`;
-                                 } else if (p.includes('space') || p.includes('galaxy') || p.includes('warp') || p.includes('hyper')) {
-                                   scifiBg = `radial-gradient(circle at 50% 50%, rgba(0, 20, 50, 0.3) 0%, transparent 80%),
-                                              repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.2) 0px, transparent 2px, transparent 150px)`;
-                                 } else {
-                                   scifiBg = `radial-gradient(circle at 50% 50%, rgba(0, 225, 255, 0.08) 0%, transparent 75%)`;
-                                 }
-
-                                 if (scanlines > 10) {
-                                   scifiBg += `, repeating-linear-gradient(0deg, rgba(0, 225, 255, ${scanlines / 600}) 0px, transparent 2px, transparent 6px)`;
-                                 }
-
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: scifiBg,
-                                   opacity: op,
-                                   filter: `brightness(${(props.brightness ?? 50)/50}) contrast(${(props.contrast ?? 50)/50}) saturate(${(props.saturation ?? 50)/50}) drop-shadow(0 0 ${glow / 6}px ${tint})`,
-                                   mixBlendMode: (eff.blendMode as any) || 'screen'
-                                 };
-                               } else if (p.startsWith('gaming-')) {
-                                 const tint = props.gamingColorTint || '#ff0055';
-                                 const op = (props.opacity ?? 100) / 100;
-                                 const glow = props.neonGlow ?? 50;
-                                 const lines = props.speedLines ?? 0;
-                                 const flash = props.flashIntensity ?? 0;
-                                 const shake = props.cameraShake ?? 0;
-                                 
-                                 let gamingBg = 'transparent';
-                                 
-                                 if (lines > 10) {
-                                   gamingBg = `repeating-linear-gradient(45deg, rgba(255, 255, 255, ${lines / 1000}) 0px, transparent 15px, rgba(255, 255, 255, 0.05) 30px, transparent 120px)`;
-                                 }
-
-                                 if (flash > 0) {
-                                   const isFlashActive = Math.floor(localTime * 4) % 2 === 0;
-                                   if (isFlashActive) {
-                                     gamingBg = `rgba(255,255,255,${flash / 350})`;
-                                   }
-                                 }
-
-                                 let transformStr = undefined;
-                                 if (shake > 0) {
-                                   const dx = Math.sin(localTime * 50) * (shake / 10);
-                                   const dy = Math.cos(localTime * 45) * (shake / 10);
-                                   transformStr = `translate(${dx}px, ${dy}px)`;
-                                 }
-
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: gamingBg,
-                                   opacity: op,
-                                   transform: transformStr,
-                                   filter: `brightness(${(props.brightness ?? 50)/50}) contrast(${(props.contrast ?? 50)/50}) saturate(${(props.saturation ?? 50)/50}) drop-shadow(0 0 ${glow / 5}px ${tint})`,
-                                   mixBlendMode: (eff.blendMode as any) || 'screen'
-                                 };
-                               } else if (p.startsWith('cosmic-')) {
-                                 const color = props.nebulaColor || '#8a2be2';
-                                 const op = (props.opacity ?? 100) / 100;
-                                 const galaxy = props.galaxyDensity ?? 50;
-                                 const glow = props.glowStrength ?? 50;
-                                 const gravity = props.gravityDistortion ?? 0;
-                                 const rot = props.wormholeRotation ?? 0;
-                                 const aurora = props.auroraStrength ?? 0;
-                                 
-                                 const shift = localTime * 5;
-                                 let cosmicBg = '';
-                                 
-                                 if (galaxy > 10) {
-                                   cosmicBg = `radial-gradient(circle at ${50 + Math.sin(shift * 0.5) * 10}% ${50 + Math.cos(shift * 0.5) * 10}%, ${color}33 0%, transparent 70%)`;
-                                 } else {
-                                   cosmicBg = `radial-gradient(circle at 50% 50%, rgba(20, 10, 40, 0.4) 0%, transparent 80%)`;
-                                 }
-
-                                 if (aurora > 10) {
-                                   const aurWave = Math.sin(localTime * 2) * 15;
-                                   cosmicBg += `, repeating-linear-gradient(${90 + aurWave}deg, transparent 0px, rgba(0, 255, 150, ${aurora / 1000}) 40px, transparent 120px)`;
-                                 }
-
-                                 let transformStr = undefined;
-                                 if (rot > 0) {
-                                   transformStr = `rotate(${rot + localTime * 15}deg)`;
-                                 }
-                                 if (gravity > 0) {
-                                   const gravScale = 1.0 - (gravity / 300);
-                                   transformStr = transformStr ? `${transformStr} scale(${gravScale})` : `scale(${gravScale})`;
-                                 }
-
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: cosmicBg,
-                                   opacity: op,
-                                   transform: transformStr,
-                                   filter: `brightness(${(props.brightness ?? 50)/50}) contrast(${(props.contrast ?? 50)/50}) saturate(${(props.saturation ?? 50)/50}) drop-shadow(0 0 ${glow / 5}px ${color})`,
-                                   mixBlendMode: (eff.blendMode as any) || 'screen'
-                                 };
-                               } else if (p.startsWith('threed-')) {
-                                 const tint = props.threeDColorTint || '#000000';
-                                 const op = (props.opacity ?? 100) / 100;
-                                 const depth = props.depthAmount ?? 50;
-                                 const perspectiveVal = props.perspective ?? 50;
-                                 const orbit = props.cameraOrbit ?? 50;
-                                 const tilt = props.cameraTilt ?? 50;
-                                 const roll = props.cameraRoll ?? 50;
-                                 const rx = props.threeDrotationX ?? 50;
-                                 const ry = props.threeDrotationY ?? 50;
-                                 const rz = props.threeDrotationZ ?? 50;
-                                 const zoomVal = props.zoom ?? 50;
-                                 const glow = props.glowStrength ?? 50;
-                                 const ref = props.reflectionStrength ?? 0;
-                                 
-                                 const degX = (rx - 50) * 0.8;
-                                 const degY = (ry - 50) * 0.8;
-                                 const degZ = (rz - 50) * 0.8;
-                                 
-                                 const orbitDeg = (orbit - 50) * 0.5;
-                                 const tiltDeg = (tilt - 50) * 0.5;
-                                 const rollDeg = (roll - 50) * 0.5;
-                                 
-                                 const totalRx = degX + tiltDeg;
-                                 const totalRy = degY + orbitDeg;
-                                 const totalRz = degZ + rollDeg;
-                                 
-                                 const persPx = 200 + (100 - perspectiveVal) * 12;
-                                 const scaleVal = 0.5 + (zoomVal / 100);
-
-                                 const transformStr = `perspective(${persPx}px) rotateX(${totalRx}deg) rotateY(${totalRy}deg) rotateZ(${totalRz}deg) scale(${scaleVal})`;
-                                 
-                                 let threedBg = 'transparent';
-                                 if (ref > 10) {
-                                   threedBg = `linear-gradient(135deg, rgba(255, 255, 255, ${ref / 400}) 0%, transparent 50%, rgba(0,0,0,${ref / 600}) 100%)`;
-                                 }
-
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: threedBg,
-                                   opacity: op,
-                                   transform: transformStr,
-                                   boxShadow: `0 ${depth / 2}px ${depth}px rgba(${parseInt(tint.slice(1,3), 16) || 0}, ${parseInt(tint.slice(3,5), 16) || 0}, ${parseInt(tint.slice(5,7), 16) || 0}, 0.5)`,
-                                   filter: `brightness(${(props.brightness ?? 50)/50}) contrast(${(props.contrast ?? 50)/50}) saturate(${(props.saturation ?? 50)/50}) drop-shadow(0 0 ${glow / 6}px rgba(255,255,255,0.4))`,
-                                   mixBlendMode: (eff.blendMode as any) || 'normal',
-                                   transformStyle: 'preserve-3d',
-                                   backfaceVisibility: 'hidden'
-                                 };
-                               } else if (p.startsWith('artistic-')) {
-                                 const op = (props.opacity ?? 100) / 100;
-                                 const brush = props.brushSize ?? 50;
-                                 const detail = props.brushDetail ?? 50;
-                                 const stroke = props.strokeStrength ?? 50;
-                                 const texture = props.textureAmount ?? 50;
-                                 const outline = props.outlineStrength ?? 50;
-                                 const vibrance = props.colorVibrance ?? 50;
-                                 const glow = props.glowStrength ?? 50;
-                                 
-                                 let artisticBg = 'transparent';
-                                 if (texture > 10) {
-                                   artisticBg = `repeating-linear-gradient(0deg, rgba(0,0,0,${texture / 1500}) 0px, rgba(0,0,0,${texture / 1500}) 1px, transparent 1px, transparent 4px),
-                                                 repeating-linear-gradient(90deg, rgba(0,0,0,${texture / 1500}) 0px, rgba(0,0,0,${texture / 1500}) 1px, transparent 1px, transparent 4px)`;
-                                 }
-
-                                 const sharpnessVal = (props.contrast ?? 50) / 40;
-                                 const filterStr = `brightness(${(props.brightness ?? 50)/50}) contrast(${sharpnessVal}) saturate(${(vibrance + (props.saturation ?? 50)) / 100}) drop-shadow(0 0 ${glow / 8}px rgba(255,255,255,0.3))`;
-
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: artisticBg,
-                                   opacity: op,
-                                   filter: filterStr,
-                                   mixBlendMode: (eff.blendMode as any) || 'normal'
-                                 };
-                               } else if (p.startsWith('ai-')) {
-                                 const color = props.aiColorTint || '#00ff88';
-                                 const op = (props.opacity ?? 100) / 100;
-                                 const scanSpeed = props.aiScanSpeed ?? 50;
-                                 const glow = props.glowStrength ?? 50;
-                                 const rgb = props.rgbStrength ?? 50;
-                                 const scanline = props.scanlineIntensity ?? 50;
-                                 const hologram = props.hologramStrength ?? 50;
-                                 
-                                 const scanPos = (localTime * scanSpeed * 1.5) % 100;
-                                 
-                                 let aiBg = `linear-gradient(to bottom, transparent 0%, transparent ${scanPos - 1}%, ${color}33 ${scanPos}%, transparent ${scanPos + 1}%, transparent 100%)`;
-                                 
-                                 if (hologram > 10) {
-                                   aiBg += `, repeating-linear-gradient(0deg, rgba(0, 255, 136, ${hologram / 2000}) 0px, rgba(0, 255, 136, ${hologram / 2000}) 1px, transparent 1px, transparent 8px)`;
-                                 }
-                                 
-                                 if (scanline > 10) {
-                                   aiBg += `, repeating-linear-gradient(90deg, rgba(0, 0, 0, ${scanline / 1500}) 0px, rgba(0, 0, 0, ${scanline / 1500}) 1px, transparent 1px, transparent 3px)`;
-                                 }
-
-                                 const colorFilter = `brightness(${(props.brightness ?? 50)/50}) contrast(${(props.contrast ?? 50)/50}) saturate(${(props.saturation ?? 50)/50}) drop-shadow(0 0 ${glow / 5}px ${color})`;
-
-                                 overlayStyles = {
-                                   ...overlayStyles,
-                                   background: aiBg,
-                                   opacity: op,
-                                   filter: colorFilter,
-                                   mixBlendMode: (eff.blendMode as any) || 'screen'
-                                 };
-                               }
-
-                               return (
-                                 <div
-                                   key={eff.id}
-                                   className={`absolute inset-0 pointer-events-none transition-all duration-150 z-10 ${preset.overlayClass || ''}`}
-                                   style={overlayStyles}
-                                 >
-                                   {eff.presetId === 'vhs-recording' && (
-                                     <div className="absolute top-4 left-4 flex items-center gap-1.5 font-mono text-[9px] text-red-500 font-bold tracking-wider">
-                                       <span className="h-2 w-2 rounded-full bg-red-500 animate-ping" />
-                                       <span>REC</span>
-                                     </div>
-                                   )}
-                                   {eff.presetId === 'vhs-play' && (
-                                     <div className="absolute top-4 left-4 flex items-center gap-1 font-mono text-[9px] text-emerald-400 font-bold tracking-wider">
-                                       <span>▶ PLAY</span>
-                                     </div>
-                                   )}
-                                   {eff.presetId === 'vhs-stop' && (
-                                     <div className="absolute top-4 left-4 flex items-center gap-1 font-mono text-[9px] text-sky-400 font-bold tracking-wider">
-                                       <span>■ STOP</span>
-                                     </div>
-                                   )}
-                                   {(eff.presetId === 'vhs-rewind' || eff.presetId === 'vhs-fast-forward' || eff.presetId === 'vhs-pause') && (
-                                     <div className="absolute top-4 left-4 flex items-center gap-1 font-mono text-[9px] text-amber-500 font-bold tracking-wider">
-                                       <span>{eff.presetId === 'vhs-rewind' ? '◀◀ REW' : eff.presetId === 'vhs-fast-forward' ? '▶▶ FWD' : '|| PAUSE'}</span>
-                                     </div>
-                                   )}
-                                   {(eff.presetId === 'vhs-timecode' || eff.presetId === 'vhs-camcorder' || eff.presetId === 'vhs-home-video') && (
-                                     <div className="absolute bottom-4 right-4 font-mono text-[9px] text-white/80 tracking-widest font-semibold">
-                                       AM 12:48:35<br />
-                                       JUL. 27 1989
-                                     </div>
-                                   )}
-                                   {eff.presetId.startsWith('scifi-') && (props.hudOpacity ?? 50) > 10 && (
-                                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ opacity: (props.hudOpacity ?? 50) / 100 }}>
-                                       <svg className="w-4/5 h-4/5 stroke-cyan-400 stroke-1 fill-none" viewBox="0 0 100 100">
-                                         <circle cx="50" cy="50" r="30" strokeDasharray="5 3" className="animate-spin" style={{ transformOrigin: 'center', animationDuration: '20s' }} />
-                                         <circle cx="50" cy="50" r="15" strokeDasharray="10 15" className="animate-spin" style={{ transformOrigin: 'center', animationDuration: '10s', animationDirection: 'reverse' }} />
-                                         <path d="M 10 50 L 25 50 M 75 50 L 90 50 M 50 10 L 50 25 M 50 75 L 50 90" stroke="rgba(0, 225, 255, 0.4)" />
-                                         <rect x="5" y="5" width="90" height="90" rx="4" stroke="rgba(0, 225, 255, 0.2)" />
-                                       </svg>
-                                       <div className="absolute bottom-4 right-4 font-mono text-[7px] text-cyan-400/80 bg-slate-950/70 border border-cyan-500/25 rounded px-1 py-0.5">
-                                         <span>SYSTEM ACTIVE: PROX. {Math.floor(50 + (localTime * 15) % 50)}%</span>
-                                       </div>
-                                     </div>
-                                   )}
-                                   {eff.presetId.startsWith('gaming-') && (props.hudOpacity ?? 50) > 10 && (
-                                     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4" style={{ opacity: (props.hudOpacity ?? 50) / 100 }}>
-                                       <div className="flex justify-between items-start w-full">
-                                         <div className="bg-slate-950/70 border border-[#ff0055]/30 rounded px-2 py-0.5 font-mono text-[7px] text-white flex items-center gap-1.5">
-                                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-                                           <span>LIVE MATCH: 120 FPS</span>
-                                         </div>
-                                         <div className="bg-slate-950/75 border border-[#ff0055]/20 rounded px-2 py-1 font-mono text-[6.5px] text-slate-300 text-right space-y-0.5">
-                                           <div>🏆 PlayerOne <span className="text-[#ff0055]">⚡</span> OpponentA</div>
-                                           <div className="text-[5.5px] text-slate-500">Double Kill!</div>
-                                         </div>
-                                       </div>
-
-                                       <div className="absolute inset-0 flex items-center justify-center">
-                                         <svg 
-                                           className="stroke-emerald-400 stroke-2 fill-none" 
-                                           style={{ 
-                                             width: `${props.crosshairSize ?? 40}px`, 
-                                             height: `${props.crosshairSize ?? 40}px`,
-                                             filter: `drop-shadow(0 0 2px ${props.gamingColorTint || '#ff0055'})`
-                                           }}
-                                           viewBox="0 0 24 24"
-                                         >
-                                           <circle cx="12" cy="12" r="3" />
-                                           <path d="M 12 2 L 12 6 M 12 18 L 12 22 M 2 12 L 6 12 M 18 12 L 22 12" />
-                                         </svg>
-                                       </div>
-
-                                       <div className="flex justify-between items-end w-full">
-                                         <div className="space-y-1 bg-slate-950/70 border border-[#ff0055]/30 rounded p-1.5 font-mono">
-                                           <div className="flex items-center gap-2 text-[7px] text-emerald-400">
-                                             <span>HP</span>
-                                             <div className="w-16 h-1 bg-slate-800 rounded overflow-hidden">
-                                               <div className="h-full bg-emerald-400" style={{ width: '85%' }} />
-                                             </div>
-                                             <span className="text-[6.5px] text-white">85/100</span>
-                                           </div>
-                                           <div className="flex items-center gap-2 text-[7px] text-sky-400">
-                                             <span>AP</span>
-                                             <div className="w-16 h-1 bg-slate-800 rounded overflow-hidden">
-                                               <div className="h-full bg-sky-400" style={{ width: '60%' }} />
-                                             </div>
-                                             <span className="text-[6.5px] text-white">60/100</span>
-                                           </div>
-                                         </div>
-
-                                         <div className="bg-slate-950/70 border border-amber-500/30 rounded p-1 text-center font-mono text-[7px] text-amber-400">
-                                           <div>LVL {Math.floor(10 + (localTime * 0.2) % 5)}</div>
-                                           <div className="text-[5.5px] text-slate-400">XP +{(Math.floor(localTime * 125) % 999)}</div>
-                                         </div>
-                                       </div>
-                                     </div>
-                                   )}
-                                   {eff.presetId.startsWith('cosmic-') && (props.starCount ?? 50) > 10 && (
-                                     <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                                       <svg className="w-full h-full fill-none stroke-white" viewBox="0 0 100 100">
-                                         {eff.presetId.includes('blackhole') && (
-                                           <circle cx="50" cy="50" r="12" className="stroke-slate-950 fill-black stroke-[3] shadow-2xl" />
-                                         )}
-                                         
-                                         <circle cx="20" cy="30" r="0.4" className="animate-pulse" style={{ animationDelay: '0.2s', opacity: (props.starBrightness ?? 50) / 100 }} />
-                                         <circle cx="80" cy="40" r="0.6" className="animate-pulse" style={{ animationDelay: '0.5s', opacity: (props.starBrightness ?? 50) / 100 }} />
-                                         <circle cx="45" cy="75" r="0.3" className="animate-pulse" style={{ animationDelay: '0.8s', opacity: (props.starBrightness ?? 50) / 100 }} />
-                                         <circle cx="15" cy="85" r="0.5" className="animate-pulse" style={{ animationDelay: '0.1s', opacity: (props.starBrightness ?? 50) / 100 }} />
-                                         <circle cx="75" cy="20" r="0.8" className="animate-pulse" style={{ animationDelay: '1.2s', opacity: (props.starBrightness ?? 50) / 100 }} />
-                                         <circle cx="55" cy="15" r="0.4" className="animate-pulse" style={{ animationDelay: '1.5s', opacity: (props.starBrightness ?? 50) / 100 }} />
-                                         <circle cx="90" cy="70" r="0.7" className="animate-pulse" style={{ animationDelay: '0.4s', opacity: (props.starBrightness ?? 50) / 100 }} />
-                                         <circle cx="35" cy="55" r="0.3" className="animate-pulse" style={{ animationDelay: '0.7s', opacity: (props.starBrightness ?? 50) / 100 }} />
-
-                                         {(props.meteorSpeed ?? 50) > 10 && (
-                                           <path 
-                                             d="M -10 -10 L 40 40 M 60 -10 L 110 40" 
-                                             stroke="rgba(255, 255, 255, 0.4)" 
-                                             strokeWidth="0.5"
-                                             strokeDasharray="10 90" 
-                                             strokeDashoffset={localTime * (props.meteorSpeed ?? 50) * 1.5}
-                                           />
-                                         )}
-                                       </svg>
-                                     </div>
-                                   )}
-                                   {eff.presetId.startsWith('threed-') && (
-                                     <div className="absolute inset-0 border border-white/20 rounded shadow-[inset_0_0_15px_rgba(255,255,255,0.15)] flex items-center justify-center pointer-events-none">
-                                       <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
-                                       
-                                       {eff.presetId.includes('room') && (
-                                         <div className="absolute w-4/5 h-4/5 border border-white/10 shadow-[0_0_20px_rgba(0,0,0,0.8)]" style={{ transform: 'translateZ(-50px)' }} />
-                                       )}
-                                     </div>
-                                   )}
-                                   {eff.presetId.startsWith('artistic-') && (
-                                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
-                                       {(props.strokeStrength ?? 50) > 10 && (
-                                         <svg className="absolute w-full h-full fill-white/10 stroke-none" viewBox="0 0 100 100">
-                                           <circle cx="15" cy="20" r={(props.brushSize ?? 50) / 40} className="opacity-40 animate-pulse" />
-                                           <circle cx="85" cy="75" r={(props.brushSize ?? 50) / 35} className="opacity-30 animate-pulse" style={{ animationDelay: '0.4s' }} />
-                                           <circle cx="70" cy="15" r={(props.brushSize ?? 50) / 50} className="opacity-50 animate-pulse" style={{ animationDelay: '0.8s' }} />
-                                           <circle cx="25" cy="80" r={(props.brushSize ?? 50) / 45} className="opacity-35 animate-pulse" style={{ animationDelay: '1.2s' }} />
-                                         </svg>
-                                       )}
-                                       
-                                       {eff.presetId.includes('sketch') && (
-                                         <div className="absolute inset-2 border border-black/15 rounded-md" style={{ borderStyle: 'dashed' }} />
-                                       )}
-                                     </div>
-                                   )}
-                                   {eff.presetId.startsWith('ai-') && (
-                                     <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                                       {(eff.presetId.includes('detect') || eff.presetId.includes('vision') || eff.presetId.includes('computervision')) && (
-                                         <div className="absolute border-2 border-emerald-400 animate-pulse rounded animate-ping" style={{
-                                           left: '30%',
-                                           top: '25%',
-                                           width: `${props.detectionBoxSize ?? 50}%`,
-                                           height: `${props.detectionBoxSize ?? 50}%`,
-                                           borderColor: props.aiColorTint || '#00ff88',
-                                           animationDuration: '3s',
-                                           filter: `drop-shadow(0 0 4px ${props.aiColorTint || '#00ff88'})`
-                                         }}>
-                                           <span className="absolute -top-3.5 left-0 font-mono text-[6.5px] bg-[#060910] text-[#00ff88] px-1 py-0.5 border border-[#00ff88]/30 rounded">
-                                             {eff.presetId.includes('face') ? 'FACE: CONF. 98.4%' : 'OBJECT: FOCUS_ACTIVE'}
-                                           </span>
-                                           <span className="absolute -bottom-3.5 right-0 font-mono text-[5.5px] text-[#00ff88]/70">
-                                             X: {Math.floor(30 + localTime * 2) % 100} Y: {Math.floor(25 + localTime) % 100}
-                                           </span>
-                                         </div>
-                                       )}
-                                       
-                                       {eff.presetId.includes('neural') && (
-                                         <svg className="w-full h-full fill-none" style={{ stroke: props.aiColorTint || '#00ff88', strokeWidth: '0.4' }} viewBox="0 0 100 100">
-                                           <path d="M 10 20 L 40 40 M 40 40 L 70 20 M 40 40 L 50 80 M 50 80 L 90 70 M 70 20 L 90 30" strokeDasharray="3 3" />
-                                           <circle cx="10" cy="20" r="1" className="fill-emerald-400 animate-ping" />
-                                           <circle cx="40" cy="40" r="1.5" className="fill-emerald-400" />
-                                           <circle cx="70" cy="20" r="1" className="fill-emerald-400" />
-                                           <circle cx="50" cy="80" r="1.2" className="fill-emerald-400" />
-                                           <circle cx="90" cy="70" r="1" className="fill-emerald-400 animate-pulse" />
-                                           <circle cx="90" cy="30" r="1" className="fill-emerald-400" />
-                                         </svg>
-                                       )}
-
-                                       {(props.particleCount ?? 50) > 10 && (
-                                         <div className="absolute inset-0 font-mono text-[6px] text-emerald-400/30 overflow-hidden select-none leading-none">
-                                           <span className="absolute left-[10%] top-[40%] animate-bounce">01011001</span>
-                                           <span className="absolute right-[15%] top-[15%] animate-pulse">0xff38a2</span>
-                                           <span className="absolute left-[45%] bottom-[20%] animate-ping">PROCESSING...</span>
-                                         </div>
-                                       )}
-                                     </div>
-                                   )}
-                                 </div>
-                               );
-                            })}
+                            {pipelineState.overlays.map((ov, idx) => (
+                              <div
+                                key={ov.id || idx}
+                                style={ov.style}
+                                className={ov.className || 'absolute inset-0 pointer-events-none'}
+                              >
+                                {ov.content}
+                              </div>
+                            ))}
                           </div>
                         );
                       })}
-                      {transitionData?.overlayColor && (
+                      {transitionOverlayColor && (
                         <div
-                          className="absolute inset-0 pointer-events-none z-30"
-                          style={{ backgroundColor: transitionData.overlayColor }}
+                          className="absolute inset-0 pointer-events-none z-30 transition-all duration-75"
+                          style={{ backgroundColor: transitionOverlayColor }}
                         />
                       )}
                     </>
@@ -3835,22 +2886,6 @@ function EditorMainScreenContent() {
               <RotateCcw className="h-3.5 w-3.5 transform -scale-x-100" />
             </button>
             <div className="h-3.5 w-px bg-surface/10 mx-1" />
-            <button
-              type="button"
-              onClick={handleTrimActiveClip}
-              className="p-1 hover:text-foreground transition"
-              title="Trim active clip to playhead"
-            >
-              <Scissors className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleSplitActiveClip}
-              className="p-1 hover:text-foreground transition"
-              title="Split active clip at playhead"
-            >
-              <Split className="h-3.5 w-3.5" />
-            </button>
           </div>
 
           <div className="flex items-center gap-4">
@@ -4175,6 +3210,7 @@ function EditorMainScreenContent() {
                                 onClick={() => {
                                   setSelectedTransitionIndex(idx);
                                   setActiveTransitionId(transitionId);
+                                  setEffectsSubTab('transitions');
                                   setActiveTab('effects');
                                   showToast('Select a transition to apply between clips');
                                 }}
@@ -4199,11 +3235,13 @@ function EditorMainScreenContent() {
                     {/* Row 5: Audio Track */}
                     <div className="flex flex-row h-8 items-center bg-surface">
                       <div
-                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-t border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
+                        className={`w-40 h-full flex-shrink-0 flex items-center justify-center border-r border-border border-t border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5 transition ${
+                          isMuted ? 'text-red-400 bg-red-500/10' : 'text-foreground bg-background'
+                        }`}
                         onClick={(e) => { e.stopPropagation(); toggleMute(); }}
                       >
-                        <Volume2 className="h-3.5 w-3.5" />
-                        <span className="text-[10px] font-medium tracking-wide">Audio</span>
+                        {isMuted ? <VolumeX className="h-3.5 w-3.5 text-red-400" /> : <Volume2 className="h-3.5 w-3.5" />}
+                        <span className="text-[10px] font-medium tracking-wide">{isMuted ? 'Audio (Muted)' : 'Audio Track'}</span>
                       </div>
                       <div className="relative flex-1 h-full border-t border-border bg-surface/50">
                         <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />

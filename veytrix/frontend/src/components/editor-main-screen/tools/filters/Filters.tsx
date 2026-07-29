@@ -94,11 +94,18 @@ export function Filters({
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  // Add to recents when a filter is applied
   const applyFilter = (filter: FilterSample) => {
+    if (activeFilterId === filter.id) {
+      onSelectFilter(null);
+      onFilterEnabledChange?.(false);
+      triggerToast(`Filter "${filter.name}" removed`);
+      return;
+    }
+
     onSelectFilter(filter.id);
     onFilterIntensityChange(filter.defaultIntensity);
     onFilterEnabledChange?.(true);
+    triggerToast(`Filter "${filter.name}" applied`);
 
     // Track recently used filters (limit to last 10)
     setRecents(prev => {

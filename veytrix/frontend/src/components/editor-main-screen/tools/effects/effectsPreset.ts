@@ -188,30 +188,17 @@ const CATEGORIES_INFO: Record<
 const CATEGORIES = Object.keys(CATEGORIES_INFO);
 
 function generatePresets(): EffectPreset[] {
-  const list: EffectPreset[] = [...BASIC_EFFECTS, ...CAMERA_EFFECTS, ...BLUR_EFFECTS, ...GLITCH_EFFECTS, ...CINEMATIC_EFFECTS, ...LIGHT_EFFECTS, ...RETRO_EFFECTS, ...THREED_EFFECTS, ...AI_EFFECTS];
-  CATEGORIES.forEach((cat) => {
-    if (cat === 'Basic' || cat === 'Camera' || cat === 'Blur' || cat === 'Glitch' || cat === 'Cinematic' || cat === 'Light' || cat === 'Retro' || cat === '3D' || cat === 'AI') return; // Skip generating active categories programmatically
-    const info = CATEGORIES_INFO[cat];
-    for (let i = 1; i <= 40; i++) {
-      const presetId = `${cat.toLowerCase().replace('&', 'and').replace(' ', '-')}-preset-${i}`;
-      list.push({
-        id: presetId,
-        name: `${info.baseName} ${i}`,
-        category: cat,
-        description: info.descTpl(i),
-        cssFilter: info.filterTpl(i),
-        overlayClass: info.overlayClass,
-        overlayStyle: info.overlayStyle ? info.overlayStyle(i) : undefined,
-        defaultIntensity: 60 + (i % 5) * 5,
-        defaultOpacity: 90 + (i % 3) * 3,
-        defaultSpeed: 50 + (i % 6) * 6,
-        defaultAngle: (i * 9) % 360,
-        defaultDirection: i % 4 === 0 ? 'horizontal' : i % 4 === 1 ? 'vertical' : i % 4 === 2 ? 'diagonal' : 'reverse',
-        defaultBlendMode: info.defaultBlendMode || 'normal'
-      });
-    }
-  });
-  return list;
+  return [
+    ...BASIC_EFFECTS,
+    ...CAMERA_EFFECTS,
+    ...BLUR_EFFECTS,
+    ...GLITCH_EFFECTS,
+    ...CINEMATIC_EFFECTS,
+    ...LIGHT_EFFECTS,
+    ...RETRO_EFFECTS,
+    ...THREED_EFFECTS,
+    ...AI_EFFECTS
+  ];
 }
 
 export const EFFECT_PRESETS: EffectPreset[] = generatePresets();

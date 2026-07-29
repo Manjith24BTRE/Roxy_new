@@ -24,6 +24,9 @@ interface EffectsProps {
   onShowBeforeOnlyChange?: (showBefore: boolean) => void;
   onHoverFilter?: (id: string | null) => void;
 
+  effectsSubTab?: 'transitions' | 'filters' | 'effects';
+  onSubTabChange?: (tab: 'transitions' | 'filters' | 'effects') => void;
+
   // Effects Engine Props
   activeAppliedEffectId: string | null;
   onSetActiveAppliedEffectId: (id: string | null) => void;
@@ -84,6 +87,9 @@ export function Effects({
   onShowBeforeOnlyChange,
   onHoverFilter,
 
+  effectsSubTab,
+  onSubTabChange,
+
   // Effects Engine Destructure
   activeAppliedEffectId,
   onSetActiveAppliedEffectId,
@@ -96,9 +102,15 @@ export function Effects({
   onAddEffectKeyframe,
   onDeleteEffectKeyframe
 }: EffectsProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'transitions' | 'filters' | 'effects'>('effects');
+  const [activeSubTab, setActiveSubTab] = useState<'transitions' | 'filters' | 'effects'>(effectsSubTab || 'effects');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+
+  useEffect(() => {
+    if (effectsSubTab) {
+      setActiveSubTab(effectsSubTab);
+    }
+  }, [effectsSubTab]);
 
   // Favorites & Recents Persistent Storage
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -280,7 +292,7 @@ export function Effects({
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
               <input
                 type="text"
-                placeholder="Search 1,000+ effects..."
+                placeholder={`Search ${EFFECT_PRESETS.length} effects...`}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-[#060910] border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50 transition-colors"
@@ -7665,11 +7677,19 @@ export function Effects({
               <div className="grid grid-cols-2 gap-2">
                 {filteredPresets.map((preset) => {
                   const isFav = favorites.includes(preset.id);
+                  const isApplied = activeClip?.appliedEffects?.some(
+                    (e: AppliedEffect) => e.presetId === preset.id || e.name === preset.name
+                  );
+
                   return (
                     <div
                       key={preset.id}
                       onClick={() => handleApplyPreset(preset)}
-                      className="rounded-xl border border-white/5 hover:border-white/10 bg-[#0b101c]/60 p-2 flex flex-col justify-between overflow-hidden cursor-pointer group relative h-[92px] transition"
+                      className={`rounded-xl border p-2 flex flex-col justify-between overflow-hidden cursor-pointer group relative h-[92px] transition ${
+                        isApplied 
+                          ? 'border-sky-500/40 bg-sky-500/10' 
+                          : 'border-white/5 hover:border-white/10 bg-[#0b101c]/60'
+                      }`}
                     >
                       {/* CSS Preview Visualizer card */}
                       <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-950 border border-white/10 mb-1 flex-shrink-0">
@@ -7687,6 +7707,13 @@ export function Effects({
                             className="absolute inset-0 pointer-events-none opacity-40"
                             style={preset.overlayStyle}
                           />
+                        )}
+
+                        {/* Applied badge */}
+                        {isApplied && (
+                          <span className="absolute top-0.5 left-0.5 z-20 bg-sky-500 text-slate-950 text-[7px] font-black uppercase px-1 py-0.5 rounded flex items-center gap-0.5 shadow-sm">
+                            <Check className="h-2 w-2 stroke-[3]" /> Applied
+                          </span>
                         )}
 
                         {/* Favorite button toggle */}
