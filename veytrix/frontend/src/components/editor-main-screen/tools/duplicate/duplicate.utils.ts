@@ -38,7 +38,7 @@ export function duplicateTimelineClip<T extends { id: string; name: string; star
 
   if (lockedTracks[clip.trackId] || lockedClips[clip.id]) {
     if (lockedClips[clip.id] && showToast) {
-      showToast('Cannot edit: Clip is locked!');
+      showToast('This clip is locked. Unlock it to make changes.');
     }
     return null;
   }

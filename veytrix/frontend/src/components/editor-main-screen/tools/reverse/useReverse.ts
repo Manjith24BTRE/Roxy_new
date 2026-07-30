@@ -22,10 +22,10 @@ export function useReverse<T extends ReversibleClip = any>(params: UseReversePar
       let targetClipObj: T | null = null;
 
       if (targetId) {
-        targetClipObj = clips.find((c) => c.id === targetId || c.mediaId === targetId) || null;
+        targetClipObj = clips.find((c) => c.id === targetId) || null;
       } else if (getSelectedClip) {
         targetClipObj = getSelectedClip();
-        if (targetClipObj) targetId = targetClipObj.id || targetClipObj.mediaId;
+        if (targetClipObj) targetId = targetClipObj.id;
       }
 
       if (!targetId || !targetClipObj) {

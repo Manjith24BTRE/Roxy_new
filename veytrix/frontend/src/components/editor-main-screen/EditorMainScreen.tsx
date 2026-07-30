@@ -28,6 +28,10 @@ import { useDuplicate } from './tools/duplicate';
 import { useCopyPaste } from './tools/copy-paste';
 import { useRename, RenameDialog } from './tools/rename';
 import { useReverse, reversedAudioEngine } from './tools/reverse';
+import { useDetach } from './tools/detach';
+import { useLock } from './tools/lock';
+import { useFreeze } from './tools/freeze';
+import { useAudio } from './tools/audio';
 
 // Context Menu
 import { ClipActionsPanel } from './clip-actions/ClipActionsPanel';
@@ -92,7 +96,13 @@ function EditorMainScreenContent() {
     showToast,
   });
 
-  const activeSelectedClip = timelineClips.find(c => c.mediaId === activeMediaId || c.id === activeMediaId) || timelineClips[0] || null;
+  const [activeSelectedClipId, setActiveSelectedClipId] = useState<string | null>(null);
+
+  const activeSelectedClip = activeSelectedClipId
+    ? (timelineClips.find(c => c.id === activeSelectedClipId) || null)
+    : (activeMediaId
+        ? (timelineClips.find(c => c.id === activeMediaId || c.mediaId === activeMediaId) || null)
+        : null);
   const activeClipLocalTime = activeSelectedClip ? Math.max(0, currentTime - activeSelectedClip.timelineStart) : 0;
 
   // Reverse hook initialization
@@ -105,24 +115,42 @@ function EditorMainScreenContent() {
       setTimelineClips(updatedClips);
       commitTransaction(getProjectState());
 
-      if (isPlaying) {
-        reversedAudioEngine.stopReversedAudio();
-        const activeClip = updatedClips.find(
-          (c) => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration
-        ) || updatedClips[0];
-        if (activeClip && activeClip.isReversed) {
-          const relTime = Math.max(0, currentTime - activeClip.timelineStart);
-          const clipVol = isMuted || mutedClips[activeClip.id] ? 0 : volume;
-          const mediaSource = getClipMediaSource(activeClip);
-          reversedAudioEngine.playReversedAudio(
-            activeClip.id,
-            mediaSource,
-            relTime,
-            activeClip.duration,
-            clipVol,
-            activeClip.playbackRate || activeClip.speed || 1
-          );
+      const targetClip = (activeSelectedClipId ? updatedClips.find(c => c.id === activeSelectedClipId) : null) ||
+        updatedClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
+        updatedClips[0];
+
+      if (targetClip) {
+        setActiveSelectedClipId(targetClip.id);
+        setActiveMediaId(targetClip.mediaId);
+
+        const mediaSource = getClipMediaSource(targetClip);
+        if (targetClip.isReversed && mediaSource) {
+          reversedAudioEngine.loadAndReverseAudio(targetClip.id, mediaSource).catch(() => {});
+        } else {
+          reversedAudioEngine.stopReversedAudio();
         }
+
+        const vEl = videoRefs.current[targetClip.id];
+        if (vEl) {
+          try {
+            vEl.load();
+            vEl.currentTime = timelineTimeToSourceTime(targetClip, currentTime);
+          } catch {}
+        }
+      }
+
+      if (isPlaying && targetClip && targetClip.isReversed) {
+        const relTime = Math.max(0, currentTime - targetClip.timelineStart);
+        const clipVol = isMuted || !!mutedClips[targetClip.id] ? 0 : volume;
+        const mediaSource = getClipMediaSource(targetClip);
+        reversedAudioEngine.playReversedAudio(
+          targetClip.id,
+          mediaSource,
+          relTime,
+          targetClip.duration,
+          clipVol,
+          targetClip.playbackRate || targetClip.speed || 1
+        );
       }
     },
     showToast,
@@ -130,10 +158,7 @@ function EditorMainScreenContent() {
 
   // Copy & Paste hook initialization
   const { copy: copyClip, paste: pasteClip, hasClipboardPayload } = useCopyPaste({
-    getSelectedClip: () => {
-      const clip = timelineClips.find(c => c.mediaId === activeMediaId || c.id === activeMediaId) || timelineClips[0];
-      return clip || null;
-    },
+    getSelectedClip: () => activeSelectedClip,
     onPasteSequence: (updatedClips) => {
       setTimelineClips(updatedClips);
     },
@@ -142,11 +167,80 @@ function EditorMainScreenContent() {
     showToast,
   });
 
+  // Detach Audio hook initialization
+  const { detachAudio } = useDetach({
+    getClips: () => timelineClips,
+    getSelectedClip: () => activeSelectedClip,
+    onUpdateClips: (updatedClips) => {
+      beginTransaction('Detach Audio', getProjectState());
+      setTimelineClips(updatedClips);
+      commitTransaction(getProjectState());
+    },
+    showToast,
+  });
+
+  // Lock hook initialization
+  const { toggleLock, validateCanEdit, checkIsLocked } = useLock({
+    getClips: () => timelineClips,
+    getSelectedClipId: () => activeSelectedClip?.id || null,
+    getPlayheadTime: () => currentTime,
+    getLockedClipsMap: () => lockedClips,
+    onUpdateClips: (updatedClips, updatedLockedMap) => {
+      beginTransaction('Lock/Unlock clip', getProjectState());
+      if (updatedLockedMap) setLockedClips(updatedLockedMap);
+      setTimelineClips(updatedClips);
+      commitTransaction(getProjectState());
+    },
+    onUpdateLockedMap: (updatedLockedMap) => {
+      beginTransaction('Lock/Unlock clip', getProjectState());
+      setLockedClips(updatedLockedMap);
+      commitTransaction(getProjectState());
+    },
+    showToast,
+  });
+
+  // Freeze hook initialization
+  const { freezeFrame } = useFreeze({
+    getClips: () => timelineClips,
+    getSelectedClip: () => activeSelectedClip,
+    getPlayheadTime: () => currentTime,
+    getVideoElement: (clipId) => videoRefs.current[clipId || activeSelectedClip?.id || ''],
+    onUpdateClips: (updatedClips, createdFreezeId) => {
+      beginTransaction('Create Freeze Frame', getProjectState());
+      setTimelineClips(updatedClips);
+      if (createdFreezeId) {
+        setActiveSelectedClipId(createdFreezeId);
+      }
+      commitTransaction(getProjectState());
+    },
+    showToast,
+  });
+
+  // Audio hook initialization
+  const { libraryAssets, importAudioFile, addAudioToTimeline, removeLibraryAsset } = useAudio({
+    getClips: () => timelineClips,
+    getPlayheadTime: () => currentTime,
+    onUpdateClips: (updatedClips, createdAudioId) => {
+      beginTransaction('Add Audio to Timeline', getProjectState());
+      setTimelineClips(updatedClips);
+      if (createdAudioId) {
+        setActiveSelectedClipId(createdAudioId);
+      }
+      commitTransaction(getProjectState());
+    },
+    showToast,
+  });
+
   // Drag and drop index tracking
   const [draggedClipIndex, setDraggedClipIndex] = useState<number | null>(null);
   const [selectedTransitionIndex, setSelectedTransitionIndex] = useState<number | null>(null);
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
+    const clip = timelineClips[index];
+    if (clip && !validateCanEdit(clip.id, 'move')) {
+      e.preventDefault();
+      return;
+    }
     beginTransaction('Move clip', getProjectState());
     setDraggedClipIndex(index);
     e.dataTransfer.effectAllowed = 'move';
@@ -211,6 +305,9 @@ function EditorMainScreenContent() {
   const recalculateSequence = (clips: any[]) => {
     let currentStart = 0;
     return clips.map((c) => {
+      if (c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio) {
+        return c;
+      }
       const updated = { ...c, timelineStart: currentStart };
       currentStart += c.duration;
       return updated;
@@ -274,7 +371,10 @@ function EditorMainScreenContent() {
   };
 
   const handleSplitClip = (clipId: string) => {
-    const clipIndex = timelineClips.findIndex(c => c.id === clipId);
+    const targetClipId = clipId || activeSelectedClip?.id;
+    if (!targetClipId) return;
+
+    const clipIndex = timelineClips.findIndex(c => c.id === targetClipId);
     if (clipIndex === -1) return;
     const clip = timelineClips[clipIndex];
 
@@ -285,15 +385,34 @@ function EditorMainScreenContent() {
       const leftSourceDur = relativePlayhead * (clip.playbackRate || 1);
       const rightSourceDur = originalSourceDur - leftSourceDur;
 
+      const deepCloneArr = <T,>(arr?: T[]): T[] => arr ? JSON.parse(JSON.stringify(arr)) : [];
+
       const leftPart = {
         ...clip,
+        id: clip.id,
+        appliedEffects: deepCloneArr(clip.appliedEffects),
+        filters: deepCloneArr(clip.filters),
+        keyframes: deepCloneArr(clip.keyframes),
+        transitions: deepCloneArr(clip.transitions),
+        transforms: clip.transforms ? JSON.parse(JSON.stringify(clip.transforms)) : undefined,
         baseDuration: leftSourceDur,
         duration: relativePlayhead
       };
+
+      const rightPartId = `${clip.id}-split-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+      const splitTimelineStart = clip.timelineStart + relativePlayhead;
       const rightPart = {
         ...clip,
-        id: `${clip.id}-split-${Date.now()}`,
-        startOffset: clip.startOffset + leftSourceDur,
+        id: rightPartId,
+        isLocked: false,
+        timelineStart: splitTimelineStart,
+        start: splitTimelineStart,
+        appliedEffects: deepCloneArr(clip.appliedEffects),
+        filters: deepCloneArr(clip.filters),
+        keyframes: deepCloneArr(clip.keyframes),
+        transitions: deepCloneArr(clip.transitions),
+        transforms: clip.transforms ? JSON.parse(JSON.stringify(clip.transforms)) : undefined,
+        startOffset: (clip.startOffset || 0) + leftSourceDur,
         baseDuration: rightSourceDur,
         duration: clip.duration - relativePlayhead
       };
@@ -301,6 +420,8 @@ function EditorMainScreenContent() {
       const updated = [...timelineClips];
       updated.splice(clipIndex, 1, leftPart, rightPart);
       setTimelineClips(recalculateSequence(updated));
+      setActiveSelectedClipId(rightPart.id);
+      setActiveMediaId(rightPart.mediaId);
       showToast('Split clip successfully');
     } else {
       showToast('Seek playhead inside clip to split');
@@ -553,6 +674,7 @@ function EditorMainScreenContent() {
   };
 
   const handleDuplicateClip = (clipId: string) => {
+    if (!validateCanEdit(clipId, 'duplicate')) return;
     const updated = duplicateClipSequence(timelineClips, clipId, recalculateSequence);
     if (updated) {
       setTimelineClips(updated);
@@ -560,6 +682,7 @@ function EditorMainScreenContent() {
   };
 
   const handleDeleteClip = (clipId: string) => {
+    if (!validateCanEdit(clipId, 'delete')) return;
     const updated = timelineClips.filter(c => c.id !== clipId);
     setTimelineClips(recalculateSequence(updated));
     if (activeMediaId === clipId) {
@@ -586,16 +709,22 @@ function EditorMainScreenContent() {
     }
   };
 
-  const handleTrimUpdate = (clipId: string, _newTimelineStart: number, newSourceStart: number, newDuration: number) => {
+  const handleTrimUpdate = (clipId: string, newTimelineStart: number, newSourceStart: number, newDuration: number) => {
     // During drag: update sourceStart and duration, then reflow sequential positions.
-    // We intentionally ignore _newTimelineStart from the hook because this is a
-    // sequential (VN-style) timeline where clip positions are derived from durations.
     setTimelineClips((prev) => {
-      const updated = prev.map(c => 
-        c.id === clipId 
-          ? { ...c, startOffset: newSourceStart, duration: newDuration } 
-          : c
-      );
+      const updated = prev.map(c => {
+        if (c.id === clipId) {
+          const isAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
+          return {
+            ...c,
+            timelineStart: isAudio ? newTimelineStart : c.timelineStart,
+            start: isAudio ? newTimelineStart : (c.start ?? c.timelineStart),
+            startOffset: newSourceStart,
+            duration: newDuration
+          };
+        }
+        return c;
+      });
       return recalculateSequence(updated);
     });
   };
@@ -1132,6 +1261,12 @@ function EditorMainScreenContent() {
     const clip = timelineClips.find((c) => c.id === clipId);
     if (!clip) return;
 
+    if (actionId !== 'lock' && actionId !== 'unlock') {
+      if (!validateCanEdit(clipId, actionId)) {
+        return;
+      }
+    }
+
     switch (actionId) {
       case 'delete':
         handleDeleteClip(clipId);
@@ -1143,12 +1278,8 @@ function EditorMainScreenContent() {
         handleSplitClip(clipId);
         break;
       case 'lock':
-        setLockedClips({ ...lockedClips, [clipId]: true });
-        showToast(`Locked clip: ${clip.name}`);
-        break;
       case 'unlock':
-        setLockedClips({ ...lockedClips, [clipId]: false });
-        showToast(`Unlocked clip: ${clip.name}`);
+        toggleLock(clipId);
         break;
       case 'mute-audio':
         const isCurrentlyMuted = !!mutedClips[clipId];
@@ -1183,10 +1314,13 @@ function EditorMainScreenContent() {
         if (sp) showToast(`Set speed multiplier of ${clip.name} to ${sp}`);
         break;
       case 'detach-audio':
-        showToast(`Mock Action: Detached audio stream from ${clip.name}`);
+        detachAudio(clipId || clip?.id);
         break;
       case 'freeze-frame':
-        showToast(`Mock Action: Created freeze frame at playhead for ${clip.name}`);
+        freezeFrame(clipId || clip?.id);
+        break;
+      case 'keyframes':
+        handleAddKeyframeAtPlayhead(clipId || clip?.id);
         break;
       case 'replace-media':
         const clipToReplace = timelineClips.find(c => c.id === clipId || c.mediaId === activeMediaId) || timelineClips[0];
@@ -1265,8 +1399,9 @@ function EditorMainScreenContent() {
     timelineClips.forEach((clip) => {
       const video = videoRefs.current[clip.id];
       if (video) {
-        video.volume = Math.min(1, Math.max(0, volume));
-        video.muted = isMuted || !!mutedClips[clip.id];
+        const isVideoMuted = isMuted || !!mutedClips[clip.id] || !!clip.isMuted || !!clip.isAudioDetached || !!clip.audioDetached || clip.embeddedAudioEnabled === false;
+        video.muted = isVideoMuted;
+        video.volume = isVideoMuted ? 0 : Math.min(1, Math.max(0, volume * (clip.volume ?? 1)));
       }
     });
   }, [volume, isMuted, mutedClips, timelineClips]);
@@ -1390,6 +1525,12 @@ function EditorMainScreenContent() {
     currentTimeRef.current = currentTime;
   }, [currentTime]);
 
+  useEffect(() => {
+    if (!isPlaying) {
+      reversedAudioEngine.stopReversedAudio();
+    }
+  }, [isPlaying]);
+
   // Smooth 60 FPS playhead tracking and auto-follow scrolling loop
   useEffect(() => {
     let animationFrameId: number;
@@ -1415,6 +1556,20 @@ function EditorMainScreenContent() {
             if (video && !video.paused) {
               video.pause();
             }
+
+            const relativeTime = Math.max(0, curTime - activeClip.timelineStart);
+            const clipVol = isMuted || !!mutedClips[activeClip.id] ? 0 : volume;
+            const mediaSource = getClipMediaSource(activeClip);
+
+            reversedAudioEngine.playReversedAudio(
+              activeClip.id,
+              mediaSource,
+              relativeTime,
+              activeClip.duration,
+              clipVol,
+              activeClip.playbackRate || activeClip.speed || 1
+            );
+
             const speed = activeClip.playbackRate || activeClip.speed || 1;
             const nextTime = curTime + deltaSec * speed;
 
@@ -1452,7 +1607,55 @@ function EditorMainScreenContent() {
             }
           } else {
             // FORWARD CLIP PLAYBACK ENGINE
-            if (video) {
+            const isFreezeOrImage = activeClip.isFreezeFrame || activeClip.type === 'image' || activeClip.type === 'freeze' || (activeClip.url && (activeClip.url.startsWith('data:image/') || activeClip.url.endsWith('.png') || activeClip.url.endsWith('.jpg') || activeClip.url.endsWith('.jpeg') || activeClip.url.endsWith('.webp')));
+
+            if (isFreezeOrImage || !video) {
+              // STILL IMAGE / FREEZE CLIP PLAYBACK ENGINE - Advance time using deltaSec
+              timelineClips.forEach((c) => {
+                const v = videoRefs.current[c.id];
+                if (v && !v.paused) {
+                  v.pause();
+                }
+              });
+
+              const speed = activeClip.playbackRate || activeClip.speed || 1;
+              const nextTime = curTime + deltaSec * speed;
+
+              if (nextTime >= totalDur) {
+                setIsPlaying(false);
+                currentTimeRef.current = totalDur;
+                setCurrentTime(totalDur);
+                showToast('Video playback completed');
+                return;
+              }
+
+              currentTimeRef.current = nextTime;
+              setCurrentTime(nextTime);
+
+              if (timelineScrollRef.current) {
+                const pxPerSec = (zoomLevel / 100) * 35;
+                timelineScrollRef.current.scrollLeft = nextTime * pxPerSec;
+              }
+
+              if (nextTime >= activeClip.timelineStart + activeClip.duration) {
+                const currentClipIndex = timelineClips.findIndex((c) => c.id === activeClip.id);
+                if (currentClipIndex !== -1 && currentClipIndex < timelineClips.length - 1) {
+                  const nextClip = timelineClips[currentClipIndex + 1];
+                  const nextVideo = videoRefs.current[nextClip.id];
+                  if (nextVideo) {
+                    const nextTarget = timelineTimeToSourceTime(nextClip, nextClip.timelineStart);
+                    nextVideo.currentTime = nextTarget;
+                    if (!nextClip.isReversed && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
+                      nextVideo.play().catch(() => {});
+                    }
+                  }
+                  setActiveSelectedClipId(nextClip.id);
+                  setActiveMediaId(nextClip.mediaId);
+                  currentTimeRef.current = nextClip.timelineStart;
+                  setCurrentTime(nextClip.timelineStart);
+                }
+              }
+            } else if (video) {
               if (video.paused && !video.seeking) {
                 timelineClips.forEach((c) => {
                   const v = videoRefs.current[c.id];
@@ -1491,10 +1694,11 @@ function EditorMainScreenContent() {
                     if (nextVideo) {
                       const nextTarget = timelineTimeToSourceTime(nextClip, nextClip.timelineStart);
                       nextVideo.currentTime = nextTarget;
-                      if (!nextClip.isReversed) {
+                      if (!nextClip.isReversed && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
                         nextVideo.play().catch(() => {});
                       }
                     }
+                    setActiveSelectedClipId(nextClip.id);
                     setActiveMediaId(nextClip.mediaId);
                     currentTimeRef.current = nextClip.timelineStart;
                     setCurrentTime(nextClip.timelineStart);
@@ -2206,7 +2410,14 @@ function EditorMainScreenContent() {
             )}
 
             {activeTab === 'audio' && (
-              <Audio volume={volume} onVolumeChange={setVolume} />
+              <Audio
+                volume={volume}
+                onVolumeChange={setVolume}
+                onImportAudio={(file) => importAudioFile(file)}
+                onAddAudioToTimeline={(assetId) => addAudioToTimeline(assetId)}
+                uploadedAssets={libraryAssets}
+                onDeleteAsset={(id) => removeLibraryAsset(id)}
+              />
             )}
 
             {activeTab === 'text' && (
@@ -2756,32 +2967,49 @@ function EditorMainScreenContent() {
                         const finalBlendMode = (filterEnabled && !showBeforeOnly) ? (filterBlendMode as any) : renderedCSS.mixBlendModeVal;
                         const finalTransform = `translate(${posX}px, ${posY}px) scale(${clipScale * clipScaleX}, ${clipScale * clipScaleY}) rotate(${clipRotation}deg) ${renderedCSS.transformStr} ${tState.transform}`;
 
+                        const isImageOrFreeze = clip.isFreezeFrame || clip.type === 'image' || clip.type === 'freeze' || (clip.url && (clip.url.startsWith('data:image/') || clip.url.endsWith('.png') || clip.url.endsWith('.jpg') || clip.url.endsWith('.jpeg') || clip.url.endsWith('.webp')));
+
                         return (
                           <div
                             key={clip.id}
                             className="absolute inset-0 pointer-events-none"
                             style={{ display: tState.display ? 'block' : 'none', zIndex: tState.zIndex }}
                           >
-                            <video
-                              ref={(el) => {
-                                videoRefs.current[clip.id] = el;
-                                if (el) {
-                                  el.volume = Math.min(1, Math.max(0, volume));
-                                  el.muted = isMuted || !!mutedClips[clip.id];
-                                }
-                              }}
-                              src={clip.url}
-                              preload="auto"
-                              className="h-full w-full object-contain mx-auto pointer-events-none transition-all duration-150 absolute inset-0"
-                              style={{
-                                filter: finalFilterStr,
-                                opacity: finalOpacity,
-                                mixBlendMode: finalBlendMode,
-                                transform: finalTransform
-                              }}
-                              onTimeUpdate={() => handleTimeUpdate(clip.id)}
-                              onEnded={() => handleClipEnded(clip.id)}
-                            />
+                            {isImageOrFreeze ? (
+                              <img
+                                src={clip.url || clip.thumbnails?.[0]}
+                                alt={clip.name}
+                                className="h-full w-full object-contain mx-auto pointer-events-none transition-all duration-150 absolute inset-0"
+                                style={{
+                                  filter: finalFilterStr,
+                                  opacity: finalOpacity,
+                                  mixBlendMode: finalBlendMode,
+                                  transform: finalTransform
+                                }}
+                              />
+                            ) : (
+                              <video
+                                ref={(el) => {
+                                  videoRefs.current[clip.id] = el;
+                                  if (el) {
+                                    const isVideoMuted = isMuted || !!mutedClips[clip.id] || !!clip.isMuted || !!clip.isAudioDetached || !!clip.audioDetached || clip.embeddedAudioEnabled === false;
+                                    el.muted = isVideoMuted;
+                                    el.volume = isVideoMuted ? 0 : Math.min(1, Math.max(0, volume * (clip.volume ?? 1)));
+                                  }
+                                }}
+                                src={clip.url}
+                                preload="auto"
+                                className="h-full w-full object-contain mx-auto pointer-events-none transition-all duration-150 absolute inset-0"
+                                style={{
+                                  filter: finalFilterStr,
+                                  opacity: finalOpacity,
+                                  mixBlendMode: finalBlendMode,
+                                  transform: finalTransform
+                                }}
+                                onTimeUpdate={() => handleTimeUpdate(clip.id)}
+                                onEnded={() => handleClipEnded(clip.id)}
+                              />
+                            )}
                             {pipelineState.overlays.map((ov, idx) => (
                               <div
                                 key={ov.id || idx}
@@ -2886,62 +3114,7 @@ function EditorMainScreenContent() {
                   );
                 })()}
 
-                {/* Professional Bounding Box & Transform Handles when Selected */}
-                {isSelectedOnCanvas && activeMedia && (
-                  <div className="absolute inset-0 border-2 border-sky-400 pointer-events-none z-20 shadow-glow">
-                    {/* Top Rotation Handle */}
-                    <div
-                      className="absolute -top-7 left-1/2 -translate-x-1/2 h-5 w-5 rounded-full bg-sky-400 text-primary-foreground flex items-center justify-center cursor-grab pointer-events-auto shadow-md"
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                        beginTransaction('Rotate clip', getProjectState());
-                        setIsRotatingCanvas(true);
-                        setDragStart({ x: e.clientX, y: e.clientY });
-                      }}
-                      title="Rotate Video"
-                    >
-                      <RotateCcw className="h-3 w-3" />
-                    </div>
 
-                    {/* Corner Handles */}
-                    {['top-left', 'top-right', 'bottom-left', 'bottom-right'].map((corner) => (
-                      <div
-                        key={corner}
-                        className={`absolute h-3 w-3 bg-surface border-2 border-sky-400 rounded-sm pointer-events-auto cursor-nwse-resize shadow-md ${
-                          corner === 'top-left' ? '-top-1.5 -left-1.5' :
-                          corner === 'top-right' ? '-top-1.5 -right-1.5' :
-                          corner === 'bottom-left' ? '-bottom-1.5 -left-1.5' :
-                          '-bottom-1.5 -right-1.5'
-                        }`}
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          beginTransaction('Resize clip', getProjectState());
-                          setIsResizingCanvas(corner);
-                          setDragStart({ x: e.clientX, y: e.clientY });
-                        }}
-                      />
-                    ))}
-
-                    {/* Side Edge Handles */}
-                    {['top', 'bottom', 'left', 'right'].map((edge) => (
-                      <div
-                        key={edge}
-                        className={`absolute bg-surface border border-sky-400 rounded-sm pointer-events-auto ${
-                          edge === 'top' ? '-top-1 left-1/2 -translate-x-1/2 w-4 h-1.5 cursor-ns-resize' :
-                          edge === 'bottom' ? '-bottom-1 left-1/2 -translate-x-1/2 w-4 h-1.5 cursor-ns-resize' :
-                          edge === 'left' ? '-left-1 top-1/2 -translate-y-1/2 h-4 w-1.5 cursor-ew-resize' :
-                          '-right-1 top-1/2 -translate-y-1/2 h-4 w-1.5 cursor-ew-resize'
-                        }`}
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          beginTransaction('Resize clip', getProjectState());
-                          setIsResizingCanvas(edge);
-                          setDragStart({ x: e.clientX, y: e.clientY });
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
               </div>
 
 
@@ -3226,17 +3399,73 @@ function EditorMainScreenContent() {
 
                   {/* Tracks Row Grid Container */}
                   <div className="flex flex-col divide-y divide-white/5 flex-1">
-                    {/* Row 1: Music Track */}
+                    {/* Row 1: Audio Track */}
                     <div className="flex flex-row h-8 items-center bg-surface">
                       <div
                         className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
                         onClick={(e) => { e.stopPropagation(); setActiveTab('audio'); }}
                       >
                         <span className="text-sm">🎵</span>
-                        <span className="text-[10px] font-medium tracking-wide">Music</span>
+                        <span className="text-[10px] font-medium tracking-wide">Audio</span>
                       </div>
-                      <div className="relative flex-1 h-full border-b border-border">
-                        <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
+                      <div className="relative flex-1 h-full border-b border-border px-0 flex items-center">
+                        {timelineClips
+                          .filter((c) => c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio)
+                          .map((clip) => {
+                            const startSec = clip.timelineStart ?? clip.start ?? 0;
+                            const clipLeftPx = startSec * pxPerSec + 4;
+                            const clipWidthPx = Math.max(24, clip.duration * pxPerSec - 8);
+                            const isSelected = activeSelectedClipId ? clip.id === activeSelectedClipId : (activeMediaId === clip.id || activeMediaId === clip.mediaId);
+                            const isMuted = !!mutedClips[clip.id] || !!clip.isMuted;
+                            const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
+
+                            return (
+                              <div
+                                key={clip.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveSelectedClipId(clip.id);
+                                  setActiveMediaId(clip.mediaId || clip.id);
+                                  setIsSelectedOnCanvas(true);
+                                  handleSeek(startSec);
+                                }}
+                                className={`h-6 rounded border flex items-center overflow-hidden cursor-pointer absolute transition px-2 font-mono text-[9px] font-semibold gap-1.5 select-none top-1 ${
+                                  isSelected
+                                    ? 'border-emerald-400 ring-2 ring-emerald-400/50 bg-emerald-500/40 text-emerald-100 z-20 shadow-glow'
+                                    : 'border-emerald-500/40 bg-emerald-500/25 text-emerald-300 hover:border-emerald-400/70 z-10'
+                                } ${isMuted ? 'opacity-50 line-through border-dashed' : ''} ${
+                                  isLocked ? 'opacity-70 border-dashed border-amber-500/40' : ''
+                                }`}
+                                style={{ left: `${clipLeftPx}px`, width: `${clipWidthPx}px` }}
+                                title={`${clip.name} (${formatTimecode(clip.duration)})`}
+                              >
+                                {isSelected && !isLocked && (
+                                  <ClipTrimHandles
+                                    clipId={clip.id}
+                                    timelineStart={startSec}
+                                    sourceStart={clip.startOffset || 0}
+                                    duration={clip.duration}
+                                    maxSourceDuration={mediaFiles.find(m => m.id === clip.mediaId)?.duration || clip.baseDuration || clip.duration || Infinity}
+                                    pixelsPerSecond={pxPerSec}
+                                    playbackRate={clip.playbackRate || 1}
+                                    isLocked={isLocked}
+                                    onTrimStart={(edge) => beginTransaction(`Trim audio clip ${edge}`, getProjectState())}
+                                    onTrimUpdate={(newTimelineStart, newSourceStart, newDuration) => {
+                                      handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration);
+                                    }}
+                                    onTrimEnd={handleTrimCommit}
+                                  />
+                                )}
+                                <span className="text-[10px] flex-shrink-0">🎵</span>
+                                <span className="truncate flex-1">{clip.name}</span>
+                                <span className="text-[8px] opacity-80 flex-shrink-0">({formatTimecode(clip.duration)})</span>
+                                {isMuted && <VolumeX className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />}
+                              </div>
+                            );
+                          })}
+                        {timelineClips.filter((c) => c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio).length === 0 && (
+                          <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
+                        )}
                       </div>
                     </div>
 
@@ -3319,25 +3548,28 @@ function EditorMainScreenContent() {
                         <span className="text-[10px] font-medium tracking-wide">Video</span>
                       </div>
                       <div className="relative flex-1 h-full px-0 flex items-center">
-                        {timelineClips.reduce<React.ReactNode[]>((acc, clip, idx) => {
-                          const clipWidthPx = clip.duration * pxPerSec;
-                          const isFirst = idx === 0;
-                          const isLast = idx === timelineClips.length - 1;
+                        {timelineClips
+                          .filter((c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio)
+                          .reduce<React.ReactNode[]>((acc, clip, idx, videoClipsArray) => {
+                            const clipWidthPx = clip.duration * pxPerSec;
+                            const isFirst = idx === 0;
+                            const isLast = idx === videoClipsArray.length - 1;
                           const startGapPx = isFirst ? 4 : 16;
                           const endGapPx = isLast ? 4 : 16;
                           const clipLeftPx = clip.timelineStart * pxPerSec + startGapPx;
                           const clipComputedWidth = Math.max(12, clipWidthPx - (startGapPx + endGapPx));
 
                           const numThumbnails = Math.max(1, Math.floor(clipComputedWidth / 48));
-                          const isLocked = !!lockedClips[clip.id];
+                          const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
                           const isMuted = !!mutedClips[clip.id];
-                          const isSelected = clip.mediaId === activeMediaId;
+                          const isSelected = activeSelectedClipId ? clip.id === activeSelectedClipId : clip.mediaId === activeMediaId;
 
                           const clipEl = (
                             <div
                               key={clip.id}
                               onClick={(e) => {
                                 e.stopPropagation();
+                                setActiveSelectedClipId(clip.id);
                                 setActiveMediaId(clip.mediaId);
                                 setIsSelectedOnCanvas(true);
                                 handleSeek(clip.timelineStart);
@@ -3386,6 +3618,7 @@ function EditorMainScreenContent() {
                               <span className="px-2 font-mono text-[9px] text-foreground font-semibold truncate bg-black/80 py-0.5 rounded-l absolute right-2 bottom-1 pointer-events-none flex items-center gap-1">
                                 {isLocked && <Lock className="h-2.5 w-2.5 text-amber-400 flex-shrink-0" />}
                                 {isMuted && <VolumeX className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />}
+                                {clip.isReversed && <span className="text-sky-400 font-bold text-[9px] flex-shrink-0">⏪ Reversed</span>}
                                 {clip.name} ({formatTimecode(clip.duration)})
                               </span>
                             </div>
@@ -3393,8 +3626,8 @@ function EditorMainScreenContent() {
 
                           acc.push(clipEl);
 
-                          if (idx < timelineClips.length - 1) {
-                            const nextClip = timelineClips[idx + 1];
+                          if (idx < videoClipsArray.length - 1) {
+                            const nextClip = videoClipsArray[idx + 1];
                             const transitionId = clip.appliedTransition;
                             
                             acc.push(
@@ -3450,15 +3683,15 @@ function EditorMainScreenContent() {
 
         {/* BOTTOM ACTION PANEL */}
         <ClipActionsPanel 
-          clip={activeMediaId ? {
-            id: activeMediaId,
-            name: timelineClips.find(c => c.mediaId === activeMediaId)?.name || activeMediaId,
-            trackId: 'video'
+          clip={activeSelectedClip ? {
+            id: activeSelectedClip.id,
+            name: activeSelectedClip.name,
+            trackId: activeSelectedClip.trackId || 'video'
           } : null}
-          isLocked={!!lockedClips[timelineClips.find(c => c.mediaId === activeMediaId)?.id || '']}
-          isMuted={!!mutedClips[timelineClips.find(c => c.mediaId === activeMediaId)?.id || '']}
+          isLocked={!!(activeSelectedClip && (lockedClips[activeSelectedClip.id] || activeSelectedClip.isLocked))}
+          isMuted={!!(activeSelectedClip && (mutedClips[activeSelectedClip.id] || activeSelectedClip.isMuted))}
           hasClipboardPayload={hasClipboardPayload}
-          onAction={(actionId) => handleMenuAction(actionId, timelineClips.find(c => c.mediaId === activeMediaId)?.id || '')}
+          onAction={(actionId) => handleMenuAction(actionId, activeSelectedClip?.id || '')}
         />
       </footer>
 

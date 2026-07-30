@@ -21,7 +21,7 @@ export class ReverseManager {
     options: ReverseOptions = {},
     mediaSource?: File | Blob | string
   ): ReverseResult<T> {
-    const target = clips.find((c) => c.id === clipId || c.mediaId === clipId) || null;
+    const target = clips.find((c) => c.id === clipId) || null;
     const validation = isClipReversible(target);
 
     if (!validation.isValid) {

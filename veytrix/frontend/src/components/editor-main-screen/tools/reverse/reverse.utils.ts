@@ -21,8 +21,8 @@ export function calculateReversedSourceTime(clip: ReversibleClip, relativeTime: 
 }
 
 /**
- * Immutably toggle the isReversed flag on target clip.
- * Preserves all other clip properties (duration, trim, scale, rotation, keyframes, etc.).
+ * Immutably toggle the isReversed flag on target clip strictly by clip.id.
+ * Preserves all other clip references unchanged to prevent timeline flickering.
  */
 export function toggleClipReverseState<T extends ReversibleClip>(
   clips: T[],
@@ -32,7 +32,7 @@ export function toggleClipReverseState<T extends ReversibleClip>(
   let nextIsReversed = false;
 
   const updatedClips = clips.map((c) => {
-    if (c.id === clipId || c.mediaId === clipId) {
+    if (c.id === clipId) {
       nextIsReversed = !c.isReversed;
       targetClip = {
         ...c,
@@ -40,7 +40,7 @@ export function toggleClipReverseState<T extends ReversibleClip>(
       };
       return targetClip;
     }
-    return c;
+    return c; // Preserve exact object reference for all other clips
   });
 
   return { updatedClips, targetClip, nextIsReversed };

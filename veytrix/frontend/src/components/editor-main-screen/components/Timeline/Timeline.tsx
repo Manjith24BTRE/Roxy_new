@@ -9,6 +9,9 @@ import { useDuplicate } from '../../tools/duplicate';
 import { useCopyPaste } from '../../tools/copy-paste';
 import { useRename, RenameDialog } from '../../tools/rename';
 import { useReverse } from '../../tools/reverse';
+import { useDetach } from '../../tools/detach';
+import { useLock } from '../../tools/lock';
+import { useFreeze } from '../../tools/freeze';
 
 export interface TimelineClip {
   id: string;
@@ -17,6 +20,8 @@ export interface TimelineClip {
   duration: number; // in seconds
   trackId: 'video' | 'audio' | 'text' | 'effect';
   color: string;
+  isLocked?: boolean;
+  [key: string]: any;
 }
 
 export interface Marker {
@@ -120,6 +125,41 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
     showToast,
   });
 
+  const { detachAudio: detachTimelineAudio } = useDetach({
+    getClips: () => clips,
+    getSelectedClip: () => clips.find((c) => c.id === selectedClipId) || null,
+    onUpdateClips: (updatedClips) => {
+      updateHistory(updatedClips);
+    },
+    showToast,
+  });
+
+  const { toggleLock: toggleTimelineLock, validateCanEdit: validateTimelineEdit } = useLock({
+    getClips: () => clips,
+    getSelectedClipId: () => selectedClipId,
+    getPlayheadTime: () => currentTime,
+    getLockedClipsMap: () => lockedClips,
+    onUpdateClips: (updatedClips, updatedLockedMap) => {
+      if (updatedLockedMap) setLockedClips(updatedLockedMap);
+      updateHistory(updatedClips);
+    },
+    onUpdateLockedMap: (updatedLockedMap) => {
+      setLockedClips(updatedLockedMap);
+    },
+    showToast,
+  });
+
+  const { freezeFrame: freezeTimelineFrame } = useFreeze({
+    getClips: () => clips,
+    getSelectedClip: () => clips.find((c) => c.id === selectedClipId) || null,
+    getPlayheadTime: () => currentTime,
+    onUpdateClips: (updatedClips, createdFreezeId) => {
+      if (createdFreezeId) setSelectedClipId(createdFreezeId);
+      updateHistory(updatedClips);
+    },
+    showToast,
+  });
+
   const updateHistory = (newClips: TimelineClip[]) => {
     const updatedHistory = history.slice(0, historyIndex + 1);
     setHistory([...updatedHistory, newClips]);
@@ -147,8 +187,8 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
   const handleSplit = () => {
     if (!selectedClipId) return;
     const clip = clips.find((c) => c.id === selectedClipId);
-    if (!clip || lockedTracks[clip.trackId] || lockedClips[clip.id]) {
-      if (clip && lockedClips[clip.id]) showToast('Cannot edit: Clip is locked!');
+    if (!clip || lockedTracks[clip.trackId] || lockedClips[clip.id] || clip.isLocked) {
+      if (clip && (lockedClips[clip.id] || clip.isLocked)) showToast('This clip is locked. Unlock it to make changes.');
       return;
     }
 
@@ -156,14 +196,29 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
     if (currentTime > clip.start && currentTime < clip.start + clip.duration) {
       const firstPartDuration = currentTime - clip.start;
       const secondPartDuration = clip.start + clip.duration - currentTime;
+      const deepCloneArr = <T,>(arr?: T[]): T[] => arr ? JSON.parse(JSON.stringify(arr)) : [];
 
-      const firstPart: TimelineClip = { ...clip, duration: firstPartDuration };
+      const firstPart: TimelineClip = {
+        ...clip,
+        id: clip.id,
+        duration: firstPartDuration,
+        appliedEffects: deepCloneArr((clip as any).appliedEffects),
+        filters: deepCloneArr((clip as any).filters),
+        keyframes: deepCloneArr((clip as any).keyframes),
+        transitions: deepCloneArr((clip as any).transitions)
+      };
+      const secondPartId = `${clip.id}-split-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
       const secondPart: TimelineClip = {
         ...clip,
-        id: `${clip.id}-split-${Date.now()}`,
+        id: secondPartId,
         name: `${clip.name} (Split)`,
         start: currentTime,
-        duration: secondPartDuration
+        duration: secondPartDuration,
+        isLocked: false,
+        appliedEffects: deepCloneArr((clip as any).appliedEffects),
+        filters: deepCloneArr((clip as any).filters),
+        keyframes: deepCloneArr((clip as any).keyframes),
+        transitions: deepCloneArr((clip as any).transitions)
       };
 
       const updatedClips = clips.filter((c) => c.id !== clip.id).concat(firstPart, secondPart);
@@ -187,8 +242,8 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
   const handleDelete = () => {
     if (!selectedClipId) return;
     const clip = clips.find((c) => c.id === selectedClipId);
-    if (!clip || lockedTracks[clip.trackId] || lockedClips[clip.id]) {
-      if (clip && lockedClips[clip.id]) showToast('Cannot edit: Clip is locked!');
+    if (!clip || lockedTracks[clip.trackId] || lockedClips[clip.id] || clip.isLocked) {
+      if (clip && (lockedClips[clip.id] || clip.isLocked)) showToast('This clip is locked. Unlock it to make changes.');
       return;
     }
 
@@ -200,8 +255,8 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
   const handleRippleDelete = () => {
     if (!selectedClipId) return;
     const clip = clips.find((c) => c.id === selectedClipId);
-    if (!clip || lockedTracks[clip.trackId] || lockedClips[clip.id]) {
-      if (clip && lockedClips[clip.id]) showToast('Cannot edit: Clip is locked!');
+    if (!clip || lockedTracks[clip.trackId] || lockedClips[clip.id] || clip.isLocked) {
+      if (clip && (lockedClips[clip.id] || clip.isLocked)) showToast('This clip is locked. Unlock it to make changes.');
       return;
     }
 
@@ -322,12 +377,8 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
         }
         break;
       case 'lock':
-        setLockedClips({ ...lockedClips, [clipId]: true });
-        showToast(`Locked clip: ${clip.name}`);
-        break;
       case 'unlock':
-        setLockedClips({ ...lockedClips, [clipId]: false });
-        showToast(`Unlocked clip: ${clip.name}`);
+        toggleTimelineLock(clipId);
         break;
       case 'mute-audio':
         const isCurrentlyMuted = !!mutedClips[clipId];
@@ -360,19 +411,10 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
         if (sp) showToast(`Set speed multiplier of ${clip.name} to ${sp}`);
         break;
       case 'detach-audio':
-        const audioClip: TimelineClip = {
-          id: `detached-${Date.now()}`,
-          name: `Audio from ${clip.name}`,
-          start: clip.start,
-          duration: clip.duration,
-          trackId: 'audio',
-          color: 'bg-emerald-500/25 border-emerald-400/50 text-emerald-300'
-        };
-        updateHistory([...clips, audioClip]);
-        showToast(`Detached Audio track from ${clip.name}`);
+        detachTimelineAudio(clipId || clip?.id);
         break;
       case 'freeze-frame':
-        showToast(`Mock Action: Created freeze frame at playhead for ${clip.name}`);
+        freezeTimelineFrame(clipId || clip?.id);
         break;
       case 'replace-media':
         showToast(`Mock Action: Replacing assets for ${clip.name}...`);
