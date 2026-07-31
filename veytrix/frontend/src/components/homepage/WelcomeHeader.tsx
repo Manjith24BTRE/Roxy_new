@@ -2,8 +2,9 @@ import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export function WelcomeHeader() {
-  const { user } = useAuth();
-  const displayName = user?.displayName?.split(' ')[0] || 'Creator'; // Just first name if available
+  const { user, userProfile } = useAuth();
+  const rawName = userProfile?.display_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || 'Creator';
+  const displayName = rawName.split(' ')[0] || 'Creator';
 
   return (
     <div className="flex-shrink-0 py-4 md:py-6">
@@ -16,3 +17,4 @@ export function WelcomeHeader() {
     </div>
   );
 }
+

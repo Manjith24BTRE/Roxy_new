@@ -15,10 +15,14 @@ const NAV = [
 export function SiteHeader() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isSignedIn, signOut } = useAuth();
+  const { user, userProfile, isSignedIn, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+
+  const displayName = userProfile?.display_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || 'Creator';
+  const email = user?.email || '';
+  const avatarUrl = userProfile?.avatar_url || user?.user_metadata?.avatar_url || user?.user_metadata?.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0ea5e9&color=fff`;
 
   useEffect(() => {
     const handleScroll = () => {
@@ -91,8 +95,8 @@ export function SiteHeader() {
                 className="flex items-center gap-2.5 rounded-full bg-white px-2 py-1 border border-[#1D2B64]/10 hover:border-[#3B6CE7]/40 shadow-sm transition-colors"
               >
                 <img
-                  src={user!.avatarUrl}
-                  alt={user!.displayName}
+                  src={avatarUrl}
+                  alt={displayName}
                   className="h-8 w-8 rounded-full border border-[#3B6CE7]/20 object-cover"
                 />
               </button>
@@ -100,8 +104,8 @@ export function SiteHeader() {
               {showUserMenu && (
                 <div className="absolute right-0 mt-2 w-52 rounded-2xl bg-white border border-[#1D2B64]/10 shadow-xl py-2 z-50">
                   <div className="px-4 py-2 mb-2 border-b border-[#1D2B64]/5">
-                    <div className="text-sm font-semibold text-[#1D2B64] truncate">{user!.displayName}</div>
-                    <div className="text-[10px] text-[#1D2B64]/60 truncate">{user!.email}</div>
+                    <div className="text-sm font-semibold text-[#1D2B64] truncate">{displayName}</div>
+                    <div className="text-[10px] text-[#1D2B64]/60 truncate">{email}</div>
                   </div>
                   <Link
                     to="/home"
@@ -192,13 +196,13 @@ export function SiteHeader() {
               <>
                 <div className="flex items-center gap-3 px-4 py-2">
                   <img
-                    src={user!.avatarUrl}
-                    alt={user!.displayName}
+                    src={avatarUrl}
+                    alt={displayName}
                     className="h-10 w-10 rounded-full border border-[#3B6CE7]/20 object-cover"
                   />
                   <div>
-                    <div className="text-sm font-semibold text-[#1D2B64]">{user!.displayName}</div>
-                    <div className="text-xs text-[#1D2B64]/60">{user!.email}</div>
+                    <div className="text-sm font-semibold text-[#1D2B64]">{displayName}</div>
+                    <div className="text-xs text-[#1D2B64]/60">{email}</div>
                   </div>
                 </div>
                 <Link

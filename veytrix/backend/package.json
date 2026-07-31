@@ -1,16 +1,11 @@
 {
   "name": "veytrix-backend",
+  "version": "1.0.0",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "description": "VEYTRIX FastAPI Backend Service",
   "scripts": {
-    "dev": "echo 'TODO: dev server'",
-    "build": "tsc -b",
-    "start": "echo 'TODO: start server'"
-  },
-  "dependencies": {},
-  "devDependencies": {
-    "typescript": "^5.6.0",
-    "@types/node": "^22.0.0"
+    "dev": ".\\.venv\\Scripts\\python.exe main.py",
+    "start": ".\\.venv\\Scripts\\python.exe main.py",
+    "test": ".\\.venv\\Scripts\\pytest.exe"
   }
 }

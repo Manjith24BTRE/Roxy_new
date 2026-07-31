@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { VeytrixLogo } from '../VeytrixLogo';
 import { useProjectMedia } from '../../contexts/ProjectMediaContext';
+import { ExportCenter } from './components/ExportCenter/ExportCenter';
 
 // Quick AI Edit Imports
 import { AspectRatio } from './tools/aspect-ratio/AspectRatio';
@@ -65,6 +66,7 @@ function EditorMainScreenContent() {
   const [lockedClips, setLockedClipsState] = useState<Record<string, boolean>>({});
   const [mutedClips, setMutedClipsState] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<string | null>(null);
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -2294,6 +2296,7 @@ function EditorMainScreenContent() {
           <button
             type="button"
             className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-md bg-gradient-primary text-primary-foreground font-semibold shadow-glow hover:opacity-95 transition"
+            onClick={() => setIsExportOpen(true)}
           >
             <Download className="h-3.5 w-3.5" />
             <span>Export</span>
@@ -3755,6 +3758,14 @@ function EditorMainScreenContent() {
         currentName={renameCurrentName}
         onRename={confirmRename}
         onCancel={closeRename}
+      />
+
+      {/* EXPORT CENTER MODAL */}
+      <ExportCenter
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        projectId="current-project"
+        projectTitle="My Project"
       />
     </div>
   );

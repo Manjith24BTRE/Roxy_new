@@ -9,15 +9,15 @@ interface SidebarProfileProps {
 }
 
 export function SidebarProfile({ collapsed }: SidebarProfileProps) {
-  const { user, signOut } = useAuth();
+  const { user, userProfile, signOut } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const getInitials = (name?: string, email?: string) => {
-    if (name) return name.substring(0, 2).toUpperCase();
-    if (email) return email.substring(0, 2).toUpperCase();
-    return 'CR';
+    if (name && name.trim()) return name.substring(0, 2).toUpperCase();
+    if (email && email.trim()) return email.substring(0, 2).toUpperCase();
+    return 'VX';
   };
 
   useEffect(() => {
@@ -36,10 +36,10 @@ export function SidebarProfile({ collapsed }: SidebarProfileProps) {
     navigate('/');
   };
 
-  const currentUser = user || {
-    displayName: 'Google Demo',
-    email: 'googledemo@gmail.com',
-    avatarUrl: ''
+  const currentUser = {
+    displayName: userProfile?.display_name || user?.user_metadata?.full_name || user?.user_metadata?.name || 'Creator',
+    email: user?.email || 'No email',
+    avatarUrl: userProfile?.avatar_url || user?.user_metadata?.avatar_url || user?.user_metadata?.picture || '',
   };
 
   return (

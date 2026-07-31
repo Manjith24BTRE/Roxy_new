@@ -1,10 +1,13 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { User, Settings, HelpCircle, LogOut } from 'lucide-react';
-import { MockUser } from '../../../contexts/AuthContext';
+import { User as UserIcon, Settings, HelpCircle, LogOut } from 'lucide-react';
 
 interface ProfileMenuProps {
-  user: MockUser;
+  user: {
+    displayName?: string;
+    email?: string;
+    avatarUrl?: string;
+  };
   collapsed: boolean;
   onClose: () => void;
   onSignOut: () => void;
@@ -24,7 +27,7 @@ export function ProfileMenu({ user, collapsed, onClose, onSignOut }: ProfileMenu
     <div className={`absolute bottom-[calc(100%+8px)] bg-white rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.08)] border border-[#1D2B64]/10 py-1.5 z-50 ${collapsed ? 'left-3 w-48' : 'left-3 right-3'}`}>
       <div className="px-3 py-2 mb-1 border-b border-[#1D2B64]/5">
         <div className="text-sm font-semibold text-[#1D2B64] truncate">{user.displayName || 'Creator'}</div>
-        <div className="text-[10px] text-[#1D2B64]/60 truncate">{user.email}</div>
+        <div className="text-[10px] text-[#1D2B64]/60 truncate">{user.email || ''}</div>
       </div>
       
       <Link
@@ -32,7 +35,7 @@ export function ProfileMenu({ user, collapsed, onClose, onSignOut }: ProfileMenu
         onClick={onClose}
         className="flex items-center gap-2 px-3 py-2 text-sm text-[#1D2B64]/80 hover:bg-[#F8FBFD] hover:text-[#1D2B64] transition-colors"
       >
-        <User size={14} /> View Profile
+        <UserIcon size={14} /> View Profile
       </Link>
       <Link
         to="/settings"
