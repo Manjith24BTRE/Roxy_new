@@ -23,7 +23,8 @@ def mock_get_current_user():
 
 
 @pytest.fixture(autouse=True)
-def override_auth_and_credits():
+def override_auth_and_credits(monkeypatch):
+    monkeypatch.setattr("app.services.resource_monitor.resource_monitor.is_safe_for_new_render", lambda: (True, "Resources optimal"))
     app.dependency_overrides[get_current_user] = mock_get_current_user
     # Seed user credits with 500 balance
     now = utc_now()
@@ -38,6 +39,7 @@ def override_auth_and_credits():
     )
     yield
     app.dependency_overrides.clear()
+
 
 
 def test_ffmpeg_service_resolution_and_bitrate_parsing():

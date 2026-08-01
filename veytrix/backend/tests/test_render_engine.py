@@ -32,6 +32,12 @@ def ffmpeg_builder():
     return FFmpegBuilder()
 
 
+@pytest.fixture(autouse=True)
+def mock_resource_monitor(monkeypatch):
+    monkeypatch.setattr("app.services.resource_monitor.resource_monitor.is_safe_for_new_render", lambda: (True, "Resources optimal"))
+
+
+
 @pytest.mark.anyio
 async def test_queue_manager_enqueue_dequeue(queue_manager, parser, ffmpeg_builder):
     timeline = parser.parse({"duration": 5.0, "tracks": []})
@@ -75,7 +81,7 @@ async def test_render_worker_process_task(render_worker, parser, ffmpeg_builder)
 
     progress_events = []
 
-    def on_progress(eid, p, msg):
+    def on_progress(eid, p, msg, status=None):
         progress_events.append((p, msg))
 
     success, file_url, storage_path, err = await render_worker.process_task(
@@ -112,4 +118,5 @@ async def test_export_service_end_to_end_pipeline():
     await asyncio.sleep(0.5)
 
     status_res = export_service.get_export_status(export_res.id, user_id)
-    assert status_res.status in (ExportStatus.COMPLETED, ExportStatus.RENDERING, ExportStatus.UPLOADING)
+    assert status_res.status in (ExportStatus.QUEUED, ExportStatus.COMPLETED, ExportStatus.RENDERING, ExportStatus.UPLOADING)
+

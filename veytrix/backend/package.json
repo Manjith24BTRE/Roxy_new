@@ -4,8 +4,8 @@
   "private": true,
   "description": "VEYTRIX FastAPI Backend Service",
   "scripts": {
-    "dev": ".\\.venv\\Scripts\\python.exe main.py",
-    "start": ".\\.venv\\Scripts\\python.exe main.py",
-    "test": ".\\.venv\\Scripts\\pytest.exe"
+    "dev": "python main.py",
+    "start": "python main.py",
+    "test": "pytest"
   }
 }
