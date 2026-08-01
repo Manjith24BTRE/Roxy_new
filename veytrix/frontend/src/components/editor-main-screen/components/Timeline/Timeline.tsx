@@ -407,8 +407,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
         openRename(clipId || clip?.id, clip?.name);
         break;
       case 'speed':
-        const sp = prompt('Adjust speed factor (e.g. 0.5x, 2.0x):', '1.0');
-        if (sp) showToast(`Set speed multiplier of ${clip.name} to ${sp}`);
+        showToast(`Opened speed adjustment for ${clip.name}`);
         break;
       case 'detach-audio':
         detachTimelineAudio(clipId || clip?.id);

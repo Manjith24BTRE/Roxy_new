@@ -668,7 +668,7 @@ export function getInterpolatedEffectProps(effect: AppliedEffect, localTime: num
   }
 
   const sorted = [...effect.keyframes]
-    .filter((k) => k && k.properties)
+    .filter((k) => k && (k.properties || typeof (k as any).value === 'number'))
     .sort((a, b) => a.time - b.time);
 
   if (sorted.length === 0) {
@@ -678,27 +678,38 @@ export function getInterpolatedEffectProps(effect: AppliedEffect, localTime: num
   let prevKf = sorted[0];
   let nextKf = sorted[sorted.length - 1];
 
+  if (!prevKf) return defaults;
+
+  const extractProps = (kf: any) => {
+    if (!kf) return {};
+    if (kf.properties) return kf.properties;
+    if (kf.property && typeof kf.value === 'number') {
+      return { [kf.property]: kf.value };
+    }
+    return {};
+  };
+
   if (localTime <= prevKf.time) {
-    return { ...defaults, ...(prevKf.properties || {}) };
+    return { ...defaults, ...extractProps(prevKf) };
   }
-  if (localTime >= nextKf.time) {
-    return { ...defaults, ...(nextKf.properties || {}) };
+  if (nextKf && localTime >= nextKf.time) {
+    return { ...defaults, ...extractProps(nextKf) };
   }
 
   for (let i = 0; i < sorted.length - 1; i++) {
-    if (localTime >= sorted[i].time && localTime <= sorted[i + 1].time) {
+    if (sorted[i] && sorted[i + 1] && localTime >= sorted[i].time && localTime <= sorted[i + 1].time) {
       prevKf = sorted[i];
       nextKf = sorted[i + 1];
       break;
     }
   }
 
-  const duration = nextKf.time - prevKf.time;
+  const duration = (nextKf && prevKf) ? (nextKf.time - prevKf.time) : 0;
   const progress = duration > 0 ? (localTime - prevKf.time) / duration : 0;
   const lerp = (start: number, end: number) => start + (end - start) * progress;
 
-  const prevProps = prevKf.properties || {};
-  const nextProps = nextKf.properties || {};
+  const prevProps = extractProps(prevKf);
+  const nextProps = extractProps(nextKf);
 
   const interpolated: any = { ...defaults };
   const keys = new Set([...Object.keys(prevProps), ...Object.keys(nextProps)]);

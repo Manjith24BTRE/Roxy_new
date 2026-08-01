@@ -6,6 +6,8 @@ import { formatAudioDuration } from './audio.utils';
 interface AudioProps {
   volume: number;
   onVolumeChange: (vol: number) => void;
+  isMuted?: boolean;
+  onToggleMute?: () => void;
   onImportAudio?: (file: File) => void;
   onAddAudioToTimeline?: (assetId: string) => void;
   uploadedAssets?: AudioAsset[];
@@ -15,6 +17,8 @@ interface AudioProps {
 export function Audio({
   volume,
   onVolumeChange,
+  isMuted = false,
+  onToggleMute,
   onImportAudio,
   onAddAudioToTimeline,
   uploadedAssets = [],
@@ -201,23 +205,36 @@ export function Audio({
         <div className="space-y-2.5">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
             <span>Volume & Gain</span>
-            <span className="font-mono text-sky-400">{Math.round(volume * 100)}%</span>
+            <span className="font-mono text-sky-400">{isMuted ? 'Muted (0%)' : `${Math.round(volume * 100)}%`}</span>
           </div>
           <div className="flex items-center gap-3 bg-slate-900/40 border border-white/5 rounded-xl p-3">
             <button
               type="button"
-              onClick={() => onVolumeChange(volume === 0 ? 0.8 : 0)}
+              onClick={() => {
+                if (onToggleMute) {
+                  onToggleMute();
+                } else {
+                  onVolumeChange(volume === 0 ? 0.8 : 0);
+                }
+              }}
               className="text-slate-400 hover:text-white cursor-pointer transition"
+              title={isMuted ? 'Unmute' : 'Mute'}
             >
-              {volume === 0 ? <VolumeX className="h-4.5 w-4.5 text-red-400" /> : <Volume2 className="h-4.5 w-4.5" />}
+              {(isMuted || volume === 0) ? <VolumeX className="h-4.5 w-4.5 text-red-400" /> : <Volume2 className="h-4.5 w-4.5" />}
             </button>
             <input
               type="range"
               min="0"
               max="2"
               step="0.01"
-              value={volume}
-              onChange={(e) => onVolumeChange(Number(e.target.value))}
+              value={isMuted ? 0 : volume}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                onVolumeChange(v);
+                if (isMuted && onToggleMute) {
+                  onToggleMute();
+                }
+              }}
               className="flex-1 accent-sky-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
             />
           </div>

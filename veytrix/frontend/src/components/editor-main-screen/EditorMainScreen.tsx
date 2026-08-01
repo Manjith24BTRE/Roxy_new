@@ -34,6 +34,7 @@ import { useLock } from './tools/lock';
 import { useFreeze } from './tools/freeze';
 import { useAudio } from './tools/audio';
 
+
 // Context Menu
 import { ClipActionsPanel } from './clip-actions/ClipActionsPanel';
 import { ClipTrimHandles } from './trim/ClipTrimHandles';
@@ -473,24 +474,7 @@ function EditorMainScreenContent() {
   const handleAddKeyframeAtPlayhead = (clipId: string) => {
     const clip = timelineClips.find(c => c.id === clipId);
     if (!clip) return;
-    const relativePlayhead = currentTime - clip.timelineStart;
-
-    if (relativePlayhead >= 0 && relativePlayhead <= clip.duration) {
-      setTimelineClips((prev) =>
-        prev.map((c) => {
-          if (c.id === clipId) {
-            const newKeyframe = {
-              time: relativePlayhead,
-              properties: { opacity: 1, scale: 1, rotation: 0 }
-            };
-            const keyframes = c.keyframes ? [...c.keyframes, newKeyframe] : [newKeyframe];
-            return { ...c, keyframes };
-          }
-          return c;
-        })
-      );
-      showToast(`Keyframe added at ${currentTime.toFixed(2)}s`);
-    }
+    showToast(`Keyframe icon clicked for ${clip.name}`);
   };
 
   const handleAddAppliedEffect = (presetId: string) => {
@@ -1283,11 +1267,16 @@ function EditorMainScreenContent() {
       case 'unlock':
         toggleLock(clipId);
         break;
-      case 'mute-audio':
-        const isCurrentlyMuted = !!mutedClips[clipId];
-        setMutedClips({ ...mutedClips, [clipId]: !isCurrentlyMuted });
-        showToast(`${isCurrentlyMuted ? 'Unmuted' : 'Muted'} audio track of: ${clip.name}`);
+      case 'mute-audio': {
+        const isCurrentlyMuted = isMuted || (clipId ? !!mutedClips[clipId] : false);
+        const targetMuteState = !isCurrentlyMuted;
+        toggleMute();
+        if (clipId) {
+          setMutedClips({ ...mutedClips, [clipId]: targetMuteState });
+        }
+        showToast(`${targetMuteState ? 'Muted' : 'Unmuted'} audio${clip ? ` (${clip.name})` : ''}`);
         break;
+      }
       case 'reverse':
         toggleReverse(clipId);
         break;
@@ -1311,19 +1300,31 @@ function EditorMainScreenContent() {
       case 'rename':
         openRename(clipId || clip?.id, clip?.name);
         break;
-      case 'speed':
-        const sp = prompt('Adjust speed factor (e.g. 0.5x, 2.0x):', '1.0');
-        if (sp) showToast(`Set speed multiplier of ${clip.name} to ${sp}`);
+      case 'speed': {
+        const targetClip = timelineClips.find((c) => c.id === clipId || c.mediaId === activeMediaId) || clip || timelineClips[0];
+        if (targetClip) {
+          setActiveSelectedClipId(targetClip.id);
+          setActiveMediaId(targetClip.mediaId || targetClip.id);
+        }
+        setActiveTab('speed');
+        showToast(`Opened speed adjustment for ${targetClip ? targetClip.name : 'clip'}`);
         break;
+      }
       case 'detach-audio':
         detachAudio(clipId || clip?.id);
         break;
       case 'freeze-frame':
         freezeFrame(clipId || clip?.id);
         break;
-      case 'keyframes':
-        handleAddKeyframeAtPlayhead(clipId || clip?.id);
+      case 'keyframes': {
+        const targetClip = timelineClips.find((c) => c.id === clipId || c.mediaId === activeMediaId) || clip || timelineClips[0];
+        if (targetClip) {
+          setActiveSelectedClipId(targetClip.id);
+          setActiveMediaId(targetClip.mediaId || targetClip.id);
+        }
+        showToast(`Keyframe icon clicked for ${targetClip ? targetClip.name : 'clip'}`);
         break;
+      }
       case 'replace-media':
         const clipToReplace = timelineClips.find(c => c.id === clipId || c.mediaId === activeMediaId) || timelineClips[0];
         if (!clipToReplace) {
@@ -2416,6 +2417,8 @@ function EditorMainScreenContent() {
               <Audio
                 volume={volume}
                 onVolumeChange={setVolume}
+                isMuted={isMuted}
+                onToggleMute={toggleMute}
                 onImportAudio={(file) => importAudioFile(file)}
                 onAddAudioToTimeline={(assetId) => addAudioToTimeline(assetId)}
                 uploadedAssets={libraryAssets}
@@ -2483,7 +2486,7 @@ function EditorMainScreenContent() {
 
             {activeTab === 'speed' && (
               <SpeedTool
-                activeClip={timelineClips.find(c => c.mediaId === activeMediaId) || timelineClips[0] || null}
+                activeClip={activeSelectedClip || timelineClips.find(c => c.id === activeSelectedClipId || c.mediaId === activeMediaId) || timelineClips[0] || null}
                 onUpdateClipSpeed={handleUpdateClipSpeed}
                 onStartSpeedChange={(label) => beginTransaction(label, getProjectState())}
                 onEndSpeedChange={() => commitTransaction(getProjectState())}
@@ -2564,9 +2567,9 @@ function EditorMainScreenContent() {
                         let clipScaleY = 1;
                         let posX = 0;
                         let posY = 0;
-
                         let kfFilterStr = '';
                         let kfOpacityMultiplier = 1;
+                        let kfClipPathStr = 'none';
 
 
                         if (clip.appliedEffects && tState.display) {
@@ -2987,7 +2990,8 @@ function EditorMainScreenContent() {
                                   filter: finalFilterStr,
                                   opacity: finalOpacity,
                                   mixBlendMode: finalBlendMode,
-                                  transform: finalTransform
+                                  transform: finalTransform,
+                                  clipPath: kfClipPathStr !== 'none' ? kfClipPathStr : undefined
                                 }}
                               />
                             ) : (
@@ -3007,7 +3011,8 @@ function EditorMainScreenContent() {
                                   filter: finalFilterStr,
                                   opacity: finalOpacity,
                                   mixBlendMode: finalBlendMode,
-                                  transform: finalTransform
+                                  transform: finalTransform,
+                                  clipPath: kfClipPathStr !== 'none' ? kfClipPathStr : undefined
                                 }}
                                 onTimeUpdate={() => handleTimeUpdate(clip.id)}
                                 onEnded={() => handleClipEnded(clip.id)}
@@ -3159,8 +3164,8 @@ function EditorMainScreenContent() {
               <div className="flex items-center gap-4">
                 {/* Volume & Mute */}
                 <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <button type="button" onClick={toggleMute} className="hover:text-foreground transition">
-                    <Volume2 className={`h-4 w-4 ${isMuted ? 'text-red-400' : 'text-muted-foreground'}`} />
+                  <button type="button" onClick={toggleMute} className="hover:text-foreground transition" title={isMuted ? 'Unmute' : 'Mute'}>
+                    {isMuted ? <VolumeX className="h-4 w-4 text-red-400" /> : <Volume2 className="h-4 w-4 text-muted-foreground" />}
                   </button>
                   <input
                     type="range"
@@ -3692,7 +3697,7 @@ function EditorMainScreenContent() {
             trackId: activeSelectedClip.trackId || 'video'
           } : null}
           isLocked={!!(activeSelectedClip && (lockedClips[activeSelectedClip.id] || activeSelectedClip.isLocked))}
-          isMuted={!!(activeSelectedClip && (mutedClips[activeSelectedClip.id] || activeSelectedClip.isMuted))}
+          isMuted={isMuted || !!(activeSelectedClip && (mutedClips[activeSelectedClip.id] || activeSelectedClip.isMuted))}
           hasClipboardPayload={hasClipboardPayload}
           onAction={(actionId) => handleMenuAction(actionId, activeSelectedClip?.id || '')}
         />
