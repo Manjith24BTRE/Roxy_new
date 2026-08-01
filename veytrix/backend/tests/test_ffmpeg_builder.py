@@ -118,8 +118,8 @@ def test_effect_and_filter_builders():
         start_time=0.0,
         end_time=5.0,
         duration=5.0,
-        effect=EffectData(effect_id="fx-001", engine_key="glitch_v1", parameters={"radius": 12}),
-        filter=FilterData(filter_id="fl-001", intensity=0.9),
+        effect=EffectData(effect_id="blur-gaussian", engine_key="glitch_v1", parameters={"radius": 12}),
+        filter=FilterData(filter_id="hollywood-gold", intensity=0.9),
     )
 
     eff_str = EffectBuilder.build_effect_filter(clip_fx)

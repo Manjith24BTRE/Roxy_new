@@ -30,8 +30,8 @@ class EntitlementService:
 
         subscription = _subscriptions_store.get(u_id)
 
-        if not subscription and init_supabase_client():
-            client = init_supabase_client()
+        client = init_supabase_client()
+        if not subscription and client is not None:
             try:
                 res = client.table("subscriptions").select("*").eq("user_id", u_id).execute()
                 if res.data and len(res.data) > 0:
@@ -96,7 +96,12 @@ class EntitlementService:
         Effective Plan Resolver:
         Resolves the user's active entitlement plan. If subscription is expired,
         cancelled, or past due, falls back automatically to FREE.
+        If DEVELOPER_MODE is active, returns PREMIUM for unrestricted testing.
         """
+        from app.core.config import settings
+        if getattr(settings, "DEVELOPER_MODE", False):
+            return PlanType.PREMIUM
+
         sub = EntitlementService.get_user_subscription(user_id)
 
         if sub.status in (SubscriptionStatus.ACTIVE, SubscriptionStatus.PENDING):
@@ -114,6 +119,9 @@ class EntitlementService:
     @staticmethod
     def can_access_asset(user_id: UUID | str, required_plan: PlanType) -> bool:
         """Check if user's effective plan level satisfies asset's required plan tier."""
+        from app.core.config import settings
+        if getattr(settings, "DEVELOPER_MODE", False):
+            return True
         effective_plan = EntitlementService.get_effective_plan(user_id)
         user_level = PLAN_LEVELS.get(effective_plan, 0)
         required_level = PLAN_LEVELS.get(required_plan, 0)
@@ -122,6 +130,9 @@ class EntitlementService:
     @staticmethod
     def can_export_resolution(user_id: UUID | str, target_resolution: str) -> bool:
         """Check if user's effective plan supports rendering target resolution."""
+        from app.core.config import settings
+        if getattr(settings, "DEVELOPER_MODE", False):
+            return True
         config = EntitlementService.get_effective_plan_config(user_id)
         max_allowed_res = config.max_export
         user_max_level = RESOLUTION_LEVELS.get(max_allowed_res.lower(), 0)

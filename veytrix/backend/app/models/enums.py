@@ -32,7 +32,11 @@ class ExportStatus(str, Enum):
 
     PENDING = "pending"
     QUEUED = "queued"
+    PREPARING = "preparing"
+    PARSING = "parsing"
+    RESOLVING_ASSETS = "resolving_assets"
     RENDERING = "rendering"
+    ENCODING = "encoding"
     UPLOADING = "uploading"
     PROCESSING = "processing"
     COMPLETED = "completed"

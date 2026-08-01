@@ -12,9 +12,9 @@ class ResourceMonitor:
 
     def __init__(
         self,
-        max_cpu_percent: float = 90.0,
-        max_memory_percent: float = 85.0,
-        min_disk_free_gb: float = 2.0,
+        max_cpu_percent: float = 95.0,
+        max_memory_percent: float = 95.0,
+        min_disk_free_gb: float = 1.0,
     ):
         self.max_cpu_percent = max_cpu_percent
         self.max_memory_percent = max_memory_percent

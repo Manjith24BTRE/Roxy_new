@@ -52,7 +52,7 @@ class RenderTask:
 class QueueManager:
     """Production export rendering queue manager with priority sorting, recovery, cancellation, and concurrency control."""
 
-    def __init__(self, max_concurrent_renders: int = 4):
+    def __init__(self, max_concurrent_renders: int = 1):
         self._queue: List[RenderTask] = []
         self._active_tasks: Dict[UUID, RenderTask] = {}
         self._running_processes: Dict[UUID, asyncio.subprocess.Process] = {}
@@ -187,28 +187,19 @@ class RenderWorker:
                 return False, None, None, "Task cancelled before rendering"
 
             if progress_callback:
-                try:
-                    progress_callback(task.export_id, 10, "Preparing workspace & assets", ExportStatus.PROCESSING)
-                except TypeError:
-                    progress_callback(task.export_id, 10, "Preparing workspace & assets")
+                progress_callback(task.export_id, 10, "Preparing workspace & assets", ExportStatus.PROCESSING)
 
             # Step 1: Prepare command args
             cmd_args = list(task.render_graph.command_args)
             cmd_args[-1] = temp_output_path
 
             if progress_callback:
-                try:
-                    progress_callback(task.export_id, 25, "Rendering FFmpeg video graph", ExportStatus.RENDERING)
-                except TypeError:
-                    progress_callback(task.export_id, 25, "Rendering FFmpeg video graph")
+                progress_callback(task.export_id, 25, "Rendering FFmpeg video graph", ExportStatus.RENDERING)
 
             # Step 2: Execute FFmpeg CLI Command with process handle registration
             def emit_progress(p: int):
                 if progress_callback:
-                    try:
-                        progress_callback(task.export_id, min(90, 25 + int(p * 0.65)), "Encoding video frames", ExportStatus.RENDERING)
-                    except TypeError:
-                        progress_callback(task.export_id, min(90, 25 + int(p * 0.65)), "Encoding video frames")
+                    progress_callback(task.export_id, min(90, 25 + int(p * 0.65)), "Encoding video frames", ExportStatus.RENDERING)
 
             success = await self._execute_ffmpeg_command(
                 export_id=task.export_id,
@@ -226,10 +217,7 @@ class RenderWorker:
                 raise RuntimeError("FFmpeg rendering execution failed to produce output file.")
 
             if progress_callback:
-                try:
-                    progress_callback(task.export_id, 92, "Uploading rendered video to Supabase Storage", ExportStatus.UPLOADING)
-                except TypeError:
-                    progress_callback(task.export_id, 92, "Uploading rendered video to Supabase Storage")
+                progress_callback(task.export_id, 92, "Uploading rendered video to Supabase Storage", ExportStatus.UPLOADING)
 
             # Step 3: Upload completed video container to Supabase Storage
             storage_path = f"{task.user_id}/exports/{task.export_id}.{task.settings.format}"
@@ -244,10 +232,7 @@ class RenderWorker:
             file_size_bytes = Path(temp_output_path).stat().st_size if Path(temp_output_path).exists() else 0
 
             if progress_callback:
-                try:
-                    progress_callback(task.export_id, 100, "Export completed successfully", ExportStatus.COMPLETED)
-                except TypeError:
-                    progress_callback(task.export_id, 100, "Export completed successfully")
+                progress_callback(task.export_id, 100, "Export completed successfully", ExportStatus.COMPLETED)
 
             logger.info(f"RenderWorker completed export {task.export_id} in {render_duration:.2f}s ({file_size_bytes} bytes) -> {file_url}")
 

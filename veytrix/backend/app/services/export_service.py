@@ -22,6 +22,8 @@ from app.schemas.export import (
     ExportSettings,
     ExportStatusResponse,
 )
+from app.services.asset_resolver import AssetResolver
+from app.models.timeline import TimelineModel
 from app.services.credit_service import CreditService
 from app.services.entitlement_service import EntitlementService
 from app.services.ffmpeg_service import FFmpegService
@@ -50,6 +52,7 @@ class ExportService:
         project_service: Optional[ProjectService] = None,
         timeline_parser: Optional[TimelineParser] = None,
         ffmpeg_builder: Optional[FFmpegBuilder] = None,
+        asset_resolver: Optional[AssetResolver] = None,
         queue_manager: Optional[QueueManager] = None,
         render_worker: Optional[RenderWorker] = None,
     ):
@@ -59,6 +62,7 @@ class ExportService:
         self.credit_service = credit_service or CreditService()
         self.project_service = project_service or ProjectService()
         self.timeline_parser = timeline_parser or TimelineParser()
+        self.asset_resolver = asset_resolver or AssetResolver(entitlement_service=self.entitlement_service)
         self.ffmpeg_builder = ffmpeg_builder or FFmpegBuilder(entitlement_service=self.entitlement_service)
         self.queue_manager = queue_manager or _GLOBAL_QUEUE_MANAGER
         self.render_worker = render_worker or _GLOBAL_RENDER_WORKER
@@ -121,6 +125,10 @@ class ExportService:
 
     def _validate_export_entitlements(self, user_id: str, settings: ExportSettings) -> PlanType:
         """Validates user resolution limits and watermark removal permissions based on subscription plan."""
+        from app.core.config import settings as app_settings
+        if getattr(app_settings, "DEVELOPER_MODE", False):
+            return PlanType.PREMIUM
+
         user_plan = self.entitlement_service.get_effective_plan(user_id)
         plan_config = get_plan_config(user_plan)
         max_allowed_res = plan_config.max_export
@@ -144,6 +152,27 @@ class ExportService:
 
         return user_plan
 
+    def _validate_timeline_assets(self, timeline: TimelineModel, user_id: str) -> None:
+        """Validates that all timeline assets exist, are enabled, and user's plan is entitled."""
+        from app.core.config import settings as app_settings
+        if getattr(app_settings, "DEVELOPER_MODE", False):
+            return
+
+        stacks = self.asset_resolver.resolve_timeline_render_definitions(timeline, user_id)
+        for stack in stacks:
+            items = stack.effects + stack.filters + ([stack.transition] if stack.transition else [])
+            for item in items:
+                if not item.enabled:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Asset '{item.name}' ({item.id}) is currently disabled.",
+                    )
+                if not item.user_has_access:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Asset '{item.name}' ({item.id}) requires '{item.required_plan.value}' plan. Please upgrade to render.",
+                    )
+
     async def create_export(self, data: ExportCreate, user_id: str) -> ExportResponse:
         """Triggers a new export workflow: validates project, plan, credits, parses timeline, and enqueues FFmpeg rendering."""
         owner_id = UUID(user_id)
@@ -164,6 +193,9 @@ class ExportService:
             default_fps=data.settings.fps,
             default_aspect_ratio=data.settings.aspect_ratio,
         )
+
+        # Validate asset entitlements on timeline
+        self._validate_timeline_assets(normalized_timeline, user_id)
 
         # Validate subscription entitlements
         user_plan = self._validate_export_entitlements(user_id, data.settings)
@@ -485,6 +517,34 @@ class ExportService:
             expires_in_seconds=3600,
             file_name=f"export_{export_id}.{export_model.format}",
         )
+
+    @staticmethod
+    def recover_interrupted_jobs() -> int:
+        """Startup recovery: scans in-memory/persisted jobs and marks interrupted jobs as FAILED."""
+        recovered_count = 0
+        now = datetime.now(timezone.utc)
+        for export_id, export_model in _LOCAL_EXPORTS.items():
+            if export_model.status in (
+                ExportStatus.QUEUED,
+                ExportStatus.PREPARING,
+                ExportStatus.PARSING,
+                ExportStatus.RESOLVING_ASSETS,
+                ExportStatus.RENDERING,
+                ExportStatus.ENCODING,
+                ExportStatus.UPLOADING,
+                ExportStatus.PROCESSING,
+            ):
+                export_model.status = ExportStatus.FAILED
+                export_model.error_message = "Server restarted during export rendering. Please retry export."
+                export_model.updated_at = now
+                _EXPORT_PROGRESS[export_id] = 0
+                _EXPORT_STAGES[export_id] = "Interrupted by server restart"
+                recovered_count += 1
+
+        cleanup_orphaned_temp_files()
+        if recovered_count > 0:
+            logger.info(f"Startup recovery: marked {recovered_count} interrupted render jobs as FAILED.")
+        return recovered_count
 
     async def cancel_export_async(self, export_id: UUID, user_id: str) -> bool:
         """Cancels an in-progress export or deletes export record."""

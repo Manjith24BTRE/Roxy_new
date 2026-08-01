@@ -26,6 +26,11 @@ from app.middleware.exception_handler import (
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager for startup and shutdown events."""
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION} ({settings.ENVIRONMENT})")
+    try:
+        from app.services.export_service import ExportService
+        ExportService.recover_interrupted_jobs()
+    except Exception as exc:
+        logger.warning(f"Startup recovery notice: {exc}")
     yield
     logger.info(f"Shutting down {settings.APP_NAME}")
 

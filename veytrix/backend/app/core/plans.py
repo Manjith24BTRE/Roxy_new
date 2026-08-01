@@ -80,6 +80,9 @@ def get_plan_config(plan: PlanType) -> PlanConfig:
 
 def is_plan_sufficient(user_plan: PlanType, required_plan: PlanType) -> bool:
     """Checks whether user's plan meets or exceeds the required plan tier."""
+    from app.core.config import settings
+    if getattr(settings, "DEVELOPER_MODE", False):
+        return True
     user_level = PLAN_LEVELS.get(user_plan, 0)
     required_level = PLAN_LEVELS.get(required_plan, 0)
     return user_level >= required_level

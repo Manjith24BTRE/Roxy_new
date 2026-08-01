@@ -124,26 +124,26 @@ def test_list_assets_with_filters_and_pagination():
     assert len(data["assets"]) <= 2
 
 
-def test_list_effects_catalog_450_items():
-    """Test effects catalog returns 450 total items with entitlement flags."""
+def test_list_effects_catalog_641_items():
+    """Test effects catalog returns 641 total items with entitlement flags."""
     response = client.get("/assets/effects?page=1&limit=50")
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True
-    assert data["total"] == 450
+    assert data["total"] == 641
     assert len(data["items"]) == 50
     item = data["items"][0]
     assert item["type"] == "EFFECT"
     assert "user_has_access" in item
 
 
-def test_list_filters_catalog_200_items():
-    """Test filters catalog returns 200 total items."""
+def test_list_filters_catalog_214_items():
+    """Test filters catalog returns 214 total items."""
     response = client.get("/assets/filters?page=1&limit=20")
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True
-    assert data["total"] == 200
+    assert data["total"] == 214
     assert len(data["items"]) == 20
 
 

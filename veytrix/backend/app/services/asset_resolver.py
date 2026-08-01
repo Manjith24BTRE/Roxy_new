@@ -12,94 +12,60 @@ from app.services.asset_service import AssetService
 from app.services.entitlement_service import EntitlementService
 
 
-class RenderPlugin:
-    """Base class for plugin-based render definition generators."""
-
-    plugin_type: str = "generic"
-
-    def can_handle(self, engine_key: str, category: str) -> bool:
-        return True
-
-    def generate_render_definition(
-        self,
-        item_id: str,
-        name: str,
-        kind: RenderKind,
-        asset_type: AssetType,
-        engine_key: str,
-        category: str,
-        required_plan: PlanType,
-        enabled: bool,
-        user_has_access: bool,
-        parameters: Dict[str, Any],
-        metadata: Dict[str, Any],
-    ) -> RenderDefinition:
-        """Translates asset metadata into reusable RenderDefinition without executing FFmpeg."""
-        filter_chain: List[str] = []
-
-        if kind == RenderKind.EFFECT:
-            intensity = float(parameters.get("intensity", metadata.get("intensity", 0.8)))
-            preset = parameters.get("preset_id", metadata.get("preset_id", "default"))
-
-            if "glitch" in category.lower() or "glitch" in engine_key.lower():
-                filter_chain = [f"noise=alls={int(20 * intensity)}:allf=t+u", f"chromashift=cx={int(5 * intensity)}"]
-            elif "blur" in category.lower() or "blur" in engine_key.lower():
-                r = int(15 * intensity)
-                filter_chain = [f"boxblur={r}:{r}"]
-            elif "retro" in category.lower() or "vhs" in category.lower():
-                filter_chain = ["curves=vintage", f"eq=saturation={1.0 + (0.3 * intensity):.2f}"]
-            elif "cinematic" in category.lower():
-                filter_chain = [f"eq=contrast={1.0 + (0.2 * intensity):.2f}:saturation={1.0 + (0.1 * intensity):.2f}"]
-            else:
-                filter_chain = [f"eq=contrast={1.0 + (0.15 * intensity):.2f}:brightness=0.05"]
-
-        elif kind == RenderKind.FILTER:
-            intensity = float(parameters.get("intensity", 1.0))
-            if "warm" in category.lower():
-                filter_chain = [f"eq=gamma_r={1.0 + (0.2 * intensity):.2f}:saturation={1.0 + (0.3 * intensity):.2f}"]
-            elif "cool" in category.lower():
-                filter_chain = [f"eq=gamma_b={1.0 + (0.25 * intensity):.2f}:contrast={1.0 + (0.1 * intensity):.2f}"]
-            elif "monochrome" in category.lower():
-                filter_chain = [f"hue=s={1.0 - intensity:.2f}"]
-            else:
-                filter_chain = [f"eq=contrast={1.0 + (0.15 * intensity):.2f}"]
-
-        elif kind == RenderKind.TRANSITION:
-            duration = float(parameters.get("duration", metadata.get("default_duration_ms", 500) / 1000.0))
-            direction = str(parameters.get("direction", "left"))
-            filter_chain = [f"xfade=transition={category.lower().split()[0]}:duration={duration:.2f}"]
-
-        return RenderDefinition(
-            id=item_id,
-            name=name,
-            kind=kind,
-            asset_type=asset_type,
-            engine_key=engine_key,
-            category=category,
-            version=1,
-            required_plan=required_plan,
-            enabled=enabled,
-            parameters=parameters,
-            filter_chain=filter_chain,
-            layer_priority=10 if kind == RenderKind.EFFECT else (5 if kind == RenderKind.FILTER else 1),
-            user_has_access=user_has_access,
-            metadata=metadata,
-        )
+from app.services.renderers import (
+    AIRenderer,
+    AudioRenderer,
+    BasicRenderer,
+    BlurRenderer,
+    CameraRenderer,
+    CinematicRenderer,
+    FilterRenderer,
+    GlitchRenderer,
+    LightRenderer,
+    RenderPlugin,
+    RetroRenderer,
+    TextRenderer,
+    ThreeDRenderer,
+    TransitionRenderer,
+)
 
 
 class PluginRegistry:
     """Plugin registry for extending rendering definitions without modifying backend code."""
 
     def __init__(self):
-        self._plugins: List[RenderPlugin] = [RenderPlugin()]
+        self._plugins: List[RenderPlugin] = [
+            BlurRenderer(),
+            CameraRenderer(),
+            GlitchRenderer(),
+            CinematicRenderer(),
+            LightRenderer(),
+            RetroRenderer(),
+            ThreeDRenderer(),
+            FilterRenderer(),
+            TransitionRenderer(),
+            TextRenderer(),
+            AudioRenderer(),
+            AIRenderer(),
+            BasicRenderer(),
+            RenderPlugin(),
+        ]
 
     def register_plugin(self, plugin: RenderPlugin):
         self._plugins.insert(0, plugin)
 
-    def get_plugin(self, engine_key: str, category: str) -> RenderPlugin:
+    def get_plugin(self, engine_key: str, category: str, asset_type: Optional[AssetType] = None, item_id: str = "") -> RenderPlugin:
         for plugin in self._plugins:
-            if plugin.can_handle(engine_key, category):
-                return plugin
+            try:
+                if plugin.can_handle(engine_key, category, asset_type, item_id):
+                    return plugin
+            except TypeError:
+                try:
+                    if plugin.can_handle(engine_key, category, asset_type):
+                        return plugin
+                except TypeError:
+                    if plugin.can_handle(engine_key, category):
+                        return plugin
         return self._plugins[-1]
 
 
@@ -135,7 +101,7 @@ class AssetResolver:
 
         eff_id = effect_data.effect_id
         name = cat_item.name if cat_item else f"Effect {eff_id}"
-        engine_key = effect_data.engine_key or (cat_item.engine_key if cat_item else f"fx_{eff_id}")
+        engine_key = effect_data.engine_key or (cat_item.engine_key if cat_item else "")
         category = cat_item.category if cat_item else "General"
         required_plan = cat_item.required_plan if cat_item else effect_data.required_plan
         enabled = cat_item.enabled if cat_item else True
@@ -144,7 +110,7 @@ class AssetResolver:
         user_plan = self._get_user_plan(user_id)
         user_has_access = is_plan_sufficient(user_plan, required_plan)
 
-        plugin = self.plugin_registry.get_plugin(engine_key, category)
+        plugin = self.plugin_registry.get_plugin(engine_key, category, AssetType.EFFECT, item_id=eff_id)
         return plugin.generate_render_definition(
             item_id=eff_id,
             name=name,
@@ -165,7 +131,7 @@ class AssetResolver:
 
         filt_id = filter_data.filter_id
         name = cat_item.name if cat_item else f"Filter {filt_id}"
-        engine_key = cat_item.engine_key if cat_item else f"fl_{filt_id}"
+        engine_key = cat_item.engine_key if cat_item else ""
         category = cat_item.category if cat_item else "Color"
         required_plan = cat_item.required_plan if cat_item else PlanType.FREE
         enabled = cat_item.enabled if cat_item else True
@@ -177,7 +143,7 @@ class AssetResolver:
         params = dict(filter_data.parameters)
         params["intensity"] = filter_data.intensity
 
-        plugin = self.plugin_registry.get_plugin(engine_key, category)
+        plugin = self.plugin_registry.get_plugin(engine_key, category, AssetType.FILTER, item_id=filt_id)
         return plugin.generate_render_definition(
             item_id=filt_id,
             name=name,
@@ -198,7 +164,7 @@ class AssetResolver:
         cat_item = self._transitions_map.get(t_id)
 
         name = cat_item.name if cat_item else f"Transition {t_id}"
-        engine_key = cat_item.engine_key if cat_item else f"tr_{t_id}"
+        engine_key = cat_item.engine_key if cat_item else ""
         category = cat_item.category if cat_item else "Wipe"
         required_plan = cat_item.required_plan if cat_item else PlanType.FREE
         enabled = cat_item.enabled if cat_item else True
@@ -211,7 +177,7 @@ class AssetResolver:
         params["duration"] = transition_data.duration
         params["direction"] = transition_data.direction
 
-        plugin = self.plugin_registry.get_plugin(engine_key, category)
+        plugin = self.plugin_registry.get_plugin(engine_key, category, AssetType.TRANSITION, item_id=t_id)
         return plugin.generate_render_definition(
             item_id=t_id,
             name=name,
