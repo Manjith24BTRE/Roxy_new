@@ -6,12 +6,13 @@ import { validateAudioFile as validateAudio } from './validation';
 export interface UseAudioParams<T extends AudioClipRef = any> {
   getClips?: () => T[];
   getPlayheadTime?: () => number;
+  getSelectedClipId?: () => string | undefined;
   onUpdateClips?: (updatedClips: T[], createdClipId?: string) => void;
   showToast?: (message: string) => void;
 }
 
 export function useAudio<T extends AudioClipRef = any>(params: UseAudioParams<T> = {}) {
-  const { getClips, getPlayheadTime, onUpdateClips, showToast } = params;
+  const { getClips, getPlayheadTime, getSelectedClipId, onUpdateClips, showToast } = params;
   const [libraryAssets, setLibraryAssets] = useState<AudioAsset[]>(() => audioManager.getLibraryAssets());
 
   const refreshAssets = useCallback(() => {
@@ -35,11 +36,12 @@ export function useAudio<T extends AudioClipRef = any>(params: UseAudioParams<T>
   );
 
   const addAudioToTimeline = useCallback(
-    (assetId: string, customPlayheadTime?: number): T | null => {
+    (assetId: string, customPlayheadTime?: number, targetSelectedClipId?: string): T | null => {
       const clips = getClips ? getClips() : [];
       const playheadTime = customPlayheadTime ?? (getPlayheadTime ? getPlayheadTime() : 0);
+      const selectedClipId = targetSelectedClipId ?? (getSelectedClipId ? getSelectedClipId() : undefined);
 
-      const { updatedClips, createdClip } = audioManager.addAudioToTimeline(clips, assetId, playheadTime);
+      const { updatedClips, createdClip } = audioManager.addAudioToTimeline(clips, assetId, playheadTime, selectedClipId);
 
       if (createdClip && onUpdateClips) {
         onUpdateClips(updatedClips, createdClip.id);
@@ -50,7 +52,7 @@ export function useAudio<T extends AudioClipRef = any>(params: UseAudioParams<T>
 
       return createdClip;
     },
-    [getClips, getPlayheadTime, onUpdateClips, showToast]
+    [getClips, getPlayheadTime, getSelectedClipId, onUpdateClips, showToast]
   );
 
   const removeLibraryAsset = useCallback(

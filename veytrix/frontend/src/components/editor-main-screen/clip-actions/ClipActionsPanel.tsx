@@ -31,7 +31,7 @@ export function ClipActionsPanel({
 
   const isAudioEnabled = clip.trackId === 'video' || clip.trackId === 'audio';
 
-  // Action order: Duplicate, Split, Trim, Speed, Transition, Keyframes, Reverse, Freeze, Mute, Detach, Replace, Rename, Lock/Unlock, Delete
+  // Action order: Duplicate, Split, Trim, Speed, Transition, Keyframes, Reverse, Freeze, Mute, Extract, Replace, Rename, Lock/Unlock, Delete
   const toolbarItems = [
     { id: 'duplicate', label: 'Duplicate', icon: Copy, disabled: false, locked: isLocked },
     { id: 'split', label: 'Split', icon: Scissors, disabled: false, locked: isLocked },
@@ -42,7 +42,7 @@ export function ClipActionsPanel({
     { id: 'freeze-frame', label: 'Freeze', icon: Snowflake, disabled: clip.trackId !== 'video', locked: isLocked },
     { id: 'keyframes', label: 'Keyframe', icon: Key, disabled: false, locked: isLocked },
     { id: 'mute-audio', label: isMuted ? 'Unmute' : 'Mute', icon: VolumeX, disabled: !isAudioEnabled, active: isMuted, locked: isLocked },
-    { id: 'detach-audio', label: 'Detach', icon: Link2Off, disabled: clip.trackId !== 'video', locked: isLocked },
+    { id: 'extract-audio', label: 'Extract', icon: Link2Off, disabled: clip.trackId !== 'video', locked: isLocked },
     { id: 'replace-media', label: 'Replace', icon: Replace, disabled: false, locked: isLocked },
     { id: 'rename', label: 'Rename', icon: Edit3, disabled: false, locked: isLocked },
     isLocked 

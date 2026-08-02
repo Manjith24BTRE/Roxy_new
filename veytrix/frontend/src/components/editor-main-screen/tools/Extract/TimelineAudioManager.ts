@@ -26,13 +26,27 @@ export class TimelineAudioManager implements ITimelineAudioManager {
 
     const sourceVideo = clips[videoClipIndex];
 
+    const sourceStart = sourceVideo.timelineStart ?? (sourceVideo as any).start ?? 0;
+    const sourceDuration = sourceVideo.duration;
+
+    const alignedAudioClip: T = {
+      ...audioClip,
+      timelineStart: sourceStart,
+      start: sourceStart,
+      duration: sourceDuration,
+      baseDuration: sourceDuration,
+      startOffset: sourceVideo.startOffset ?? 0,
+      playbackRate: sourceVideo.playbackRate ?? sourceVideo.speed ?? 1,
+      speed: sourceVideo.playbackRate ?? sourceVideo.speed ?? 1,
+    };
+
     // Update source video clip to permanently disable its embedded audio during timeline playback & export
     const updatedSourceVideo: T = {
       ...sourceVideo,
       isAudioDetached: true,
       audioDetached: true,
       embeddedAudioEnabled: false,
-      detachedAudioId: audioClip.id,
+      detachedAudioId: alignedAudioClip.id,
       isMuted: true,
     };
 
@@ -41,7 +55,7 @@ export class TimelineAudioManager implements ITimelineAudioManager {
     updatedClips[videoClipIndex] = updatedSourceVideo;
 
     // Place detached audio clip in the timeline array
-    updatedClips.splice(videoClipIndex + 1, 0, audioClip);
+    updatedClips.splice(videoClipIndex + 1, 0, alignedAudioClip);
 
     return updatedClips;
   }

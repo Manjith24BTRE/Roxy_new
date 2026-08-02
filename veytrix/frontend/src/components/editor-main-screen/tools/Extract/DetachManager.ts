@@ -43,7 +43,7 @@ export class DetachManager implements IDetachManager {
     const clipIndex = clips.findIndex((c) => c.id === clipId);
 
     if (clipIndex === -1) {
-      if (showToast) showToast('Select a video clip to detach audio.');
+      if (showToast) showToast('Select a video clip to extract audio.');
       return null;
     }
 
@@ -78,6 +78,10 @@ export class DetachManager implements IDetachManager {
     // Async audio clip creation (FFmpeg extraction + waveform generation)
     const audioClip = await this.audioDetachService.createAudioClipFromVideoAsync(sourceClip, options);
     audioClip.trackId = 'audio';
+    audioClip.duration = sourceClip.duration;
+    audioClip.baseDuration = sourceClip.duration;
+    audioClip.timelineStart = sourceClip.timelineStart ?? (sourceClip as any).start ?? 0;
+    (audioClip as any).start = audioClip.timelineStart;
 
     // Place audio clip into timeline and disable video's internal audio
     const updatedClips = this.timelineAudioManager.placeAudioClip(
@@ -89,7 +93,7 @@ export class DetachManager implements IDetachManager {
     const updatedSourceClip = updatedClips.find((c) => c.id === sourceClip.id) || sourceClip;
 
     if (showToast) {
-      showToast(`Detached audio track from ${sourceClip.name}`);
+      showToast(`Extracted audio track from ${sourceClip.name}`);
     }
 
     return {
@@ -111,7 +115,7 @@ export class DetachManager implements IDetachManager {
     const clipIndex = clips.findIndex((c) => c.id === clipId);
 
     if (clipIndex === -1) {
-      if (showToast) showToast('Select a video clip to detach audio.');
+      if (showToast) showToast('Select a video clip to extract audio.');
       return null;
     }
 
@@ -144,6 +148,10 @@ export class DetachManager implements IDetachManager {
 
     const audioClip = this.audioDetachService.createAudioClipFromVideo(sourceClip, options);
     audioClip.trackId = 'audio';
+    audioClip.duration = sourceClip.duration;
+    audioClip.baseDuration = sourceClip.duration;
+    audioClip.timelineStart = sourceClip.timelineStart ?? (sourceClip as any).start ?? 0;
+    (audioClip as any).start = audioClip.timelineStart;
 
     const updatedClips = this.timelineAudioManager.placeAudioClip(
       clips,
@@ -154,7 +162,7 @@ export class DetachManager implements IDetachManager {
     const updatedSourceClip = updatedClips.find((c) => c.id === sourceClip.id) || sourceClip;
 
     if (showToast) {
-      showToast(`Detached audio track from ${sourceClip.name}`);
+      showToast(`Extracted audio track from ${sourceClip.name}`);
     }
 
     return {

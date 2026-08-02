@@ -22,7 +22,7 @@ export function useDetach(params: UseDetachParams = {}) {
 
       if (!targetId) {
         if (showToast) {
-          showToast('Select a video clip to detach audio.');
+          showToast('Select a video clip to extract audio.');
         }
         return null;
       }
@@ -72,6 +72,8 @@ export function useDetach(params: UseDetachParams = {}) {
   return {
     detachAudio,
     canDetachAudio,
+    extractAudio: detachAudio,
+    canExtractAudio: canDetachAudio,
     undoDetach,
     detachManager,
   };

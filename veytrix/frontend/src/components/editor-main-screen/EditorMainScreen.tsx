@@ -6,7 +6,7 @@ import {
   Wand2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   ZoomIn, ZoomOut, Scissors, Split, Plus, Search,
   FolderPlus, Maximize2, RotateCcw, Image as ImageIcon,
-  Languages, Crop, Lock, Unlock, Gauge, Replace
+  Languages, Crop, Lock, Unlock, Gauge, Replace, ArrowRightLeft, Sliders, Activity
 } from 'lucide-react';
 import { VeytrixLogo } from '../VeytrixLogo';
 import { useProjectMedia } from '../../contexts/ProjectMediaContext';
@@ -28,16 +28,41 @@ import { applyEffectPipeline, renderStateToCSS, createDefaultRenderState } from 
 import { useDuplicate } from './tools/duplicate';
 import { useRename, RenameDialog } from './tools/rename';
 import { useReverse, reversedAudioEngine } from './tools/reverse';
-import { useDetach } from './tools/detach';
+import { useDetach } from './tools/Extract';
 import { useLock } from './tools/lock';
 import { useFreeze } from './tools/freeze';
 import { useAudio } from './tools/audio';
+import {
+  KeyframeInspector,
+  KeyframeTimelineOverlay,
+  KeyframeButton,
+  KeyframeManager,
+  interpolateAllProperties,
+  interpolatePropertyValue,
+  hasKeyframeForProperty,
+  KeyframePoint,
+  KeyframeProperty,
+  InterpolationType
+} from './tools/keyframes';
 
 
 // Context Menu
 import { ClipActionsPanel } from './clip-actions/ClipActionsPanel';
 import { ClipTrimHandles } from './trim/ClipTrimHandles';
 import { EditorHistoryProvider, useEditorHistory, ProjectState } from './history';
+
+const getProjectTotalDuration = (clips: any[]): number => {
+  if (!clips || clips.length === 0) return 5;
+  const videoClips = clips.filter(
+    (c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio
+  );
+  const targetClips = videoClips.length > 0 ? videoClips : clips;
+  const maxEnd = targetClips.reduce((max, clip) => {
+    const startSec = clip.timelineStart ?? clip.start ?? 0;
+    return Math.max(max, startSec + (clip.duration || 0));
+  }, 0);
+  return Math.max(5, maxEnd);
+};
 
 export function EditorMainScreen() {
   return (
@@ -49,11 +74,27 @@ export function EditorMainScreen() {
 
 function EditorMainScreenContent() {
   const navigate = useNavigate();
-  const { mediaFiles, activeMediaId, setActiveMediaId } = useProjectMedia();
+  const { mediaFiles, activeMediaId, setActiveMediaId, addMediaFiles } = useProjectMedia();
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportButtonClick = () => {
+    importFileInputRef.current?.click();
+  };
+
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const filesArray = Array.from(e.target.files);
+      await addMediaFiles(filesArray);
+      showToast(`Imported ${filesArray.length} media file(s)`);
+      e.target.value = '';
+    }
+  };
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [activeTab, setActiveTab] = useState<'media' | 'ratio' | 'audio' | 'text' | 'captions' | 'effects' | 'speed' | 'replace'>('media');
+  const [activeTab, setActiveTab] = useState<'media' | 'ratio' | 'audio' | 'text' | 'captions' | 'effects' | 'transitions' | 'filters' | 'speed' | 'replace' | 'keyframes'>('media');
+  const [autoKeyframeEnabled, setAutoKeyframeEnabled] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(120);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -103,8 +144,8 @@ function EditorMainScreenContent() {
   const activeSelectedClip = activeSelectedClipId
     ? (timelineClips.find(c => c.id === activeSelectedClipId) || null)
     : (activeMediaId
-        ? (timelineClips.find(c => c.id === activeMediaId || c.mediaId === activeMediaId) || null)
-        : null);
+      ? (timelineClips.find(c => c.id === activeMediaId || c.mediaId === activeMediaId) || null)
+      : null);
   const activeClipLocalTime = activeSelectedClip ? Math.max(0, currentTime - activeSelectedClip.timelineStart) : 0;
 
   // Reverse hook initialization
@@ -127,7 +168,7 @@ function EditorMainScreenContent() {
 
         const mediaSource = getClipMediaSource(targetClip);
         if (targetClip.isReversed && mediaSource) {
-          reversedAudioEngine.loadAndReverseAudio(targetClip.id, mediaSource).catch(() => {});
+          reversedAudioEngine.loadAndReverseAudio(targetClip.id, mediaSource).catch(() => { });
         } else {
           reversedAudioEngine.stopReversedAudio();
         }
@@ -137,7 +178,7 @@ function EditorMainScreenContent() {
           try {
             vEl.load();
             vEl.currentTime = timelineTimeToSourceTime(targetClip, currentTime);
-          } catch {}
+          } catch { }
         }
       }
 
@@ -213,6 +254,7 @@ function EditorMainScreenContent() {
   const { libraryAssets, importAudioFile, addAudioToTimeline, removeLibraryAsset } = useAudio({
     getClips: () => timelineClips,
     getPlayheadTime: () => currentTime,
+    getSelectedClipId: () => activeSelectedClipId || activeSelectedClip?.id,
     onUpdateClips: (updatedClips, createdAudioId) => {
       beginTransaction('Add Audio to Timeline', getProjectState());
       setTimelineClips(updatedClips);
@@ -472,8 +514,8 @@ function EditorMainScreenContent() {
     if (!preset) return;
 
     const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
-    const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) || 
-                       (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
+    const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
+      (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
 
     if (activeClip) {
       const existingEffect = activeClip.appliedEffects?.find(
@@ -548,7 +590,7 @@ function EditorMainScreenContent() {
     setTimelineClips((prev) =>
       prev.map((c) => {
         if (c.id === clipId) {
-          const appliedEffects = c.appliedEffects ? c.appliedEffects.map((e: any) => 
+          const appliedEffects = c.appliedEffects ? c.appliedEffects.map((e: any) =>
             e.id === effectId ? { ...e, enabled: !e.enabled } : e
           ) : [];
           return { ...c, appliedEffects };
@@ -562,7 +604,7 @@ function EditorMainScreenContent() {
     setTimelineClips((prev) =>
       prev.map((c) => {
         if (c.id === clipId) {
-          const appliedEffects = c.appliedEffects ? c.appliedEffects.map((e: any) => 
+          const appliedEffects = c.appliedEffects ? c.appliedEffects.map((e: any) =>
             e.id === effectId ? { ...e, ...updates } : e
           ) : [];
           return { ...c, appliedEffects };
@@ -736,13 +778,13 @@ function EditorMainScreenContent() {
             startOffset: 0,
             timelineStart: 0
           }));
-        
+
         const reflowed = recalculateSequence([...prev, ...newClips]);
-        
+
         if (isLoadedRef.current && newClips.length > 0) {
           commitStateChange('Import clip', beforeState, { ...beforeState, timelineClips: reflowed });
         }
-        
+
         return reflowed;
       });
       isLoadedRef.current = true;
@@ -1291,6 +1333,7 @@ function EditorMainScreenContent() {
         showToast(`Opened speed adjustment for ${targetClip ? targetClip.name : 'clip'}`);
         break;
       }
+      case 'extract-audio':
       case 'detach-audio':
         detachAudio(clipId || clip?.id);
         break;
@@ -1303,7 +1346,8 @@ function EditorMainScreenContent() {
           setActiveSelectedClipId(targetClip.id);
           setActiveMediaId(targetClip.mediaId || targetClip.id);
         }
-        showToast(`Keyframe icon clicked for ${targetClip ? targetClip.name : 'clip'}`);
+        setActiveTab('keyframes');
+        showToast(`Keyframe inspector opened for ${targetClip ? targetClip.name : 'clip'}`);
         break;
       }
       case 'replace-media':
@@ -1414,38 +1458,45 @@ function EditorMainScreenContent() {
 
   // Keyframe interpolation handler
   useEffect(() => {
-    const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
-    const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) || 
-                       (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
+    const totalDur = getProjectTotalDuration(timelineClips);
+    const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
+      (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
     if (activeClip && activeClip.keyframes && activeClip.keyframes.length > 0) {
-      const localTime = (currentTime - activeClip.timelineStart) + activeClip.startOffset;
-      const sorted = [...activeClip.keyframes].sort((a, b) => a.time - b.time);
-      
-      let prevKf = sorted[0];
-      let nextKf = sorted[sorted.length - 1];
-      
-      for (let i = 0; i < sorted.length; i++) {
-        if (sorted[i].time <= localTime) {
-          prevKf = sorted[i];
+      const localTime = (currentTime - activeClip.timelineStart) + (activeClip.startOffset || 0);
+
+      // Filter legacy keyframes containing a .properties object
+      const legacyKeyframes = activeClip.keyframes.filter((k: any) => k && k.properties);
+      if (legacyKeyframes.length > 0) {
+        const sorted = [...legacyKeyframes].sort((a, b) => a.time - b.time);
+
+        let prevKf = sorted[0];
+        let nextKf = sorted[sorted.length - 1];
+
+        for (let i = 0; i < sorted.length; i++) {
+          if (sorted[i].time <= localTime) {
+            prevKf = sorted[i];
+          }
+          if (sorted[i].time >= localTime) {
+            nextKf = sorted[i];
+            break;
+          }
         }
-        if (sorted[i].time >= localTime) {
-          nextKf = sorted[i];
-          break;
-        }
-      }
-      
-      if (prevKf.id === nextKf.id || prevKf.time === nextKf.time) {
-        if (prevKf.properties.scale !== undefined) setCanvasScale(prevKf.properties.scale);
-        if (prevKf.properties.rotation !== undefined) setCanvasRotation(prevKf.properties.rotation);
-      } else {
-        const progress = (localTime - prevKf.time) / (nextKf.time - prevKf.time);
-        const lerp = (start: number, end: number) => start + (end - start) * progress;
-        
-        if (prevKf.properties.scale !== undefined && nextKf.properties.scale !== undefined) {
-          setCanvasScale(lerp(prevKf.properties.scale, nextKf.properties.scale));
-        }
-        if (prevKf.properties.rotation !== undefined && nextKf.properties.rotation !== undefined) {
-          setCanvasRotation(lerp(prevKf.properties.rotation, nextKf.properties.rotation));
+
+        if (prevKf && prevKf.properties) {
+          if (prevKf.id === nextKf?.id || prevKf.time === nextKf?.time) {
+            if (prevKf.properties.scale !== undefined) setCanvasScale(prevKf.properties.scale);
+            if (prevKf.properties.rotation !== undefined) setCanvasRotation(prevKf.properties.rotation);
+          } else if (nextKf && nextKf.properties) {
+            const progress = (localTime - prevKf.time) / (nextKf.time - prevKf.time);
+            const lerp = (start: number, end: number) => start + (end - start) * progress;
+
+            if (prevKf.properties.scale !== undefined && nextKf.properties.scale !== undefined) {
+              setCanvasScale(lerp(prevKf.properties.scale, nextKf.properties.scale));
+            }
+            if (prevKf.properties.rotation !== undefined && nextKf.properties.rotation !== undefined) {
+              setCanvasRotation(lerp(prevKf.properties.rotation, nextKf.properties.rotation));
+            }
+          }
         }
       }
     }
@@ -1476,21 +1527,24 @@ function EditorMainScreenContent() {
   };
 
   const handleClipEnded = (clipId: string) => {
-    const clip = timelineClips.find((c) => c.id === clipId);
-    const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
-    const activeClip = timelineClips.find(
+    const videoClipsOnly = timelineClips.filter(
+      (c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio
+    );
+    const clip = videoClipsOnly.find((c) => c.id === clipId);
+    const totalDur = timelineClips.reduce((acc, c) => Math.max(acc, (c.timelineStart ?? c.start ?? 0) + c.duration), 0) || 5;
+    const activeClip = videoClipsOnly.find(
       (c) => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration
-    ) || timelineClips[0];
+    ) || videoClipsOnly[0];
 
     if (clip && activeClip?.id === clip.id) {
-      const currentClipIndex = timelineClips.findIndex((c) => c.id === clip.id);
-      if (currentClipIndex !== -1 && currentClipIndex < timelineClips.length - 1) {
-        const nextClip = timelineClips[currentClipIndex + 1];
+      const currentClipIndex = videoClipsOnly.findIndex((c) => c.id === clip.id);
+      if (currentClipIndex !== -1 && currentClipIndex < videoClipsOnly.length - 1) {
+        const nextClip = videoClipsOnly[currentClipIndex + 1];
         const nextVideo = videoRefs.current[nextClip.id];
         if (nextVideo) {
           nextVideo.currentTime = nextClip.startOffset;
           if (isPlaying) {
-            nextVideo.play().catch(() => {});
+            nextVideo.play().catch(() => { });
           }
         }
         setActiveMediaId(nextClip.mediaId);
@@ -1498,7 +1552,9 @@ function EditorMainScreenContent() {
       } else {
         // Last clip ended
         setIsPlaying(false);
+        currentTimeRef.current = totalDur;
         setCurrentTime(totalDur);
+        syncAudioClips(totalDur, false);
         showToast('Video playback completed');
       }
     }
@@ -1515,6 +1571,54 @@ function EditorMainScreenContent() {
     }
   }, [isPlaying]);
 
+  const syncAudioClips = useCallback((targetTime: number, isPlayingNow: boolean) => {
+    timelineClips.forEach((clip) => {
+      if (clip.trackId === 'audio' || clip.trackId === 'music' || clip.type === 'audio' || clip.isDetachedAudio) {
+        const audioEl = audioRefs.current[clip.id];
+        if (!audioEl) return;
+
+        const clipStart = clip.timelineStart ?? clip.start ?? 0;
+        const clipRelTime = Math.max(0, targetTime - clipStart);
+        let kfVolume = 1;
+        if (hasKeyframeForProperty(clip.keyframes, 'volume')) {
+          kfVolume = interpolatePropertyValue(clip.keyframes, 'volume', clipRelTime, 1);
+        }
+
+        const isClipMuted = isMuted || !!mutedClips[clip.id] || !!clip.isMuted;
+        audioEl.muted = isClipMuted;
+        audioEl.volume = isClipMuted ? 0 : Math.min(1, Math.max(0, volume * (clip.volume ?? 1) * kfVolume));
+        audioEl.playbackRate = clip.playbackRate || clip.speed || 1;
+
+        const clipEnd = clipStart + clip.duration;
+        const isInside = targetTime >= clipStart && targetTime < clipEnd;
+
+        if (isInside && isPlayingNow) {
+          const expectedLocalTime = (targetTime - clipStart) * (clip.playbackRate || 1) + (clip.startOffset || 0);
+          if (audioEl.paused) {
+            audioEl.currentTime = expectedLocalTime;
+            audioEl.play().catch(() => { });
+          } else if (Math.abs(audioEl.currentTime - expectedLocalTime) > 0.25) {
+            audioEl.currentTime = expectedLocalTime;
+          }
+        } else {
+          if (!audioEl.paused) {
+            audioEl.pause();
+          }
+          if (isInside) {
+            const expectedLocalTime = (targetTime - clipStart) * (clip.playbackRate || 1) + (clip.startOffset || 0);
+            if (Math.abs(audioEl.currentTime - expectedLocalTime) > 0.05) {
+              audioEl.currentTime = expectedLocalTime;
+            }
+          }
+        }
+      }
+    });
+  }, [timelineClips, isMuted, mutedClips, volume]);
+
+  useEffect(() => {
+    syncAudioClips(currentTime, isPlaying);
+  }, [volume, isMuted, mutedClips, syncAudioClips, currentTime, isPlaying]);
+
   // Smooth 60 FPS playhead tracking and auto-follow scrolling loop
   useEffect(() => {
     let animationFrameId: number;
@@ -1525,12 +1629,16 @@ function EditorMainScreenContent() {
       lastTime = now;
 
       if (isPlaying) {
-        const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
+        const totalDur = timelineClips.reduce((acc, c) => Math.max(acc, (c.timelineStart ?? c.start ?? 0) + c.duration), 0) || 5;
         const curTime = currentTimeRef.current;
 
-        const activeClip = timelineClips.find(
+        const videoClipsOnly = timelineClips.filter(
+          (c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio
+        );
+
+        const activeClip = videoClipsOnly.find(
           (c) => curTime >= c.timelineStart && curTime < c.timelineStart + c.duration
-        ) || (curTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
+        ) || (curTime >= totalDur ? videoClipsOnly[videoClipsOnly.length - 1] : videoClipsOnly[0]);
 
         if (activeClip) {
           const video = videoRefs.current[activeClip.id];
@@ -1561,6 +1669,7 @@ function EditorMainScreenContent() {
               setIsPlaying(false);
               currentTimeRef.current = totalDur;
               setCurrentTime(totalDur);
+              syncAudioClips(totalDur, false);
               if (video) video.pause();
               reversedAudioEngine.stopReversedAudio();
               showToast('Video playback completed');
@@ -1569,6 +1678,7 @@ function EditorMainScreenContent() {
 
             currentTimeRef.current = nextTime;
             setCurrentTime(nextTime);
+            syncAudioClips(nextTime, true);
 
             if (video && !video.seeking) {
               const targetSourceTime = timelineTimeToSourceTime(activeClip, nextTime);
@@ -1609,12 +1719,14 @@ function EditorMainScreenContent() {
                 setIsPlaying(false);
                 currentTimeRef.current = totalDur;
                 setCurrentTime(totalDur);
+                syncAudioClips(totalDur, false);
                 showToast('Video playback completed');
                 return;
               }
 
               currentTimeRef.current = nextTime;
               setCurrentTime(nextTime);
+              syncAudioClips(nextTime, true);
 
               if (timelineScrollRef.current) {
                 const pxPerSec = (zoomLevel / 100) * 35;
@@ -1622,21 +1734,27 @@ function EditorMainScreenContent() {
               }
 
               if (nextTime >= activeClip.timelineStart + activeClip.duration) {
-                const currentClipIndex = timelineClips.findIndex((c) => c.id === activeClip.id);
-                if (currentClipIndex !== -1 && currentClipIndex < timelineClips.length - 1) {
-                  const nextClip = timelineClips[currentClipIndex + 1];
+                const currentClipIndex = videoClipsOnly.findIndex((c) => c.id === activeClip.id);
+                if (currentClipIndex !== -1 && currentClipIndex < videoClipsOnly.length - 1) {
+                  const nextClip = videoClipsOnly[currentClipIndex + 1];
                   const nextVideo = videoRefs.current[nextClip.id];
                   if (nextVideo) {
                     const nextTarget = timelineTimeToSourceTime(nextClip, nextClip.timelineStart);
                     nextVideo.currentTime = nextTarget;
                     if (!nextClip.isReversed && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
-                      nextVideo.play().catch(() => {});
+                      nextVideo.play().catch(() => { });
                     }
                   }
                   setActiveSelectedClipId(nextClip.id);
                   setActiveMediaId(nextClip.mediaId);
                   currentTimeRef.current = nextClip.timelineStart;
                   setCurrentTime(nextClip.timelineStart);
+                } else {
+                  setIsPlaying(false);
+                  currentTimeRef.current = totalDur;
+                  setCurrentTime(totalDur);
+                  syncAudioClips(totalDur, false);
+                  showToast('Video playback completed');
                 }
               }
             } else if (video) {
@@ -1649,11 +1767,12 @@ function EditorMainScreenContent() {
                 });
                 const targetLocalTime = timelineTimeToSourceTime(activeClip, curTime);
                 video.currentTime = targetLocalTime;
-                video.play().catch(() => {});
+                video.play().catch(() => { });
               } else if (!video.seeking) {
                 const absoluteTime = sourceTimeToTimelineTime(activeClip, video.currentTime);
                 currentTimeRef.current = absoluteTime;
                 setCurrentTime(absoluteTime);
+                syncAudioClips(absoluteTime, true);
 
                 if (timelineScrollRef.current) {
                   const pxPerSec = (zoomLevel / 100) * 35;
@@ -1665,27 +1784,35 @@ function EditorMainScreenContent() {
                   setIsPlaying(false);
                   currentTimeRef.current = totalDur;
                   setCurrentTime(totalDur);
+                  syncAudioClips(totalDur, false);
                   showToast('Video playback completed');
                   return;
                 }
 
                 if (absoluteTime >= activeClip.timelineStart + activeClip.duration) {
-                  const currentClipIndex = timelineClips.findIndex((c) => c.id === activeClip.id);
-                  if (currentClipIndex !== -1 && currentClipIndex < timelineClips.length - 1) {
-                    const nextClip = timelineClips[currentClipIndex + 1];
+                  const currentClipIndex = videoClipsOnly.findIndex((c) => c.id === activeClip.id);
+                  if (currentClipIndex !== -1 && currentClipIndex < videoClipsOnly.length - 1) {
+                    const nextClip = videoClipsOnly[currentClipIndex + 1];
                     const nextVideo = videoRefs.current[nextClip.id];
                     video.pause();
                     if (nextVideo) {
                       const nextTarget = timelineTimeToSourceTime(nextClip, nextClip.timelineStart);
                       nextVideo.currentTime = nextTarget;
                       if (!nextClip.isReversed && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
-                        nextVideo.play().catch(() => {});
+                        nextVideo.play().catch(() => { });
                       }
                     }
                     setActiveSelectedClipId(nextClip.id);
                     setActiveMediaId(nextClip.mediaId);
                     currentTimeRef.current = nextClip.timelineStart;
                     setCurrentTime(nextClip.timelineStart);
+                  } else {
+                    video.pause();
+                    setIsPlaying(false);
+                    currentTimeRef.current = totalDur;
+                    setCurrentTime(totalDur);
+                    syncAudioClips(totalDur, false);
+                    showToast('Video playback completed');
                   }
                 }
               }
@@ -1702,13 +1829,14 @@ function EditorMainScreenContent() {
       animationFrameId = requestAnimationFrame(updateLoop);
     } else {
       reversedAudioEngine.stopReversedAudio();
+      syncAudioClips(currentTimeRef.current, false);
     }
 
     return () => {
       cancelAnimationFrame(animationFrameId);
       reversedAudioEngine.stopReversedAudio();
     };
-  }, [isPlaying, timelineClips, zoomLevel, setActiveMediaId]);
+  }, [isPlaying, timelineClips, zoomLevel, setActiveMediaId, syncAudioClips]);
 
   const getClipMediaSource = (clip: any): File | Blob | string => {
     if (!clip) return '';
@@ -1727,10 +1855,15 @@ function EditorMainScreenContent() {
   const togglePlay = () => {
     const nextPlaying = !isPlaying;
     setIsPlaying(nextPlaying);
+    syncAudioClips(currentTime, nextPlaying);
 
-    const activeClip = timelineClips.find(
+    const videoClipsOnly = timelineClips.filter(
+      (c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio
+    );
+
+    const activeClip = videoClipsOnly.find(
       (c) => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration
-    ) || timelineClips[0];
+    ) || videoClipsOnly[0];
 
     if (activeClip) {
       const activeVid = videoRefs.current[activeClip.id];
@@ -1759,7 +1892,7 @@ function EditorMainScreenContent() {
           );
         } else {
           reversedAudioEngine.stopReversedAudio();
-          if (activeVid) activeVid.play().catch(() => {});
+          if (activeVid) activeVid.play().catch(() => { });
         }
       } else {
         if (activeVid) activeVid.pause();
@@ -1774,24 +1907,29 @@ function EditorMainScreenContent() {
       return;
     }
 
-    const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
+    const totalDur = timelineClips.reduce((acc, c) => Math.max(acc, (c.timelineStart ?? c.start ?? 0) + c.duration), 0) || 5;
     const clampedTime = Math.min(totalDur, Math.max(0, time));
-    
+
     setCurrentTime(clampedTime);
+    syncAudioClips(clampedTime, isPlaying);
     if (scrollViewport && timelineScrollRef.current) {
       const pxPerSec = (zoomLevel / 100) * 35;
       timelineScrollRef.current.scrollLeft = clampedTime * pxPerSec;
     }
 
-    const targetActiveClip = timelineClips.find(
+    const videoClipsOnly = timelineClips.filter(
+      (c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio
+    );
+
+    const targetActiveClip = videoClipsOnly.find(
       (c) => clampedTime >= c.timelineStart && clampedTime < c.timelineStart + c.duration
-    ) || (clampedTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
+    ) || (clampedTime >= totalDur ? videoClipsOnly[videoClipsOnly.length - 1] : videoClipsOnly[0]);
 
     if (targetActiveClip) {
       if (activeMediaId !== targetActiveClip.mediaId) {
         setActiveMediaId(targetActiveClip.mediaId);
       }
-      
+
       const localTime = Math.max(
         targetActiveClip.startOffset,
         Math.min(
@@ -1839,7 +1977,7 @@ function EditorMainScreenContent() {
           );
         } else {
           reversedAudioEngine.stopReversedAudio();
-          if (activeVid) activeVid.play().catch(() => {});
+          if (activeVid) activeVid.play().catch(() => { });
         }
       } else {
         reversedAudioEngine.stopReversedAudio();
@@ -1875,8 +2013,8 @@ function EditorMainScreenContent() {
     let overlayColor: string | null = null;
 
     const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
-    const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) || 
-                       (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
+    const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
+      (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
 
     timelineClips.forEach(c => {
       states[c.id] = {
@@ -2165,7 +2303,7 @@ function EditorMainScreenContent() {
 
   const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!timelineScrollRef.current) return;
-    
+
     // Allow seeking unless user clicked specifically on a clip card, drag handle, or button
     const target = e.target as HTMLElement;
     const isClip = target.closest('.rounded-md.border');
@@ -2186,20 +2324,20 @@ function EditorMainScreenContent() {
 
     const scrollContainer = timelineScrollRef.current;
     const pxPerSec = (zoomLevel / 100) * 35;
-    
+
     const targetSec = scrollContainer.scrollLeft / pxPerSec;
-    
+
     if (timelineClips.length === 0) {
       setCurrentTime(targetSec);
       return;
     }
 
-    const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
+    const totalDur = getProjectTotalDuration(timelineClips);
     const clampedTime = Math.min(totalDur, Math.max(0, targetSec));
     setCurrentTime(clampedTime);
 
-    const activeClip = timelineClips.find(c => clampedTime >= c.timelineStart && clampedTime < c.timelineStart + c.duration) || 
-                       (clampedTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
+    const activeClip = timelineClips.find(c => clampedTime >= c.timelineStart && clampedTime < c.timelineStart + c.duration) ||
+      (clampedTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
     if (activeClip) {
       if (activeMediaId !== activeClip.mediaId) {
         setActiveMediaId(activeClip.mediaId);
@@ -2234,9 +2372,13 @@ function EditorMainScreenContent() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}:${f.toString().padStart(2, '0')}`;
   };
 
-  const activeClipAtPlayhead = timelineClips.find(
+  const videoClipsOnlyAtPlayhead = timelineClips.filter(
+    (c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio
+  );
+
+  const activeClipAtPlayhead = videoClipsOnlyAtPlayhead.find(
     (c) => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration
-  ) || timelineClips.find((c) => c.mediaId === activeMediaId || c.id === activeMediaId) || timelineClips[0] || null;
+  ) || videoClipsOnlyAtPlayhead.find((c) => c.mediaId === activeMediaId || c.id === activeMediaId) || videoClipsOnlyAtPlayhead[0] || null;
 
   const displayVideoName = activeClipAtPlayhead
     ? activeClipAtPlayhead.name
@@ -2297,7 +2439,7 @@ function EditorMainScreenContent() {
           onMouseUp={handleAsideMouseUp}
           className="border-r border-border bg-surface flex flex-col overflow-hidden"
         >
-          <div className="flex border-b border-border bg-surface p-1 gap-0.5 overflow-x-auto flex-shrink-0 scrollbar-none">
+          <div className="flex border-b border-border bg-surface p-1 gap-1 overflow-x-auto flex-shrink-0 scrollbar-none select-none">
             {[
               { id: 'media', label: 'Media', icon: Film },
               { id: 'ratio', label: 'Ratio', icon: Crop },
@@ -2305,7 +2447,10 @@ function EditorMainScreenContent() {
               { id: 'text', label: 'Text', icon: Type },
               { id: 'captions', label: 'Captions', icon: Languages },
               { id: 'effects', label: 'Effects', icon: Wand2 },
+              { id: 'transitions', label: 'Transitions', icon: ArrowRightLeft },
+              { id: 'filters', label: 'Filters', icon: Sliders },
               { id: 'speed', label: 'Speed', icon: Gauge },
+              { id: 'keyframes', label: 'Keyframes', icon: Activity },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -2313,14 +2458,21 @@ function EditorMainScreenContent() {
                 onClick={() => {
                   if (tab.id === 'effects') {
                     setEffectsSubTab('effects');
+                    setActiveTab('effects');
+                  } else if (tab.id === 'transitions') {
+                    setEffectsSubTab('transitions');
+                    setActiveTab('transitions');
+                  } else if (tab.id === 'filters') {
+                    setEffectsSubTab('filters');
+                    setActiveTab('filters');
+                  } else {
+                    setActiveTab(tab.id as any);
                   }
-                  setActiveTab(tab.id as any);
                 }}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-0.5 min-w-0 text-[8px] font-semibold rounded-md transition cursor-pointer overflow-hidden ${
-                  activeTab === tab.id
-                    ? 'bg-primary/15 text-primary border border-sky-500/25'
-                    : 'text-muted-foreground hover:bg-surface-hover'
-                }`}
+                className={`flex-shrink-0 flex flex-col items-center justify-center gap-0.5 py-1 px-2 min-w-[56px] text-[9px] font-semibold rounded-md transition cursor-pointer ${activeTab === tab.id
+                    ? 'bg-primary/15 text-primary border border-sky-500/25 font-bold shadow-sm'
+                    : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
+                  }`}
               >
                 <tab.icon className="h-3.5 w-3.5 flex-shrink-0" />
                 <span className="truncate">{tab.label}</span>
@@ -2340,9 +2492,17 @@ function EditorMainScreenContent() {
                       className="w-full rounded-md bg-surface border border-border pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
                     />
                   </div>
+                  <input
+                    ref={importFileInputRef}
+                    type="file"
+                    accept="video/*,image/*,audio/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleFileInputChange}
+                  />
                   <button
                     type="button"
-                    onClick={() => navigate('/upload')}
+                    onClick={handleImportButtonClick}
                     className="w-full flex items-center justify-center gap-1.5 rounded-md bg-primary/10 border border-sky-500/20 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition cursor-pointer"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -2364,11 +2524,10 @@ function EditorMainScreenContent() {
                           setIsSelectedOnCanvas(true);
                           handleSeek(0);
                         }}
-                        className={`group relative aspect-video rounded-md border overflow-hidden bg-surface cursor-pointer transition ${
-                          item.id === activeMedia?.id
+                        className={`group relative aspect-video rounded-md border overflow-hidden bg-surface cursor-pointer transition ${item.id === activeMedia?.id
                             ? 'border-sky-400 ring-1 ring-sky-400 shadow-glow'
                             : 'border-border hover:border-sky-400/50'
-                        }`}
+                          }`}
                       >
                         {item.thumbnails[0] ? (
                           <img src={item.thumbnails[0]} alt="" className="h-full w-full object-cover animate-fade-in" />
@@ -2431,14 +2590,22 @@ function EditorMainScreenContent() {
               />
             )}
 
-            {activeTab === 'effects' && (
+            {(activeTab === 'effects' || activeTab === 'transitions' || activeTab === 'filters') && (
               <Effects
                 timelineClips={timelineClips}
                 currentTime={currentTime}
                 activeTransitionId={activeTransitionId}
                 onSelectTransition={handleSelectTransition}
                 activeFilterId={activeFilterId}
-                onSelectFilter={handleAddFilterAtPlayhead}
+                onSelectFilter={(id) => {
+                  setActiveFilterId(id);
+                  if (id) {
+                    setFilterEnabled(true);
+                    showToast('Filter applied');
+                  } else {
+                    showToast('Filter cleared');
+                  }
+                }}
                 filterIntensity={filterIntensity}
                 onFilterIntensityChange={setFilterIntensity}
                 filterOpacity={filterOpacity}
@@ -2450,8 +2617,11 @@ function EditorMainScreenContent() {
                 showBeforeOnly={showBeforeOnly}
                 onShowBeforeOnlyChange={setShowBeforeOnly}
                 onHoverFilter={setPreviewFilterId}
-                effectsSubTab={effectsSubTab}
-                onSubTabChange={setEffectsSubTab}
+                effectsSubTab={activeTab === 'transitions' ? 'transitions' : activeTab === 'filters' ? 'filters' : effectsSubTab}
+                onSubTabChange={(sub) => {
+                  setEffectsSubTab(sub);
+                  setActiveTab(sub);
+                }}
                 activeAppliedEffectId={activeAppliedEffectId}
                 onSetActiveAppliedEffectId={setActiveAppliedEffectId}
                 onAddAppliedEffect={handleAddAppliedEffect}
@@ -2482,6 +2652,134 @@ function EditorMainScreenContent() {
                 showToast={showToast}
               />
             )}
+
+            {activeTab === 'keyframes' && (() => {
+              const targetClip = activeSelectedClip || timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) || timelineClips[0] || null;
+
+              return (
+                <KeyframeInspector
+                  clipId={targetClip?.id || ''}
+                  clipName={targetClip?.name || 'No clip selected'}
+                  clipRelativeTime={Math.max(0, currentTime - (targetClip?.timelineStart || 0))}
+                  keyframes={targetClip?.keyframes || []}
+                  autoKeyframeEnabled={autoKeyframeEnabled}
+                  onToggleAutoKeyframe={() => setAutoKeyframeEnabled(!autoKeyframeEnabled)}
+                  onAddOrUpdateKeyframe={(property, value, interpolation) => {
+                    if (!targetClip) return;
+                    beginTransaction(`Add keyframe ${property}`, getProjectState());
+                    setTimelineClips(prev => prev.map(c => {
+                      if (c.id === targetClip.id) {
+                        const updated = KeyframeManager.addOrUpdateKeyframe(
+                          c.keyframes,
+                          property,
+                          Math.max(0, currentTime - c.timelineStart),
+                          value,
+                          interpolation
+                        );
+                        return { ...c, keyframes: updated };
+                      }
+                      return c;
+                    }));
+                    commitTransaction(getProjectState());
+                    showToast(`Keyframe added for ${property}`);
+                  }}
+                  onDeleteKeyframe={(kfId) => {
+                    if (!targetClip) return;
+                    beginTransaction('Delete keyframe', getProjectState());
+                    setTimelineClips(prev => prev.map(c => {
+                      if (c.id === targetClip.id) {
+                        const updated = KeyframeManager.deleteKeyframe(c.keyframes, kfId);
+                        return { ...c, keyframes: updated };
+                      }
+                      return c;
+                    }));
+                    commitTransaction(getProjectState());
+                    showToast('Keyframe deleted');
+                  }}
+                  onUpdateInterpolation={(kfId, interpolation, controlPoints) => {
+                    if (!targetClip) return;
+                    beginTransaction('Update interpolation', getProjectState());
+                    setTimelineClips(prev => prev.map(c => {
+                      if (c.id === targetClip.id) {
+                        const updated = KeyframeManager.updateInterpolation(c.keyframes, kfId, interpolation, controlPoints);
+                        return { ...c, keyframes: updated };
+                      }
+                      return c;
+                    }));
+                    commitTransaction(getProjectState());
+                  }}
+                  onUpdateKeyframeValue={(kfId, value) => {
+                    if (!targetClip) return;
+                    setTimelineClips(prev => prev.map(c => {
+                      if (c.id === targetClip.id) {
+                        const kf = c.keyframes?.find((k: any) => k.id === kfId);
+                        if (!kf) return c;
+                        const updated = KeyframeManager.addOrUpdateKeyframe(
+                          c.keyframes,
+                          kf.property,
+                          kf.time,
+                          value,
+                          kf.interpolation,
+                          kf.controlPoints
+                        );
+                        return { ...c, keyframes: updated };
+                      }
+                      return c;
+                    }));
+                  }}
+                  onNavigateKeyframe={(property, direction) => {
+                    if (!targetClip) return;
+                    const propKeyframes = (targetClip.keyframes || [])
+                      .filter((k: any) => k.property === property)
+                      .sort((a: any, b: any) => a.time - b.time);
+                    const relTime = Math.max(0, currentTime - targetClip.timelineStart);
+                    let targetTime: number | null = null;
+                    if (direction === 'prev') {
+                      const prev = propKeyframes.slice().reverse().find((k: any) => k.time < relTime - 0.04);
+                      if (prev) targetTime = prev.time;
+                    } else {
+                      const next = propKeyframes.find((k: any) => k.time > relTime + 0.04);
+                      if (next) targetTime = next.time;
+                    }
+                    if (targetTime !== null) {
+                      handleSeek(targetClip.timelineStart + targetTime);
+                    }
+                  }}
+                  onCopyKeyframes={() => {
+                    if (!targetClip) return;
+                    KeyframeManager.copyKeyframesToClipboard(targetClip.id, targetClip.keyframes || []);
+                    showToast('Keyframes copied to clipboard');
+                  }}
+                  onPasteKeyframes={() => {
+                    if (!targetClip) return;
+                    const pasted = KeyframeManager.pasteKeyframesFromClipboard(targetClip.id);
+                    if (pasted) {
+                      beginTransaction('Paste keyframes', getProjectState());
+                      setTimelineClips(prev => prev.map(c => {
+                        if (c.id === targetClip.id) {
+                          return { ...c, keyframes: [...(c.keyframes || []), ...pasted] };
+                        }
+                        return c;
+                      }));
+                      commitTransaction(getProjectState());
+                      showToast('Keyframes pasted successfully');
+                    }
+                  }}
+                  onClearAllKeyframes={() => {
+                    if (!targetClip) return;
+                    beginTransaction('Clear keyframes', getProjectState());
+                    setTimelineClips(prev => prev.map(c => {
+                      if (c.id === targetClip.id) {
+                        return { ...c, keyframes: [] };
+                      }
+                      return c;
+                    }));
+                    commitTransaction(getProjectState());
+                    showToast('All keyframes cleared');
+                  }}
+                />
+              );
+            })()}
           </div>
         </aside>
 
@@ -2501,14 +2799,14 @@ function EditorMainScreenContent() {
               style={{
                 aspectRatio: aspectRatio,
                 maxWidth: aspectRatio === '16/9' ? '896px' :
-                          aspectRatio === '9/16' ? '260px' :
-                          aspectRatio === '1/1' ? '448px' :
-                          aspectRatio === '4/3' ? '672px' :
-                          aspectRatio === '21/9' ? '1024px' :
+                  aspectRatio === '9/16' ? '260px' :
+                    aspectRatio === '1/1' ? '448px' :
+                      aspectRatio === '4/3' ? '672px' :
+                        aspectRatio === '21/9' ? '1024px' :
                           '896px'
               }}
             >
-              
+
               {/* Preview Window Video Title Badge */}
               {displayVideoName && (
                 <div className="absolute top-3 left-3 z-30 bg-black/80 backdrop-blur-md border border-white/10 text-white text-[11px] font-mono px-3 py-1 rounded-md shadow-lg pointer-events-none flex items-center gap-1.5 transition-all">
@@ -2518,10 +2816,9 @@ function EditorMainScreenContent() {
 
               {/* HTML5 Native Video Tag wrapped in transform container */}
               <div
-                className={`h-full w-full relative flex items-center justify-center cursor-move ${
-                  (activeEffectId?.includes('shake') || activeEffectId?.includes('jitter') || activeEffectId?.includes('spin') || activeEffectId?.includes('roll')) ? 'animate-shake' :
-                  (activeEffectId?.includes('handheld') || activeEffectId?.includes('follow') || activeEffectId?.includes('orbit') || activeEffectId?.includes('pan') || activeEffectId?.includes('tilt')) ? 'animate-handheld' : ''
-                }`}
+                className={`h-full w-full relative flex items-center justify-center cursor-move ${(activeEffectId?.includes('shake') || activeEffectId?.includes('jitter') || activeEffectId?.includes('spin') || activeEffectId?.includes('roll')) ? 'animate-shake' :
+                    (activeEffectId?.includes('handheld') || activeEffectId?.includes('follow') || activeEffectId?.includes('orbit') || activeEffectId?.includes('pan') || activeEffectId?.includes('tilt')) ? 'animate-handheld' : ''
+                  }`}
                 style={{
                   transform: `translate(${canvasPos.x}px, ${canvasPos.y}px) scale(${canvasScale}) rotate(${canvasRotation}deg)`,
                   transition: isDraggingCanvas ? 'none' : 'transform 0.05s ease-out',
@@ -2530,10 +2827,10 @@ function EditorMainScreenContent() {
               >
                 {(() => {
                   const { states: transitionStates, overlayColor: transitionOverlayColor } = getTransitionStatesForClips();
-                  const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
-                  const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) || 
-                                     (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
-                  
+                  const totalDur = getProjectTotalDuration(timelineClips);
+                  const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
+                    (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
+
                   return timelineClips.length > 0 ? (
                     <>
                       {timelineClips.map((clip) => {
@@ -2552,11 +2849,29 @@ function EditorMainScreenContent() {
                         let kfOpacityMultiplier = 1;
                         let kfClipPathStr = 'none';
 
+                        const clipRelTime = Math.max(0, currentTime - clip.timelineStart);
+                        const kfProps = interpolateAllProperties(clip.keyframes, clipRelTime);
 
+                        const hasKf = (p: KeyframeProperty) => hasKeyframeForProperty(clip.keyframes, p);
+
+                        if (hasKf('scale')) clipScale = kfProps.scale * canvasScale;
+                        if (hasKf('rotation')) clipRotation = canvasRotation + kfProps.rotation;
+                        if (hasKf('positionX')) posX = kfProps.positionX;
+                        if (hasKf('positionY')) posY = kfProps.positionY;
+                        if (hasKf('opacity')) kfOpacityMultiplier = kfProps.opacity;
+
+                        if (hasKf('blur')) kfFilterStr += ` blur(${kfProps.blur}px)`;
+                        if (hasKf('brightness')) kfFilterStr += ` brightness(${kfProps.brightness}%)`;
+                        if (hasKf('contrast')) kfFilterStr += ` contrast(${kfProps.contrast}%)`;
+                        if (hasKf('saturation')) kfFilterStr += ` saturate(${kfProps.saturation}%)`;
+                        if (hasKf('hue')) kfFilterStr += ` hue-rotate(${kfProps.hue}deg)`;
+                        if (hasKf('glow')) kfFilterStr += ` drop-shadow(0 0 ${kfProps.glow}px rgba(56, 189, 248, 0.8))`;
+                        if (hasKf('shadow')) kfFilterStr += ` drop-shadow(0 ${kfProps.shadow / 2}px ${kfProps.shadow}px rgba(0, 0, 0, 0.5))`;
+                        if (hasKf('crop')) kfClipPathStr = `inset(${kfProps.crop}%)`;
                         if (clip.appliedEffects && tState.display) {
                           clip.appliedEffects.forEach((eff: AppliedEffect) => {
                             if (!eff.enabled || showBeforeOnly) return;
-                            const props = getInterpolatedEffectProps(eff, localTime);
+                            const props = getInterpolatedEffectProps(eff, localTime) || {};
                             if (props.scale !== undefined && props.scale !== 1) {
                               clipScale = clipScale * props.scale;
                             }
@@ -2887,7 +3202,7 @@ function EditorMainScreenContent() {
                                 clipScaleX = clipScaleX * jellyScaleX;
                                 clipScaleY = clipScaleY * jellyScaleY;
                               } else if (presetId === 'dist-swirl' || presetId === 'dist-twist' || presetId === 'dist-spiral' || presetId === 'dist-vortex' || presetId === 'dist-tornado') {
-                              clipRotation += Math.sin(localTime * 3 * speedFactor) * 12 * intFactor;
+                                clipRotation += Math.sin(localTime * 3 * speedFactor) * 12 * intFactor;
                                 clipScale = clipScale * (1 + 0.05 * intFactor);
                               } else if (presetId === 'dist-stretch' || presetId === 'dist-pinch' || presetId === 'dist-bulge' || presetId === 'dist-warp' || presetId === 'dist-extreme' || presetId === 'dist-master') {
                                 clipScaleX = clipScaleX * (1 + 0.15 * intFactor);
@@ -2982,7 +3297,7 @@ function EditorMainScreenContent() {
                                   if (el) {
                                     const isVideoMuted = isMuted || !!mutedClips[clip.id] || !!clip.isMuted || !!clip.isAudioDetached || !!clip.audioDetached || clip.embeddedAudioEnabled === false;
                                     el.muted = isVideoMuted;
-                                    el.volume = isVideoMuted ? 0 : Math.min(1, Math.max(0, volume * (clip.volume ?? 1)));
+                                    el.volume = isVideoMuted ? 0 : Math.min(1, Math.max(0, volume * (clip.volume ?? 1) * (hasKeyframeForProperty(clip.keyframes, 'volume') ? interpolatePropertyValue(clip.keyframes, 'volume', clipRelTime, 1) : 1)));
                                   }
                                 }}
                                 src={clip.url}
@@ -3053,9 +3368,8 @@ function EditorMainScreenContent() {
                         setActiveOverlayId(overlay.id);
                         setActiveTab('text');
                       }}
-                      className={`absolute cursor-pointer select-none transition-all hover:scale-105 active:scale-95 ${
-                        activeOverlayId === overlay.id ? 'ring-1 ring-sky-400 rounded px-1' : ''
-                      }`}
+                      className={`absolute cursor-pointer select-none transition-all hover:scale-105 active:scale-95 ${activeOverlayId === overlay.id ? 'ring-1 ring-sky-400 rounded px-1' : ''
+                        }`}
                       style={{
                         color: overlay.color,
                         fontFamily: overlay.font,
@@ -3278,7 +3592,7 @@ function EditorMainScreenContent() {
             <button
               type="button"
               onClick={() => {
-                const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
+                const totalDur = getProjectTotalDuration(timelineClips);
                 handleSeek(Math.min(totalDur, currentTime + 1));
               }}
               className="p-1 hover:text-foreground transition text-muted-foreground font-mono text-[10px] font-bold"
@@ -3290,7 +3604,7 @@ function EditorMainScreenContent() {
             <button
               type="button"
               onClick={() => {
-                const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
+                const totalDur = getProjectTotalDuration(timelineClips);
                 const lastClip = timelineClips[timelineClips.length - 1];
                 if (lastClip) {
                   setActiveMediaId(lastClip.mediaId);
@@ -3343,7 +3657,7 @@ function EditorMainScreenContent() {
           >
             {(() => {
               const pxPerSec = (zoomLevel / 100) * 35;
-              const totalTimelineSecs = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
+              const totalTimelineSecs = getProjectTotalDuration(timelineClips);
               const totalTimelineWidth = totalTimelineSecs * pxPerSec;
               const playheadPx = currentTime * pxPerSec;
 
@@ -3418,13 +3732,11 @@ function EditorMainScreenContent() {
                                   setIsSelectedOnCanvas(true);
                                   handleSeek(startSec);
                                 }}
-                                className={`h-6 rounded border flex items-center overflow-hidden cursor-pointer absolute transition px-2 font-mono text-[9px] font-semibold gap-1.5 select-none top-1 ${
-                                  isSelected
+                                className={`h-6 rounded border flex items-center overflow-hidden cursor-pointer absolute transition px-2 font-mono text-[9px] font-semibold gap-1.5 select-none top-1 ${isSelected
                                     ? 'border-emerald-400 ring-2 ring-emerald-400/50 bg-emerald-500/40 text-emerald-100 z-20 shadow-glow'
                                     : 'border-emerald-500/40 bg-emerald-500/25 text-emerald-300 hover:border-emerald-400/70 z-10'
-                                } ${isMuted ? 'opacity-50 line-through border-dashed' : ''} ${
-                                  isLocked ? 'opacity-70 border-dashed border-amber-500/40' : ''
-                                }`}
+                                  } ${isMuted ? 'opacity-50 line-through border-dashed' : ''} ${isLocked ? 'opacity-70 border-dashed border-amber-500/40' : ''
+                                  }`}
                                 style={{ left: `${clipLeftPx}px`, width: `${clipWidthPx}px` }}
                                 title={`${clip.name} (${formatTimecode(clip.duration)})`}
                               >
@@ -3434,7 +3746,7 @@ function EditorMainScreenContent() {
                                     timelineStart={startSec}
                                     sourceStart={clip.startOffset || 0}
                                     duration={clip.duration}
-                                    maxSourceDuration={mediaFiles.find(m => m.id === clip.mediaId)?.duration || clip.baseDuration || clip.duration || Infinity}
+                                    maxSourceDuration={clip.isDetachedAudio ? clip.duration : (mediaFiles.find(m => m.id === clip.mediaId)?.duration || clip.duration || Infinity)}
                                     pixelsPerSecond={pxPerSec}
                                     playbackRate={clip.playbackRate || 1}
                                     isLocked={isLocked}
@@ -3443,6 +3755,50 @@ function EditorMainScreenContent() {
                                       handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration);
                                     }}
                                     onTrimEnd={handleTrimCommit}
+                                  />
+                                )}
+                                {clip.keyframes && clip.keyframes.length > 0 && (
+                                  <KeyframeTimelineOverlay
+                                    clipId={clip.id}
+                                    clipTimelineStart={startSec}
+                                    clipDuration={clip.duration}
+                                    keyframes={clip.keyframes}
+                                    pixelsPerSecond={pxPerSec}
+                                    playheadTimelineTime={currentTime}
+                                    isSelectedClip={isSelected}
+                                    onMoveKeyframe={(kfId, newTime) => {
+                                      beginTransaction('Move keyframe', getProjectState());
+                                      setTimelineClips(prev => prev.map(c => {
+                                        if (c.id === clip.id) {
+                                          const updatedKeyframes = KeyframeManager.moveKeyframe(c.keyframes, kfId, newTime);
+                                          return { ...c, keyframes: updatedKeyframes };
+                                        }
+                                        return c;
+                                      }));
+                                      commitTransaction(getProjectState());
+                                    }}
+                                    onMoveMultipleKeyframes={(moves) => {
+                                      beginTransaction('Move keyframes', getProjectState());
+                                      setTimelineClips(prev => prev.map(c => {
+                                        if (c.id === clip.id) {
+                                          const updatedKeyframes = KeyframeManager.moveMultipleKeyframes(c.keyframes, moves);
+                                          return { ...c, keyframes: updatedKeyframes };
+                                        }
+                                        return c;
+                                      }));
+                                      commitTransaction(getProjectState());
+                                    }}
+                                    onDeleteKeyframe={(kfId) => {
+                                      beginTransaction('Delete keyframe', getProjectState());
+                                      setTimelineClips(prev => prev.map(c => {
+                                        if (c.id === clip.id) {
+                                          const updatedKeyframes = KeyframeManager.deleteKeyframe(c.keyframes, kfId);
+                                          return { ...c, keyframes: updatedKeyframes };
+                                        }
+                                        return c;
+                                      }));
+                                      commitTransaction(getProjectState());
+                                    }}
                                   />
                                 )}
                                 <span className="text-[10px] flex-shrink-0">🎵</span>
@@ -3480,9 +3836,8 @@ function EditorMainScreenContent() {
                                 setActiveTab('text');
                                 handleSeek(overlay.startTime ?? 0);
                               }}
-                              className={`absolute h-5 rounded bg-amber-500/25 border text-[9px] px-1.5 truncate flex items-center font-mono cursor-pointer transition top-1.5 ${
-                                activeOverlayId === overlay.id ? 'border-amber-400 ring-1 ring-amber-400 bg-amber-500/40' : 'border-amber-500/35'
-                              }`}
+                              className={`absolute h-5 rounded bg-amber-500/25 border text-[9px] px-1.5 truncate flex items-center font-mono cursor-pointer transition top-1.5 ${activeOverlayId === overlay.id ? 'border-amber-400 ring-1 ring-amber-400 bg-amber-500/40' : 'border-amber-500/35'
+                                }`}
                               style={{ left: `${leftPx}px`, width: `${widthPx}px`, zIndex: 10 }}
                             >
                               ✍️ {overlay.text}
@@ -3543,117 +3898,158 @@ function EditorMainScreenContent() {
                             const clipWidthPx = clip.duration * pxPerSec;
                             const isFirst = idx === 0;
                             const isLast = idx === videoClipsArray.length - 1;
-                          const startGapPx = isFirst ? 4 : 16;
-                          const endGapPx = isLast ? 4 : 16;
-                          const clipLeftPx = clip.timelineStart * pxPerSec + startGapPx;
-                          const clipComputedWidth = Math.max(12, clipWidthPx - (startGapPx + endGapPx));
+                            const startGapPx = isFirst ? 4 : 16;
+                            const endGapPx = isLast ? 4 : 16;
+                            const clipLeftPx = clip.timelineStart * pxPerSec + startGapPx;
+                            const clipComputedWidth = Math.max(12, clipWidthPx - (startGapPx + endGapPx));
 
-                          const numThumbnails = Math.max(1, Math.floor(clipComputedWidth / 48));
-                          const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
-                          const isMuted = !!mutedClips[clip.id];
-                          const isSelected = activeSelectedClipId ? clip.id === activeSelectedClipId : clip.mediaId === activeMediaId;
+                            const numThumbnails = Math.max(1, Math.floor(clipComputedWidth / 48));
+                            const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
+                            const isMuted = !!mutedClips[clip.id];
+                            const isSelected = activeSelectedClipId ? clip.id === activeSelectedClipId : clip.mediaId === activeMediaId;
 
-                          const clipEl = (
-                            <div
-                              key={clip.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveSelectedClipId(clip.id);
-                                setActiveMediaId(clip.mediaId);
-                                setIsSelectedOnCanvas(true);
-                                handleSeek(clip.timelineStart);
-                              }}
-                              draggable={!isLocked}
-                              onDragStart={(e) => handleDragStart(e, idx)}
-                              onDragOver={(e) => handleDragOver(e, idx)}
-                              onDragEnd={handleDragEnd}
-                              className={`h-12 rounded-md border flex items-center overflow-hidden cursor-pointer flex-shrink-0 transition absolute ${
-                                isSelected
-                                  ? 'border-sky-400 ring-2 ring-sky-400/50 bg-primary/25 z-20 shadow-glow scale-[1.01]'
-                                  : 'border-border-strong bg-surface hover:border-sky-400/60 z-10'
-                              } ${isLocked ? 'opacity-70 border-dashed border-amber-500/30' : ''}`}
-                              style={{ left: `${clipLeftPx}px`, width: `${clipComputedWidth}px` }}
-                            >
-                              {/* Left Trim handle bar */}
-                              {isSelected && !isLocked && (
-                                <ClipTrimHandles
-                                  clipId={clip.id}
-                                  timelineStart={clip.timelineStart}
-                                  sourceStart={clip.startOffset}
-                                  duration={clip.duration}
-                                  maxSourceDuration={mediaFiles.find(m => m.id === clip.mediaId)?.duration || Infinity}
-                                  pixelsPerSecond={pxPerSec}
-                                  playbackRate={clip.playbackRate || 1}
-                                  isLocked={isLocked}
-                                  onTrimStart={(edge) => beginTransaction(`Trim clip ${edge}`, getProjectState())}
-                                  onTrimUpdate={(newTimelineStart, newSourceStart, newDuration) => {
-                                    handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration);
-                                  }}
-                                  onTrimEnd={handleTrimCommit}
-                                />
-                              )}
-
-                              <div className="h-full flex-1 flex overflow-hidden opacity-90 px-2 pointer-events-none">
-                                {Array.from({ length: numThumbnails }).map((_, idx) => (
-                                  <img
-                                    key={idx}
-                                    src={clip.thumbnails[idx % clip.thumbnails.length] || clip.thumbnails[0]}
-                                    alt=""
-                                    className="h-full w-12 object-cover flex-shrink-0 border-r border-black/40"
-                                  />
-                                ))}
-                              </div>
-
-                              <span className="px-2 font-mono text-[9px] text-foreground font-semibold truncate bg-black/80 py-0.5 rounded-l absolute right-2 bottom-1 pointer-events-none flex items-center gap-1">
-                                {isLocked && <Lock className="h-2.5 w-2.5 text-amber-400 flex-shrink-0" />}
-                                {isMuted && <VolumeX className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />}
-                                {clip.isReversed && <span className="text-sky-400 font-bold text-[9px] flex-shrink-0">⏪ Reversed</span>}
-                                {clip.name} ({formatTimecode(clip.duration)})
-                              </span>
-                            </div>
-                          );
-
-                          acc.push(clipEl);
-
-                          if (idx < videoClipsArray.length - 1) {
-                            const nextClip = videoClipsArray[idx + 1];
-                            const transitionId = clip.appliedTransition;
-                            
-                            acc.push(
-                              <button
-                                key={`trans-${clip.id}-${nextClip.id}`}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedTransitionIndex(idx);
-                                  setActiveTransitionId(transitionId);
-                                  setEffectsSubTab('transitions');
-                                  setActiveTab('effects');
-                                  showToast('Select a transition to apply between clips');
+                            const clipEl = (
+                              <div
+                                key={clip.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveSelectedClipId(clip.id);
+                                  setActiveMediaId(clip.mediaId);
+                                  setIsSelectedOnCanvas(true);
+                                  handleSeek(clip.timelineStart);
                                 }}
-                                className={`h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 border transition-all duration-200 shadow-lg z-40 absolute ${
-                                  transitionId 
-                                    ? 'bg-primary text-primary-foreground font-bold hover:bg-sky-400 border-sky-400 ring-2 ring-sky-400/30 shadow-[0_0_10px_rgba(56,189,248,0.5)] scale-105' 
-                                    : 'bg-surface text-primary border-sky-500/40 hover:bg-primary hover:text-primary-foreground hover:border-sky-400 hover:scale-110'
-                                }`}
-                                style={{ left: `${(clip.timelineStart + clip.duration) * pxPerSec - 12}px` }}
-                                title={transitionId ? `Transition: ${transitionId}` : 'Add Transition'}
+                                draggable={!isLocked}
+                                onDragStart={(e) => handleDragStart(e, idx)}
+                                onDragOver={(e) => handleDragOver(e, idx)}
+                                onDragEnd={handleDragEnd}
+                                className={`h-12 rounded-md border flex items-center overflow-hidden cursor-pointer flex-shrink-0 transition absolute ${isSelected
+                                    ? 'border-sky-400 ring-2 ring-sky-400/50 bg-primary/25 z-20 shadow-glow scale-[1.01]'
+                                    : 'border-border-strong bg-surface hover:border-sky-400/60 z-10'
+                                  } ${isLocked ? 'opacity-70 border-dashed border-amber-500/30' : ''}`}
+                                style={{ left: `${clipLeftPx}px`, width: `${clipComputedWidth}px` }}
                               >
-                                <Plus className="h-3.5 w-3.5" />
-                              </button>
-                            );
-                          }
+                                {/* Left Trim handle bar */}
+                                {isSelected && !isLocked && (
+                                  <ClipTrimHandles
+                                    clipId={clip.id}
+                                    timelineStart={clip.timelineStart}
+                                    sourceStart={clip.startOffset}
+                                    duration={clip.duration}
+                                    maxSourceDuration={mediaFiles.find(m => m.id === clip.mediaId)?.duration || Infinity}
+                                    pixelsPerSecond={pxPerSec}
+                                    playbackRate={clip.playbackRate || 1}
+                                    isLocked={isLocked}
+                                    onTrimStart={(edge) => beginTransaction(`Trim clip ${edge}`, getProjectState())}
+                                    onTrimUpdate={(newTimelineStart, newSourceStart, newDuration) => {
+                                      handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration);
+                                    }}
+                                    onTrimEnd={handleTrimCommit}
+                                  />
+                                )}
+                                {clip.keyframes && clip.keyframes.length > 0 && (
+                                  <KeyframeTimelineOverlay
+                                    clipId={clip.id}
+                                    clipTimelineStart={clip.timelineStart}
+                                    clipDuration={clip.duration}
+                                    keyframes={clip.keyframes}
+                                    pixelsPerSecond={pxPerSec}
+                                    playheadTimelineTime={currentTime}
+                                    isSelectedClip={isSelected}
+                                    onMoveKeyframe={(kfId, newTime) => {
+                                      beginTransaction('Move keyframe', getProjectState());
+                                      setTimelineClips(prev => prev.map(c => {
+                                        if (c.id === clip.id) {
+                                          const updatedKeyframes = KeyframeManager.moveKeyframe(c.keyframes, kfId, newTime);
+                                          return { ...c, keyframes: updatedKeyframes };
+                                        }
+                                        return c;
+                                      }));
+                                      commitTransaction(getProjectState());
+                                    }}
+                                    onMoveMultipleKeyframes={(moves) => {
+                                      beginTransaction('Move keyframes', getProjectState());
+                                      setTimelineClips(prev => prev.map(c => {
+                                        if (c.id === clip.id) {
+                                          const updatedKeyframes = KeyframeManager.moveMultipleKeyframes(c.keyframes, moves);
+                                          return { ...c, keyframes: updatedKeyframes };
+                                        }
+                                        return c;
+                                      }));
+                                      commitTransaction(getProjectState());
+                                    }}
+                                    onDeleteKeyframe={(kfId) => {
+                                      beginTransaction('Delete keyframe', getProjectState());
+                                      setTimelineClips(prev => prev.map(c => {
+                                        if (c.id === clip.id) {
+                                          const updatedKeyframes = KeyframeManager.deleteKeyframe(c.keyframes, kfId);
+                                          return { ...c, keyframes: updatedKeyframes };
+                                        }
+                                        return c;
+                                      }));
+                                      commitTransaction(getProjectState());
+                                    }}
+                                  />
+                                )}
 
-                          return acc;
-                        }, [])}
+                                <div className="h-full flex-1 flex overflow-hidden opacity-90 px-2 pointer-events-none">
+                                  {Array.from({ length: numThumbnails }).map((_, idx) => (
+                                    <img
+                                      key={idx}
+                                      src={clip.thumbnails[idx % clip.thumbnails.length] || clip.thumbnails[0]}
+                                      alt=""
+                                      className="h-full w-12 object-cover flex-shrink-0 border-r border-black/40"
+                                    />
+                                  ))}
+                                </div>
+
+                                <span className="px-2 font-mono text-[9px] text-foreground font-semibold truncate bg-black/80 py-0.5 rounded-l absolute right-2 bottom-1 pointer-events-none flex items-center gap-1">
+                                  {isLocked && <Lock className="h-2.5 w-2.5 text-amber-400 flex-shrink-0" />}
+                                  {isMuted && <VolumeX className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />}
+                                  {clip.isReversed && <span className="text-sky-400 font-bold text-[9px] flex-shrink-0">⏪ Reversed</span>}
+                                  {clip.name} ({formatTimecode(clip.duration)})
+                                </span>
+                              </div>
+                            );
+
+                            acc.push(clipEl);
+
+                            if (idx < videoClipsArray.length - 1) {
+                              const nextClip = videoClipsArray[idx + 1];
+                              const transitionId = clip.appliedTransition;
+
+                              acc.push(
+                                <button
+                                  key={`trans-${clip.id}-${nextClip.id}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedTransitionIndex(idx);
+                                    setActiveTransitionId(transitionId);
+                                    setEffectsSubTab('transitions');
+                                    setActiveTab('effects');
+                                    showToast('Select a transition to apply between clips');
+                                  }}
+                                  className={`h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 border transition-all duration-200 shadow-lg z-40 absolute ${transitionId
+                                      ? 'bg-primary text-primary-foreground font-bold hover:bg-sky-400 border-sky-400 ring-2 ring-sky-400/30 shadow-[0_0_10px_rgba(56,189,248,0.5)] scale-105'
+                                      : 'bg-surface text-primary border-sky-500/40 hover:bg-primary hover:text-primary-foreground hover:border-sky-400 hover:scale-110'
+                                    }`}
+                                  style={{ left: `${(clip.timelineStart + clip.duration) * pxPerSec - 12}px` }}
+                                  title={transitionId ? `Transition: ${transitionId}` : 'Add Transition'}
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                </button>
+                              );
+                            }
+
+                            return acc;
+                          }, [])}
                       </div>
                     </div>
 
                     {/* Row 5: Audio Track */}
                     <div className="flex flex-row h-8 items-center bg-surface">
                       <div
-                        className={`w-40 h-full flex-shrink-0 flex items-center justify-center border-r border-border border-t border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5 transition ${
-                          isMuted ? 'text-red-400 bg-red-500/10' : 'text-foreground bg-background'
-                        }`}
+                        className={`w-40 h-full flex-shrink-0 flex items-center justify-center border-r border-border border-t border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5 transition ${isMuted ? 'text-red-400 bg-red-500/10' : 'text-foreground bg-background'
+                          }`}
                         onClick={(e) => { e.stopPropagation(); toggleMute(); }}
                       >
                         {isMuted ? <VolumeX className="h-3.5 w-3.5 text-red-400" /> : <Volume2 className="h-3.5 w-3.5" />}
@@ -3671,7 +4067,7 @@ function EditorMainScreenContent() {
         </div>
 
         {/* BOTTOM ACTION PANEL */}
-        <ClipActionsPanel 
+        <ClipActionsPanel
           clip={activeSelectedClip ? {
             id: activeSelectedClip.id,
             name: activeSelectedClip.name,
@@ -3729,6 +4125,31 @@ function EditorMainScreenContent() {
         }
       `}</style>
 
+
+      {/* Hidden Audio Elements for Timeline Audio Track Clips */}
+      <div className="hidden" aria-hidden="true">
+        {timelineClips
+          .filter((c) => c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio)
+          .map((clip) => {
+            const isClipMuted = isMuted || !!mutedClips[clip.id] || !!clip.isMuted;
+            const clipVol = isClipMuted ? 0 : Math.min(1, Math.max(0, volume * (clip.volume ?? 1)));
+
+            return (
+              <audio
+                key={clip.id}
+                ref={(el) => {
+                  audioRefs.current[clip.id] = el;
+                  if (el) {
+                    el.muted = isClipMuted;
+                    el.volume = clipVol;
+                  }
+                }}
+                src={clip.url}
+                preload="auto"
+              />
+            );
+          })}
+      </div>
 
       {/* RENDER TOAST ALERT NOTIFICATION */}
       {toast && (

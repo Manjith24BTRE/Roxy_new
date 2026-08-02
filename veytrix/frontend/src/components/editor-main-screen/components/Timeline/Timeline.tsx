@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { 
-  Play, Pause, Scissors, Copy, Trash2, Plus, RotateCcw, ZoomIn, 
-  ZoomOut, Lock, Unlock, Eye, EyeOff, Volume2, VolumeX, Bookmark 
+import {
+  Play, Pause, Scissors, Copy, Trash2, Plus, RotateCcw, ZoomIn,
+  ZoomOut, Lock, Unlock, Eye, EyeOff, Volume2, VolumeX, Bookmark
 } from 'lucide-react';
 import { ClipActionsPanel } from '../../clip-actions/ClipActionsPanel';
 import { ClipTrimHandles } from '../../trim/ClipTrimHandles';
 import { useDuplicate } from '../../tools/duplicate';
 import { useRename, RenameDialog } from '../../tools/rename';
 import { useReverse } from '../../tools/reverse';
-import { useDetach } from '../../tools/detach';
+import { useDetach } from '../../tools/Extract';
 import { useLock } from '../../tools/lock';
 import { useFreeze } from '../../tools/freeze';
 
@@ -37,7 +37,7 @@ interface TimelineProps {
 export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
   const [zoom, setZoom] = useState(100);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
-  
+
   // Track status states
   const [lockedTracks, setLockedTracks] = useState<Record<string, boolean>>({ video: false, audio: false, text: false, effect: false });
   const [hiddenTracks, setHiddenTracks] = useState<Record<string, boolean>>({ video: false, audio: false, text: false, effect: false });
@@ -54,12 +54,12 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
     { id: 'v1', name: 'Intro Clip.mp4', start: 0, duration: 8, trackId: 'video', color: 'bg-primary/25 border-sky-400/50 text-sky-300' },
     { id: 'v2', name: 'A-Roll Interview.mp4', start: 8, duration: 15, trackId: 'video', color: 'bg-primary/25 border-sky-400/50 text-sky-300' },
     { id: 'v3', name: 'Outro B-Roll.mp4', start: 23, duration: 7, trackId: 'video', color: 'bg-primary/25 border-sky-400/50 text-sky-300' },
-    
+
     { id: 'a1', name: 'Background Beat.mp3', start: 0, duration: 30, trackId: 'audio', color: 'bg-emerald-500/25 border-emerald-400/50 text-emerald-300' },
-    
+
     { id: 't1', name: 'Welcome Title Overlay', start: 1, duration: 4, trackId: 'text', color: 'bg-amber-500/25 border-amber-400/50 text-amber-300' },
     { id: 't2', name: 'Dialogue Subtitle Cue', start: 9, duration: 6, trackId: 'text', color: 'bg-amber-500/25 border-amber-400/50 text-amber-300' },
-    
+
     { id: 'e1', name: 'Teal & Orange Grade', start: 0, duration: 23, trackId: 'effect', color: 'bg-fuchsia-500/25 border-fuchsia-400/50 text-fuchsia-300' }
   ]);
 
@@ -386,6 +386,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
       case 'speed':
         showToast(`Opened speed adjustment for ${clip.name}`);
         break;
+      case 'extract-audio':
       case 'detach-audio':
         detachTimelineAudio(clipId || clip?.id);
         break;
@@ -405,7 +406,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
 
   return (
     <div className="flex flex-col h-full bg-surface border-t border-border text-foreground relative">
-      
+
       {/* Timeline Control Bar */}
       <div className="h-10 border-b border-border px-4 flex items-center justify-between bg-surface text-xs">
         <div className="flex items-center gap-2">
@@ -531,18 +532,16 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
                 <button
                   type="button"
                   onClick={() => toggleTrackLock(trackId)}
-                  className={`p-1 rounded hover:bg-surface-hover transition cursor-pointer ${
-                    lockedTracks[trackId] ? 'text-amber-500' : 'text-muted-foreground'
-                  }`}
+                  className={`p-1 rounded hover:bg-surface-hover transition cursor-pointer ${lockedTracks[trackId] ? 'text-amber-500' : 'text-muted-foreground'
+                    }`}
                 >
                   {lockedTracks[trackId] ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
                 </button>
                 <button
                   type="button"
                   onClick={() => toggleTrackVisibility(trackId)}
-                  className={`p-1 rounded hover:bg-surface-hover transition cursor-pointer ${
-                    hiddenTracks[trackId] ? 'text-red-400' : 'text-muted-foreground'
-                  }`}
+                  className={`p-1 rounded hover:bg-surface-hover transition cursor-pointer ${hiddenTracks[trackId] ? 'text-red-400' : 'text-muted-foreground'
+                    }`}
                 >
                   {hiddenTracks[trackId] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                 </button>
@@ -550,9 +549,8 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
                   <button
                     type="button"
                     onClick={() => toggleTrackMute(trackId)}
-                    className={`p-1 rounded hover:bg-surface-hover transition cursor-pointer ${
-                      mutedTracks[trackId] ? 'text-red-400' : 'text-muted-foreground'
-                    }`}
+                    className={`p-1 rounded hover:bg-surface-hover transition cursor-pointer ${mutedTracks[trackId] ? 'text-red-400' : 'text-muted-foreground'
+                      }`}
                   >
                     {mutedTracks[trackId] ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
                   </button>
@@ -565,7 +563,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
         {/* RIGHT scrollable Track list panel */}
         <div className="flex-1 overflow-auto relative select-none bg-background" style={{ cursor: 'crosshair' }}>
           <div className="relative h-full flex flex-col justify-between" style={{ width: `${totalTimelineWidth}px` }}>
-            
+
             {/* Time Ruler and Markers */}
             <div className="h-6 border-b border-border bg-background relative flex items-center text-[9px] font-mono text-muted-foreground">
               {Array.from({ length: 8 }).map((_, i) => {
@@ -614,9 +612,8 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
                 return (
                   <div
                     key={trackId}
-                    className={`h-[44px] relative flex items-center border-y border-transparent ${
-                      isHidden ? 'opacity-20 pointer-events-none' : ''
-                    } ${isLocked ? 'bg-surface/10' : 'bg-transparent'}`}
+                    className={`h-[44px] relative flex items-center border-y border-transparent ${isHidden ? 'opacity-20 pointer-events-none' : ''
+                      } ${isLocked ? 'bg-surface/10' : 'bg-transparent'}`}
                   >
                     {clips
                       .filter((c) => c.trackId === trackId)
@@ -635,9 +632,8 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
                               setSelectedClipId(isSelected ? null : clip.id);
                             }}
                             onContextMenu={(e) => handleClipContextMenu(e, clip)}
-                            className={`absolute h-9 rounded-md border flex items-center justify-between px-2 cursor-pointer transition shadow-md ${clip.color} ${
-                              isSelected ? 'ring-2 ring-sky-400/80 border-sky-400 scale-[1.01]' : 'hover:opacity-90'
-                            } ${clipIsLocked ? 'opacity-70 border-dashed border-amber-500/30' : ''}`}
+                            className={`absolute h-9 rounded-md border flex items-center justify-between px-2 cursor-pointer transition shadow-md ${clip.color} ${isSelected ? 'ring-2 ring-sky-400/80 border-sky-400 scale-[1.01]' : 'hover:opacity-90'
+                              } ${clipIsLocked ? 'opacity-70 border-dashed border-amber-500/30' : ''}`}
                             style={{
                               width: `${clipWidth}px`,
                               left: `${clipLeft}px`
@@ -676,7 +672,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
       </div>
 
       {/* BOTTOM ACTION PANEL */}
-      <ClipActionsPanel 
+      <ClipActionsPanel
         clip={selectedClipId ? clips.find(c => c.id === selectedClipId) || null : null}
         isLocked={!!(selectedClipId && lockedClips[selectedClipId])}
         isMuted={!!(selectedClipId && mutedClips[selectedClipId])}

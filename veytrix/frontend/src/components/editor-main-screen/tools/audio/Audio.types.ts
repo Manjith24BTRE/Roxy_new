@@ -57,11 +57,16 @@ export interface IAudioLibrary {
 }
 
 export interface IAudioTrackManager {
-  createAudioClipFromAsset(asset: AudioAsset, playheadTime: number): AudioClipRef;
+  createAudioClipFromAsset(
+    asset: AudioAsset,
+    playheadTime?: number,
+    maxAllowedDuration?: number
+  ): AudioClipRef;
   addClipToTimeline<T extends AudioClipRef>(
     clips: T[],
     asset: AudioAsset,
-    playheadTime: number
+    playheadTime?: number,
+    selectedClipId?: string
   ): { updatedClips: T[]; createdClip: T };
 }
 
@@ -74,7 +79,8 @@ export interface IAudioManager {
   addAudioToTimeline<T extends AudioClipRef>(
     clips: T[],
     assetId: string,
-    playheadTime: number
+    playheadTime?: number,
+    selectedClipId?: string
   ): { updatedClips: T[]; createdClip: T | null };
   getLibraryAssets(): AudioAsset[];
   removeLibraryAsset(id: string): boolean;

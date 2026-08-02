@@ -26,14 +26,20 @@ export class AudioManager implements IAudioManager {
   addAudioToTimeline<T extends AudioClipRef>(
     clips: T[],
     assetId: string,
-    playheadTime: number = 0
+    playheadTime: number = 0,
+    selectedClipId?: string
   ): { updatedClips: T[]; createdClip: T | null } {
     const asset = audioLibrary.getAssetById(assetId);
     if (!asset) {
       return { updatedClips: clips, createdClip: null };
     }
 
-    const { updatedClips, createdClip } = audioTrackManager.addClipToTimeline(clips, asset, playheadTime);
+    const { updatedClips, createdClip } = audioTrackManager.addClipToTimeline(
+      clips,
+      asset,
+      playheadTime,
+      selectedClipId
+    );
     return { updatedClips, createdClip };
   }
 

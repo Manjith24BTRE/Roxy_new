@@ -11,7 +11,7 @@ export function validateDetach(
   if (!clip) {
     return {
       canDetach: false,
-      reason: 'Select a clip to detach audio.',
+      reason: 'Select a clip to extract audio.',
     };
   }
 

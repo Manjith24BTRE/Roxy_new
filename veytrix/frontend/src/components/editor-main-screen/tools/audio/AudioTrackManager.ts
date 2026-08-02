@@ -2,15 +2,25 @@ import { AudioAsset, AudioClipRef, IAudioTrackManager } from './Audio.types';
 import { generateAudioId } from './audio.utils';
 
 export class AudioTrackManager implements IAudioTrackManager {
-  createAudioClipFromAsset(asset: AudioAsset, playheadTime: number = 0): AudioClipRef {
+  createAudioClipFromAsset(
+    asset: AudioAsset,
+    playheadTime: number = 0,
+    maxAllowedDuration?: number
+  ): AudioClipRef {
+    const rawDuration = asset.duration || 0;
+    const finalDuration =
+      typeof maxAllowedDuration === 'number' && maxAllowedDuration > 0
+        ? Math.min(rawDuration, maxAllowedDuration)
+        : rawDuration;
+
     return {
       id: generateAudioId('clip_audio'),
       name: asset.name,
       url: asset.url,
       timelineStart: Math.max(0, playheadTime),
-      duration: asset.duration,
+      duration: finalDuration,
       startOffset: 0,
-      baseDuration: asset.duration,
+      baseDuration: rawDuration,
       playbackRate: 1,
       speed: 1,
       volume: 1,
@@ -22,43 +32,80 @@ export class AudioTrackManager implements IAudioTrackManager {
       type: 'audio',
       mediaType: 'audio',
       mediaId: asset.id,
-      waveformData: asset.waveformData
+      waveformData: asset.waveformData,
     };
   }
 
   addClipToTimeline<T extends AudioClipRef>(
     clips: T[],
     asset: AudioAsset,
-    playheadTime: number = 0
+    playheadTime: number = 0,
+    selectedClipId?: string
   ): { updatedClips: T[]; createdClip: T } {
-    const newClip = this.createAudioClipFromAsset(asset, playheadTime) as T;
-
-    // Check if playhead position overlaps with a locked clip on audio track
-    const audioTrackId = 'audio';
-    const targetStart = newClip.timelineStart;
-    const targetEnd = targetStart + newClip.duration;
-
-    let adjustedStart = targetStart;
-
-    const lockedClipsOnTrack = clips.filter(
-      (c) => (c.trackId === audioTrackId || c.type === 'audio') && c.isLocked
+    // 1. Identify video clips on the timeline
+    const videoClips = clips.filter(
+      (c: any) =>
+        c.trackId === 'video' ||
+        c.type === 'video' ||
+        c.mediaType === 'video' ||
+        (!c.trackId && !c.type)
     );
 
-    for (const locked of lockedClipsOnTrack) {
-      const lStart = locked.timelineStart ?? locked.start ?? 0;
-      const lEnd = lStart + locked.duration;
+    let selectedVideoClip: T | undefined;
+    if (selectedClipId) {
+      selectedVideoClip = clips.find((c) => c.id === selectedClipId);
+    }
 
-      // If starting inside a locked clip, shift right after locked clip
-      if (adjustedStart >= lStart && adjustedStart < lEnd) {
-        adjustedStart = lEnd;
+    if (!selectedVideoClip && videoClips.length > 0) {
+      // Find selected clip, active clip, or first video clip
+      selectedVideoClip =
+        videoClips.find((c: any) => c.isSelected || c.active) || videoClips[0];
+    }
+
+    let targetStart = Math.max(0, playheadTime);
+    let targetMaxDuration: number | undefined;
+
+    if (selectedVideoClip) {
+      const clipStart =
+        selectedVideoClip.timelineStart ?? (selectedVideoClip as any).start ?? 0;
+      const clipLength = selectedVideoClip.duration ?? 0;
+
+      // Keep audio clip exactly aligned with the selected video clip
+      targetStart = clipStart;
+
+      // Audio Duration = Minimum(Audio Length, Selected Clip Length)
+      targetMaxDuration = clipLength;
+    } else if (clips.length > 0) {
+      // Calculate max end time of existing timeline to prevent extending timeline
+      const maxTimelineEnd = Math.max(
+        0,
+        ...clips.map(
+          (c) => (c.timelineStart ?? (c as any).start ?? 0) + (c.duration ?? 0)
+        )
+      );
+
+      if (maxTimelineEnd > 0) {
+        targetStart = Math.min(targetStart, maxTimelineEnd);
+        targetMaxDuration = Math.max(0, maxTimelineEnd - targetStart);
       }
     }
 
-    newClip.timelineStart = adjustedStart;
+    const newClip = this.createAudioClipFromAsset(
+      asset,
+      targetStart,
+      targetMaxDuration
+    ) as T;
+
+    newClip.timelineStart = targetStart;
     if ('start' in newClip) {
-      (newClip as any).start = adjustedStart;
+      (newClip as any).start = targetStart;
     }
 
+    if (selectedVideoClip) {
+      (newClip as any).sourceVideoId = selectedVideoClip.id;
+    }
+
+    // Do NOT shift, move, or push any existing clips
     const updatedClips = [...clips, newClip];
     return { updatedClips, createdClip: newClip };
   }

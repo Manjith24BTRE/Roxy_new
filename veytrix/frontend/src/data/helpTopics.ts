@@ -26,7 +26,7 @@ export const helpTopics: HelpTopic[] = [
     title: "Editing Basics",
     description: "Learn how to use fundamental editing tools.",
     keywords: ["cut", "trim", "split", "move", "basic"],
-    content: "Use the Razor tool (C) to split clips, and the Selection tool (V) to move or trim the edges. You can also right-click a clip for more options like detaching audio."
+    content: "Use the Razor tool (C) to split clips, and the Selection tool (V) to move or trim the edges. You can also right-click a clip for more options like extracting audio."
   },
   {
     id: "timeline",
