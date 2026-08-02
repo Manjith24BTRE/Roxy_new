@@ -26,7 +26,6 @@ import { SAMPLE_TRANSITIONS_NEW } from './tools/transitions/Transitions.data';
 import { EFFECT_PRESETS, EffectPreset, AppliedEffect, EffectKeyframe, getInterpolatedEffectProps } from './tools/effects/effectsPreset';
 import { applyEffectPipeline, renderStateToCSS, createDefaultRenderState } from './tools/effects/renderers';
 import { useDuplicate } from './tools/duplicate';
-import { useCopyPaste } from './tools/copy-paste';
 import { useRename, RenameDialog } from './tools/rename';
 import { useReverse, reversedAudioEngine } from './tools/reverse';
 import { useDetach } from './tools/detach';
@@ -159,16 +158,7 @@ function EditorMainScreenContent() {
     showToast,
   });
 
-  // Copy & Paste hook initialization
-  const { copy: copyClip, paste: pasteClip, hasClipboardPayload } = useCopyPaste({
-    getSelectedClip: () => activeSelectedClip,
-    onPasteSequence: (updatedClips) => {
-      setTimelineClips(updatedClips);
-    },
-    getClips: () => timelineClips,
-    currentTime,
-    showToast,
-  });
+
 
   // Detach Audio hook initialization
   const { detachAudio } = useDetach({
@@ -1288,15 +1278,6 @@ function EditorMainScreenContent() {
         setActiveTab('effects');
         showToast(`Select a transition to apply to ${clip.name}`);
         break;
-      case 'copy':
-        copyClip();
-        break;
-      case 'paste':
-        beginTransaction('Paste clip', getProjectState());
-        if (pasteClip({ selectedClipId: clipId, recalculateSequence })) {
-          commitTransaction(getProjectState());
-        }
-        break;
       case 'rename':
         openRename(clipId || clip?.id, clip?.name);
         break;
@@ -2268,11 +2249,11 @@ function EditorMainScreenContent() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/home')}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-md hover:bg-surface-hover transition"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span>Dashboard</span>
+            <span>Home</span>
           </button>
           <div className="h-4 w-px bg-surface/10" />
           <div className="flex items-center gap-2">
@@ -3698,7 +3679,7 @@ function EditorMainScreenContent() {
           } : null}
           isLocked={!!(activeSelectedClip && (lockedClips[activeSelectedClip.id] || activeSelectedClip.isLocked))}
           isMuted={isMuted || !!(activeSelectedClip && (mutedClips[activeSelectedClip.id] || activeSelectedClip.isMuted))}
-          hasClipboardPayload={hasClipboardPayload}
+          hasClipboardPayload={false}
           onAction={(actionId) => handleMenuAction(actionId, activeSelectedClip?.id || '')}
         />
       </footer>

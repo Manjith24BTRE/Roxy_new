@@ -1,7 +1,7 @@
 import React, { useState, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import { VeytrixLogo } from '../components/VeytrixLogo';
-import { Facebook, Instagram, Linkedin } from 'lucide-react';
+import { Facebook, Instagram, Linkedin, Twitter, Github, Mail } from 'lucide-react';
 import { socialLinks } from '../config/socialLinks';
 import { LandingModal } from '../components/landing/modals/LandingModal';
 
@@ -27,9 +27,7 @@ const COLS: FooterColumn[] = [
     title: "Product",
     items: [
       { label: "Editor", to: "/editor" },
-      { label: "Templates", disabled: true },
       { label: "Features", disabled: true },
-      { label: "Learning", disabled: true },
     ],
   },
   {
@@ -81,98 +79,106 @@ export function SiteFooter() {
 
   return (
     <>
-      <footer className="border-t border-[rgba(230,242,248,0.12)] bg-[#1D2B64] text-[#FFFFFF]">
-        <div className="mx-auto max-w-7xl px-6 py-14">
+      <footer className="border-t border-[#1D2B64]/5 bg-[#FFFFFF] text-[#1D2B64] py-16 relative z-10">
+        <div className="mx-auto max-w-7xl px-6">
           <div className="grid gap-10 md:grid-cols-12">
             
             <div className="md:col-span-4 flex flex-col items-start">
               <div className="flex items-center gap-2">
-                <VeytrixLogo className="h-6 w-6 text-[#FFFFFF]" />
-                <span className="font-display text-lg font-semibold tracking-tight text-[#FFFFFF]">VEYTRIX</span>
+                <VeytrixLogo className="h-6 w-6 text-[#1D2B64]" />
+                <span className="font-display text-lg font-bold tracking-tight text-[#1D2B64]">VEYTRIX</span>
               </div>
               
-              <p className="mt-4 text-sm text-[rgba(230,242,248,0.72)] max-w-[280px] leading-relaxed">
-                Professional video editing, built for speed, precision, and creative flow.
+              <p className="mt-4 text-sm text-[#1D2B64]/70 max-w-[280px] leading-relaxed">
+                Professional browser-native video editing built for speed, precision, and agency workflow.
               </p>
               
-              <p className="mt-4 text-[13px] text-[#E6F2F8] font-medium">
-                Associated with Mavros Tech Pvt Ltd.
+              <p className="mt-4 text-xs text-[#1D2B64]/50 font-semibold tracking-wide">
+                Associated Product of Mavros Tech Pvt Ltd.
               </p>
 
+              {/* Social Media Link Icons */}
               <div className="mt-6 flex items-center gap-3">
-                {socialLinks.linkedin ? (
-                  <a
-                    href={socialLinks.linkedin}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="VEYTRIX on LinkedIn"
-                    className="flex items-center justify-center w-9 h-9 rounded-md border border-[rgba(230,242,248,0.16)] text-[#E6F2F8] bg-transparent transition-colors duration-150 hover:bg-[rgba(140,200,232,0.10)] hover:text-[#FFFFFF] hover:border-[rgba(140,200,232,0.35)]"
-                  >
-                    <Linkedin className="w-[18px] h-[18px]" aria-hidden="true" />
-                  </a>
-                ) : (
-                  <span className="flex items-center justify-center w-9 h-9 rounded-md border border-[rgba(230,242,248,0.16)] text-[#E6F2F8] bg-transparent opacity-50 cursor-not-allowed" aria-hidden="true">
-                    <Linkedin className="w-[18px] h-[18px]" aria-hidden="true" />
-                  </span>
-                )}
-                {socialLinks.instagram ? (
-                  <a
-                    href={socialLinks.instagram}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="VEYTRIX on Instagram"
-                    className="flex items-center justify-center w-9 h-9 rounded-md border border-[rgba(230,242,248,0.16)] text-[#E6F2F8] bg-transparent transition-colors duration-150 hover:bg-[rgba(140,200,232,0.10)] hover:text-[#FFFFFF] hover:border-[rgba(140,200,232,0.35)]"
-                  >
-                    <Instagram className="w-[18px] h-[18px]" aria-hidden="true" />
-                  </a>
-                ) : (
-                  <span className="flex items-center justify-center w-9 h-9 rounded-md border border-[rgba(230,242,248,0.16)] text-[#E6F2F8] bg-transparent opacity-50 cursor-not-allowed" aria-hidden="true">
-                    <Instagram className="w-[18px] h-[18px]" aria-hidden="true" />
-                  </span>
-                )}
-                {socialLinks.facebook ? (
-                  <a
-                    href={socialLinks.facebook}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="VEYTRIX on Facebook"
-                    className="flex items-center justify-center w-9 h-9 rounded-md border border-[rgba(230,242,248,0.16)] text-[#E6F2F8] bg-transparent transition-colors duration-150 hover:bg-[rgba(140,200,232,0.10)] hover:text-[#FFFFFF] hover:border-[rgba(140,200,232,0.35)]"
-                  >
-                    <Facebook className="w-[18px] h-[18px]" aria-hidden="true" />
-                  </a>
-                ) : (
-                  <span className="flex items-center justify-center w-9 h-9 rounded-md border border-[rgba(230,242,248,0.16)] text-[#E6F2F8] bg-transparent opacity-50 cursor-not-allowed" aria-hidden="true">
-                    <Facebook className="w-[18px] h-[18px]" aria-hidden="true" />
-                  </span>
-                )}
+                <a
+                  href="https://linkedin.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="VEYTRIX on LinkedIn"
+                  className="flex items-center justify-center w-8 h-8 rounded-full border border-[#1D2B64]/10 text-[#1D2B64]/60 hover:text-[#3B6CE7] hover:border-[#3B6CE7]/30 hover:bg-[#E6F2F8]/30 transition-all"
+                >
+                  <Linkedin className="w-4 h-4" />
+                </a>
+                <a
+                  href="https://instagram.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="VEYTRIX on Instagram"
+                  className="flex items-center justify-center w-8 h-8 rounded-full border border-[#1D2B64]/10 text-[#1D2B64]/60 hover:text-[#3B6CE7] hover:border-[#3B6CE7]/30 hover:bg-[#E6F2F8]/30 transition-all"
+                >
+                  <Instagram className="w-4 h-4" />
+                </a>
+                <a
+                  href="https://facebook.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="VEYTRIX on Facebook"
+                  className="flex items-center justify-center w-8 h-8 rounded-full border border-[#1D2B64]/10 text-[#1D2B64]/60 hover:text-[#3B6CE7] hover:border-[#3B6CE7]/30 hover:bg-[#E6F2F8]/30 transition-all"
+                >
+                  <Facebook className="w-4 h-4" />
+                </a>
+                <a
+                  href="https://twitter.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="VEYTRIX on X"
+                  className="flex items-center justify-center w-8 h-8 rounded-full border border-[#1D2B64]/10 text-[#1D2B64]/60 hover:text-[#3B6CE7] hover:border-[#3B6CE7]/30 hover:bg-[#E6F2F8]/30 transition-all"
+                >
+                  <Twitter className="w-4 h-4" />
+                </a>
+                <a
+                  href="https://github.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="VEYTRIX on GitHub"
+                  className="flex items-center justify-center w-8 h-8 rounded-full border border-[#1D2B64]/10 text-[#1D2B64]/60 hover:text-[#3B6CE7] hover:border-[#3B6CE7]/30 hover:bg-[#E6F2F8]/30 transition-all"
+                >
+                  <Github className="w-4 h-4" />
+                </a>
+                <a
+                  href="mailto:support@veytrix.com"
+                  aria-label="Email VEYTRIX"
+                  className="flex items-center justify-center w-8 h-8 rounded-full border border-[#1D2B64]/10 text-[#1D2B64]/60 hover:text-[#3B6CE7] hover:border-[#3B6CE7]/30 hover:bg-[#E6F2F8]/30 transition-all"
+                >
+                  <Mail className="w-4 h-4" />
+                </a>
               </div>
             </div>
 
             <div className="md:col-span-8 grid grid-cols-2 gap-8 sm:grid-cols-3">
               {COLS.map((c) => (
                 <nav key={c.title} aria-label={c.title}>
-                  <div className="text-xs font-mono uppercase tracking-widest text-[#8CC8E8]">
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#3B6CE7]">
                     {c.title}
                   </div>
                   <ul className="mt-4 space-y-3">
                     {c.items.map((i) => (
                       <li key={i.label}>
                         {i.disabled ? (
-                          <span className="text-sm text-[rgba(230,242,248,0.72)] opacity-50 cursor-not-allowed">
+                          <span className="text-xs font-semibold text-[#1D2B64]/30 cursor-not-allowed uppercase tracking-wider">
                             {i.label}
                           </span>
                         ) : i.modalKey ? (
                           <button
                             type="button"
                             onClick={() => setActiveModal(i.modalKey!)}
-                            className="text-sm text-[rgba(230,242,248,0.72)] hover:text-[#8CC8E8] transition-colors duration-150 text-left"
+                            className="text-sm text-[#1D2B64]/70 hover:text-[#3B6CE7] transition-colors duration-150 text-left font-medium"
                           >
                             {i.label}
                           </button>
                         ) : (
                           <Link
                             to={i.to!}
-                            className="text-sm text-[rgba(230,242,248,0.72)] hover:text-[#8CC8E8] transition-colors duration-150"
+                            className="text-sm text-[#1D2B64]/70 hover:text-[#3B6CE7] transition-colors duration-150 font-medium"
                           >
                             {i.label}
                           </Link>
@@ -185,12 +191,12 @@ export function SiteFooter() {
             </div>
           </div>
 
-          <div className="mt-16 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-t border-[rgba(230,242,248,0.12)] pt-8">
-            <p className="text-xs text-[rgba(230,242,248,0.72)]">
+          <div className="mt-16 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-t border-[#1D2B64]/5 pt-8">
+            <p className="text-xs text-[#1D2B64]/50 font-medium">
               © {new Date().getFullYear()} VEYTRIX. All rights reserved.
             </p>
             <div className="flex items-center gap-4">
-              <p className="text-xs text-[rgba(230,242,248,0.72)] font-mono">
+              <p className="text-xs text-[#1D2B64]/40 font-mono">
                 v1.0.0 · build
               </p>
             </div>

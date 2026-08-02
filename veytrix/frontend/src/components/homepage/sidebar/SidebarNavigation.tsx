@@ -13,8 +13,6 @@ export function SidebarNavigation({ collapsed, onMobileItemClick }: SidebarNavig
   const navItems = [
     { to: '/home', icon: Home, label: 'Home' },
     { to: '/projects', icon: FolderOpen, label: 'Projects' },
-    { to: '/templates', icon: Star, label: 'Templates' },
-    { to: '/learning', icon: TrendingUp, label: 'Learning' },
   ];
 
   return (

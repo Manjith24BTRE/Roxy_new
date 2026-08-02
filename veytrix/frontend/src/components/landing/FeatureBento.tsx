@@ -1,156 +1,206 @@
-import React from 'react';
-import { Film, MonitorPlay, AudioWaveform, Palette, Wand2, Download } from 'lucide-react';
+import React, { useState } from 'react';
+import { Film, MonitorPlay, AudioWaveform, Palette, Wand2, Download, Play, Pause, ChevronRight } from 'lucide-react';
+import { GlassCard } from './GlassCard';
+import { SectionTitle } from './SectionTitle';
 
 export function FeatureBento() {
+  const [isPlayingTimeline, setIsPlayingTimeline] = useState(true);
+  const [activeBlur, setActiveBlur] = useState(8);
+  const [activeLUT, setActiveLUT] = useState('Rec.709');
+
   return (
-    <section id="features" className="relative py-24 bg-background">
+    <section id="features" className="relative py-28 bg-[#FFFFFF] z-10">
       <div className="mx-auto max-w-7xl px-6">
-        <div className="text-center max-w-2xl mx-auto mb-16">
-          <h2 className="text-4xl md:text-5xl font-display font-bold tracking-tight text-foreground">
-            Everything you need.<br />
-            <span className="text-primary">Nothing in your way.</span>
-          </h2>
+        
+        {/* Reusable Section Title */}
+        <div className="reveal-on-scroll">
+          <SectionTitle 
+            badge="Features"
+            title="Everything you need. Nothing in your way."
+            subtitle="Engineered with minimal UI overhead, allowing you to focus purely on the visual content."
+          />
         </div>
 
         {/* Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[300px]">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[310px] mt-12">
           
           {/* Timeline - Large horizontal */}
-          <div className="md:col-span-2 rounded-2xl bg-surface border border-border overflow-hidden flex flex-col p-6 hover:border-border-strong transition-colors shadow-sm relative group">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+          <GlassCard className="reveal-on-scroll md:col-span-2 flex flex-col p-8 group">
+            <div className="flex items-center gap-3.5 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-[#3B6CE7]/10 flex items-center justify-center text-[#3B6CE7]">
                 <Film size={20} />
               </div>
               <div>
-                <h3 className="font-semibold text-lg text-foreground">Cinematic Timeline</h3>
-                <span className="text-xs font-mono text-muted-foreground uppercase">Visualization</span>
+                <h3 className="font-semibold text-lg text-[#1D2B64]">Cinematic Timeline</h3>
+                <span className="text-[10px] font-mono text-[#1D2B64]/40 font-bold uppercase tracking-widest">Multi-Track Orchestration</span>
               </div>
             </div>
-            <p className="text-muted-foreground text-sm max-w-md z-10 relative">Multi-track editing with ripple, snap, and layer control that stays out of your way.</p>
+            <p className="text-[#1D2B64]/70 text-sm max-w-md">Multi-track layer editing with magnetic snapping, fluid ripple cuts, and precision zoom markers that react immediately.</p>
             
-            {/* Visual demo */}
-            <div className="mt-auto pt-8 opacity-60 group-hover:opacity-100 transition-opacity">
+            {/* Interactive Timeline Visual demo */}
+            <div className="mt-auto pt-6">
               <div className="flex flex-col gap-2 relative">
-                <div className="absolute top-0 bottom-0 left-[20%] w-px bg-primary z-10" />
-                <div className="h-6 w-full bg-background rounded border border-border flex items-center px-1">
-                   <div className="h-4 w-1/2 ml-[10%] bg-primary rounded opacity-80" />
+                <div 
+                  className={`absolute top-0 bottom-0 w-0.5 bg-[#3B6CE7] z-10 transition-all duration-[6000ms] ease-linear ${isPlayingTimeline ? 'left-[80%]' : 'left-[20%]'}`} 
+                  onTransitionEnd={() => setIsPlayingTimeline(!isPlayingTimeline)}
+                />
+                
+                <div className="h-7 w-full bg-[#E6F2F8]/30 rounded-lg border border-[#1D2B64]/5 flex items-center px-2">
+                   <div className="h-4 w-1/3 ml-[15%] bg-[#3B6CE7]/85 rounded-md border border-white/20 shadow-sm flex items-center px-2 justify-between">
+                     <span className="text-[8px] font-mono text-white font-bold">Intro.mov</span>
+                   </div>
                 </div>
-                <div className="h-6 w-full bg-background rounded border border-border flex items-center px-1">
-                   <div className="h-4 w-[60%] ml-[30%] bg-accent rounded opacity-80" />
+                <div className="h-7 w-full bg-[#E6F2F8]/30 rounded-lg border border-[#1D2B64]/5 flex items-center px-2">
+                   <div className="h-4 w-[45%] ml-[35%] bg-[#8CC8E8]/90 rounded-md border border-white/20 shadow-sm flex items-center px-2 justify-between">
+                     <span className="text-[8px] font-mono text-[#1D2B64] font-bold">B-Roll_A.mp4</span>
+                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          </GlassCard>
 
           {/* Live Preview */}
-          <div className="rounded-2xl bg-surface border border-border overflow-hidden flex flex-col p-6 hover:border-border-strong transition-colors shadow-sm group">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+          <GlassCard className="reveal-on-scroll flex flex-col p-8 group">
+            <div className="flex items-center gap-3.5 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-[#3B6CE7]/10 flex items-center justify-center text-[#3B6CE7]">
                 <MonitorPlay size={20} />
               </div>
               <div>
-                <h3 className="font-semibold text-lg text-foreground">Live Preview</h3>
-                <span className="text-xs font-mono text-muted-foreground uppercase">Canvas UI</span>
+                <h3 className="font-semibold text-lg text-[#1D2B64]">Zero-Lag Preview</h3>
+                <span className="text-[10px] font-mono text-[#1D2B64]/40 font-bold uppercase tracking-widest">Canvas UI</span>
               </div>
             </div>
             
             {/* Visual demo */}
-            <div className="mt-auto aspect-video bg-background border border-border rounded-lg relative overflow-hidden flex items-center justify-center">
-              <div className="absolute inset-4 border border-dashed border-muted-foreground/30 rounded opacity-50 group-hover:opacity-100 transition-opacity" />
-              <div className="w-12 h-12 rounded-full border-2 border-primary/20 flex items-center justify-center">
-                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                   <div className="w-0 h-0 border-t-[5px] border-t-transparent border-l-[8px] border-l-white border-b-[5px] border-b-transparent ml-1" />
-                </div>
-              </div>
+            <div className="mt-auto aspect-video bg-[#E6F2F8]/20 border border-[#1D2B64]/5 rounded-xl relative overflow-hidden flex items-center justify-center shadow-inner">
+              <div className="absolute inset-3 border border-dashed border-[#3B6CE7]/20 rounded-lg opacity-40 group-hover:opacity-100 transition-opacity" />
+              <button className="w-11 h-11 rounded-full bg-white border border-[#1D2B64]/5 flex items-center justify-center shadow-md text-[#3B6CE7] hover:scale-105 active:scale-95 transition-all">
+                <Play size={16} className="fill-current ml-0.5" />
+              </button>
             </div>
-          </div>
+          </GlassCard>
 
           {/* Effects */}
-          <div className="rounded-2xl bg-surface border border-border overflow-hidden flex flex-col p-6 hover:border-border-strong transition-colors shadow-sm group">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+          <GlassCard className="reveal-on-scroll flex flex-col p-8 group">
+            <div className="flex items-center gap-3.5 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-[#3B6CE7]/10 flex items-center justify-center text-[#3B6CE7]">
                 <Wand2 size={20} />
               </div>
               <div>
-                <h3 className="font-semibold text-lg text-foreground">Effects</h3>
-                <span className="text-xs font-mono text-muted-foreground uppercase">Shaders</span>
+                <h3 className="font-semibold text-lg text-[#1D2B64]">GPU Effects</h3>
+                <span className="text-[10px] font-mono text-[#1D2B64]/40 font-bold uppercase tracking-widest">Shaders</span>
               </div>
             </div>
             
-            {/* Visual demo */}
-            <div className="mt-auto flex flex-col gap-2">
-              <div className="bg-background border border-border rounded px-3 py-2 flex items-center justify-between text-xs font-mono group-hover:-translate-y-1 transition-transform">
-                <span className="text-foreground">Gaussian Blur</span>
-                <span className="text-primary">12px</span>
+            {/* Interactive sliders visual mockup */}
+            <div className="mt-auto space-y-3">
+              <div className="bg-[#E6F2F8]/30 border border-[#1D2B64]/5 rounded-xl p-3 flex flex-col gap-1.5">
+                <div className="flex justify-between text-[10px] font-mono font-bold text-[#1D2B64]">
+                  <span>Gaussian Blur</span>
+                  <span>{activeBlur}px</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="20" 
+                  value={activeBlur} 
+                  onChange={(e) => setActiveBlur(Number(e.target.value))}
+                  className="w-full h-1 bg-[#1D2B64]/10 rounded-lg appearance-none cursor-pointer accent-[#3B6CE7]"
+                />
               </div>
-              <div className="bg-background border border-border rounded px-3 py-2 flex items-center justify-between text-xs font-mono group-hover:translate-x-1 transition-transform delay-75">
-                <span className="text-foreground">Color Grading</span>
-                <span className="text-primary">Rec.709</span>
+              <div className="bg-[#E6F2F8]/30 border border-[#1D2B64]/5 rounded-xl p-3 flex justify-between items-center text-xs">
+                <span className="font-mono font-bold text-[#1D2B64] text-[10px]">Filter Blend</span>
+                <span className="font-mono font-bold text-[#3B6CE7] text-[10px]">Screen</span>
               </div>
             </div>
-          </div>
+          </GlassCard>
 
           {/* Audio - Large horizontal */}
-          <div className="md:col-span-2 rounded-2xl bg-surface border border-border overflow-hidden flex flex-col p-6 hover:border-border-strong transition-colors shadow-sm group">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+          <GlassCard className="reveal-on-scroll md:col-span-2 flex flex-col p-8 group">
+            <div className="flex items-center gap-3.5 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-[#3B6CE7]/10 flex items-center justify-center text-[#3B6CE7]">
                 <AudioWaveform size={20} />
               </div>
               <div>
-                <h3 className="font-semibold text-lg text-foreground">Advanced Audio</h3>
-                <span className="text-xs font-mono text-muted-foreground uppercase">Waveforms</span>
+                <h3 className="font-semibold text-lg text-[#1D2B64]">Waveform Analysis</h3>
+                <span className="text-[10px] font-mono text-[#1D2B64]/40 font-bold uppercase tracking-widest">Audio HUD</span>
               </div>
             </div>
-            <p className="text-muted-foreground text-sm max-w-md">Audio scrubbing, ducking, and mixing tuned for creators, not engineers.</p>
+            <p className="text-[#1D2B64]/70 text-sm max-w-md">Synchronize audio tracks, implement ducking parameters, and apply noise gates with interactive visualizers.</p>
             
-            {/* Visual demo */}
-            <div className="mt-auto h-20 w-full flex items-center gap-1 overflow-hidden opacity-60 group-hover:opacity-100 transition-opacity">
-              {Array.from({ length: 40 }).map((_, i) => (
-                <div key={i} className="flex-1 bg-primary/40 rounded-full" style={{ height: `${Math.max(20, Math.sin(i * 0.5) * 100)}%` }} />
-              ))}
+            {/* Waveform graphic */}
+            <div className="mt-auto h-16 w-full flex items-end gap-1.5 overflow-hidden opacity-70 group-hover:opacity-100 transition-opacity">
+              {Array.from({ length: 48 }).map((_, i) => {
+                const height = Math.abs(Math.sin(i * 0.2) * 80 + Math.cos(i * 0.4) * 20);
+                return (
+                  <div 
+                    key={i} 
+                    className="flex-1 bg-[#3B6CE7]/20 hover:bg-[#3B6CE7] rounded-full transition-all duration-300" 
+                    style={{ height: `${Math.max(10, height)}%` }} 
+                  />
+                );
+              })}
             </div>
-          </div>
+          </GlassCard>
 
-          {/* Color & Filters */}
-          <div className="md:col-span-2 rounded-2xl bg-surface border border-border overflow-hidden flex flex-col p-6 hover:border-border-strong transition-colors shadow-sm group">
-             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+          {/* Color & Curves */}
+          <GlassCard className="reveal-on-scroll md:col-span-2 flex flex-col p-8 group">
+             <div className="flex items-center gap-3.5 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-[#3B6CE7]/10 flex items-center justify-center text-[#3B6CE7]">
                 <Palette size={20} />
               </div>
               <div>
-                <h3 className="font-semibold text-lg text-foreground">Color & Filters</h3>
-                <span className="text-xs font-mono text-muted-foreground uppercase">LUTs & Curves</span>
-              </div>
-            </div>
-            <div className="mt-auto h-24 bg-background border border-border rounded-lg relative overflow-hidden flex items-end p-2 gap-1 group-hover:bg-background-subtle transition-colors">
-               {/* Abstract curves/histogram */}
-               <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-primary/20 to-transparent" />
-               <svg viewBox="0 0 100 50" className="w-full h-full preserve-3d" preserveAspectRatio="none">
-                 <path d="M0,50 C20,40 30,10 50,25 C70,40 80,5 100,20 L100,50 L0,50 Z" className="fill-primary/10 stroke-primary stroke-[0.5]" />
-               </svg>
-            </div>
-          </div>
-
-          {/* Export */}
-          <div className="rounded-2xl bg-surface border border-border overflow-hidden flex flex-col p-6 hover:border-border-strong transition-colors shadow-sm group">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                <Download size={20} />
-              </div>
-              <div>
-                <h3 className="font-semibold text-lg text-foreground">Export Center</h3>
-                <span className="text-xs font-mono text-muted-foreground uppercase">Rendering</span>
+                <h3 className="font-semibold text-lg text-[#1D2B64]">Color Grading</h3>
+                <span className="text-[10px] font-mono text-[#1D2B64]/40 font-bold uppercase tracking-widest">LUT Mapping</span>
               </div>
             </div>
             
-            {/* Visual demo */}
-            <div className="mt-auto flex gap-2 flex-wrap">
-              <span className="px-2 py-1 bg-background border border-border rounded text-[10px] font-mono text-foreground font-semibold group-hover:border-primary transition-colors">4K UHD</span>
-              <span className="px-2 py-1 bg-background border border-border rounded text-[10px] font-mono text-foreground font-semibold group-hover:border-primary transition-colors">60 FPS</span>
-              <span className="px-2 py-1 bg-background border border-border rounded text-[10px] font-mono text-foreground font-semibold group-hover:border-primary transition-colors">H.265</span>
-              <span className="px-2 py-1 bg-background border border-border rounded text-[10px] font-mono text-foreground font-semibold group-hover:border-primary transition-colors">AAC 320k</span>
+            <div className="mt-auto h-24 bg-[#E6F2F8]/10 border border-[#1D2B64]/5 rounded-xl relative overflow-hidden flex items-end p-3 gap-1">
+               <div className="absolute inset-0 bg-gradient-to-t from-[#8CC8E8]/10 to-transparent" />
+               <svg viewBox="0 0 100 50" className="w-full h-full" preserveAspectRatio="none">
+                 <path 
+                   d="M0,50 C25,45 35,5 65,20 C80,30 90,0 100,10 L100,50 L0,50 Z" 
+                   className="fill-[#3B6CE7]/5 stroke-[#3B6CE7] stroke-[0.8]" 
+                 />
+               </svg>
+               <div className="absolute top-3 right-3 flex gap-1.5">
+                 {['Rec.709', 'ACEScg', 'Film Log'].map((lut) => (
+                   <button 
+                     key={lut}
+                     onClick={() => setActiveLUT(lut)}
+                     className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold transition-all ${activeLUT === lut ? 'bg-[#1D2B64] text-white' : 'bg-white text-[#1D2B64]/60 border border-[#1D2B64]/5 hover:bg-[#E6F2F8]'}`}
+                   >
+                     {lut}
+                   </button>
+                 ))}
+               </div>
             </div>
-          </div>
+          </GlassCard>
+
+          {/* Export */}
+          <GlassCard className="reveal-on-scroll flex flex-col p-8 group">
+            <div className="flex items-center gap-3.5 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-[#3B6CE7]/10 flex items-center justify-center text-[#3B6CE7]">
+                <Download size={20} />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg text-[#1D2B64]">Pro Render Export</h3>
+                <span className="text-[10px] font-mono text-[#1D2B64]/40 font-bold uppercase tracking-widest">Multi-Format</span>
+              </div>
+            </div>
+            
+            {/* Formatting chips */}
+            <div className="mt-auto flex gap-2 flex-wrap">
+              {["4K Ultra HD", "ProRes 422", "H.265 / HEVC", "120 FPS Rendering", "Dolby Digital"].map((item, i) => (
+                <span 
+                  key={i} 
+                  className="px-2.5 py-1.5 bg-[#E6F2F8]/40 border border-[#1D2B64]/5 rounded-xl text-[10px] font-mono text-[#1D2B64] font-bold transition-all duration-300 group-hover:border-[#3B6CE7]/20 group-hover:bg-white"
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+          </GlassCard>
 
         </div>
       </div>

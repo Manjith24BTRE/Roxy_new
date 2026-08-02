@@ -10,20 +10,6 @@ export function QuickActions() {
       title: "New Project",
       desc: "Import media & start editing",
       color: "text-[#3B6CE7]"
-    },
-    {
-      to: "/templates",
-      icon: Star,
-      title: "Browse Templates",
-      desc: "Start from a template",
-      color: "text-[#8CC8E8]"
-    },
-    {
-      to: "/learning",
-      icon: TrendingUp,
-      title: "Learn Veytrix",
-      desc: "Tutorials & guides",
-      color: "text-[#1D2B64]"
     }
   ];
 

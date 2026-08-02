@@ -1,39 +1,63 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Plus } from 'lucide-react';
+import { GlassCard } from './GlassCard';
 
 const FAQS = [
-  { q: "Is VEYTRIX free to use?", a: "The public beta is free while we harden the core. Pricing tiers are coming with export watermark removal and cloud sync." },
-  { q: "What formats and codecs are supported?", a: "The Export Center will support common resolutions up to 4K, 24–120 FPS, H.264/H.265, and ProRes. Deeper codec support is on the roadmap." },
-  { q: "Does VEYTRIX include AI features?", a: "The AI Command Engine is reserved for a future release. The scaffold is in place; we're building it with the same care as the timeline." },
-  { q: "Can I self-host or use it offline?", a: "The editor runs locally in your browser. Cloud sync, templates, and shared projects are optional and opt-in." },
-  { q: "Do you have a keyboard-first workflow?", a: "Yes — every module is reachable from the command palette and keybindings are fully remappable." },
+  { q: "Is VEYTRIX free to use?", a: "The public beta is completely free to use. Advanced cloud rendering features and team libraries will be available in future premium tiers." },
+  { q: "What formats and codecs are supported?", a: "We support importing MP4, MOV, WebM, and audio files like MP3 and WAV. Exports support H.264, H.265 (HEVC), and AAC audio." },
+  { q: "Does VEYTRIX support AI editing features?", a: "The AI command engine structure is being ready for model integration. You will soon be able to auto-cut and color-grade via text commands." },
+  { q: "Is my media uploaded to a server?", a: "No, all media processing and preview renderings happen locally in your browser memory via WebCodecs and WebAssembly." },
+  { q: "Do you have a keyboard-first workflow?", a: "Yes, VEYTRIX features fully mapped shortcut presets which align with classic desktop editors like Premiere and Final Cut." },
 ];
 
 export function FAQ() {
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+
+  const toggle = (idx: number) => {
+    setOpenIndex(openIndex === idx ? null : idx);
+  };
+
   return (
-    <section className="py-24 bg-background">
-      <div className="mx-auto max-w-4xl px-6">
+    <section className="relative py-28 bg-[#FFFFFF] z-10">
+      <div className="mx-auto max-w-3xl px-6">
         
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-display font-bold tracking-tight text-foreground">
-            Questions,<br />
-            <span className="text-muted-foreground">answered.</span>
+          <span className="font-mono text-xs font-bold text-[#3B6CE7] tracking-widest uppercase mb-4 block">
+            Support
+          </span>
+          <h2 className="text-3xl md:text-4xl font-display font-bold tracking-tight text-[#1D2B64]">
+            Questions, answered.
           </h2>
         </div>
 
-        <div className="divide-y divide-border border-y border-border">
-          {FAQS.map((f, i) => (
-            <details key={i} className="group py-6">
-              <summary className="flex cursor-pointer items-center justify-between list-none text-lg font-medium text-foreground hover:text-primary transition-colors">
-                {f.q}
-                <span className="ml-6 flex h-7 w-7 items-center justify-center rounded-full bg-surface border border-border text-foreground transition-transform duration-300 group-open:rotate-45">
-                  +
-                </span>
-              </summary>
-              <p className="mt-4 text-muted-foreground leading-relaxed pr-12">
-                {f.a}
-              </p>
-            </details>
-          ))}
+        <div className="space-y-4">
+          {FAQS.map((f, i) => {
+            const isOpen = openIndex === i;
+            return (
+              <GlassCard 
+                key={i} 
+                hoverEffect={false}
+                className={`reveal-on-scroll border ${isOpen ? 'border-[#3B6CE7]/20 bg-[#E6F2F8]/10' : 'border-[#1D2B64]/5'} overflow-hidden transition-all duration-300`}
+              >
+                <button
+                  onClick={() => toggle(i)}
+                  className="w-full flex items-center justify-between p-6 text-left text-[#1D2B64] hover:text-[#3B6CE7] font-semibold text-base transition-colors"
+                >
+                  <span>{f.q}</span>
+                  <span className={`flex h-7 w-7 items-center justify-center rounded-full bg-white border border-[#1D2B64]/5 text-[#1D2B64] transition-transform duration-300 ${isOpen ? 'rotate-45 text-[#3B6CE7]' : ''}`}>
+                    <Plus size={14} />
+                  </span>
+                </button>
+                <div 
+                  className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-40 border-t border-[#1D2B64]/5' : 'max-h-0'}`}
+                >
+                  <p className="p-6 text-sm text-[#1D2B64]/70 leading-relaxed bg-white/40">
+                    {f.a}
+                  </p>
+                </div>
+              </GlassCard>
+            );
+          })}
         </div>
 
       </div>

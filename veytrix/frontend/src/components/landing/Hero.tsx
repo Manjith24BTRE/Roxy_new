@@ -1,58 +1,62 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Play, ChevronRight } from 'lucide-react';
+import { Play, Sparkles } from 'lucide-react';
+import { AnnouncementBadge } from './AnnouncementBadge';
+import { HeroPreview } from './HeroPreview';
+import { BackgroundEffects } from './BackgroundEffects';
+import { GradientButton } from './GradientButton';
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden pt-24 pb-16 md:pt-32 md:pb-20">
-      {/* Background gradients for depth without heavy animations */}
-      <div className="absolute inset-0 bg-background pointer-events-none" />
-      <div 
-        className="absolute inset-0 pointer-events-none" 
-        style={{
-          background: 'radial-gradient(circle at 50% 30%, rgba(59,108,231,0.08), transparent 50%), radial-gradient(circle at 50% 0%, rgba(140,200,232,0.05), transparent 40%)'
-        }}
-      />
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#8CC8E810_1px,transparent_1px),linear-gradient(to_bottom,#8CC8E810_1px,transparent_1px)] bg-[size:48px_48px] opacity-[0.15] pointer-events-none" />
+    <section className="relative overflow-hidden pt-20 pb-12 md:pt-28 md:pb-16">
+      {/* Light Luxury SaaS Background Style */}
+      <BackgroundEffects />
 
-      <div className="relative mx-auto max-w-7xl px-6 flex flex-col items-center text-center">
-        {/* Beta Badge */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs shadow-sm mb-8">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-          </span>
-          <span className="font-medium text-foreground tracking-wide">
-            VEYTRIX — PUBLIC BETA
-          </span>
+      <div className="relative mx-auto max-w-7xl px-6 flex flex-col items-center text-center z-10">
+        
+        {/* Animated Capsule Badge */}
+        <div className="reveal-on-scroll">
+          <AnnouncementBadge />
         </div>
 
-        {/* Main Headline */}
-        <h1 className="font-display text-5xl sm:text-6xl md:text-[88px] leading-[1.05] font-bold tracking-tight text-foreground max-w-4xl mx-auto">
-          Edit at the <br className="hidden sm:block" />
-          <span className="bg-gradient-to-br from-primary to-accent text-transparent bg-clip-text">SPEED OF THOUGHT.</span>
+        {/* Cinematic Headline */}
+        <h1 className="reveal-on-scroll delay-100 font-display text-4xl sm:text-6xl md:text-[76px] leading-[1.05] font-bold tracking-tight text-[#1D2B64] max-w-4xl mx-auto">
+          AI-Powered Video Editing at the <br className="hidden sm:block" />
+          <span className="bg-gradient-to-r from-[#3B6CE7] to-[#8CC8E8] text-transparent bg-clip-text">SPEED OF THOUGHT.</span>
         </h1>
 
-        {/* Supporting text */}
-        <p className="mt-8 max-w-2xl text-lg md:text-xl text-muted-foreground leading-relaxed">
-          A focused editing workspace built for creators who care about every frame. Precision timelines, real-time preview, and absolute control.
+        {/* Subtle, Readable Supporting copy */}
+        <p className="reveal-on-scroll delay-200 mt-6 max-w-2xl text-base md:text-lg text-[#1D2B64]/70 leading-relaxed">
+          A modern browser-native workspace engineered for creative agencies and professional creators. Precision timelines, real-time responses, and smart workflow integration.
         </p>
 
-        {/* CTAs */}
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-          <Link
-            to="/home"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-8 py-4 text-base font-semibold text-primary-foreground shadow-[0_4px_14px_0_rgba(59,108,231,0.39)] hover:bg-primary-hover hover:-translate-y-0.5 transition-all duration-200"
-          >
-            <Play className="h-5 w-5 fill-current" /> Homepage
+        {/* Polished Call-to-actions */}
+        <div className="reveal-on-scroll delay-300 mt-8 flex flex-wrap items-center justify-center gap-4">
+          <Link to="/home">
+            <GradientButton 
+              variant="primary" 
+              size="md"
+              icon={<Play size={16} className="fill-current" />}
+            >
+              Start Free Trial
+            </GradientButton>
           </Link>
-          <a
-            href="#features"
-            className="inline-flex items-center gap-2 rounded-xl bg-surface px-8 py-4 text-base font-medium text-foreground border border-border shadow-sm hover:bg-surface-hover hover:-translate-y-0.5 transition-all duration-200"
-          >
-            Explore Features <ChevronRight className="h-4 w-4" />
+          <a href="#features">
+            <GradientButton 
+              variant="outline" 
+              size="md"
+              icon={<Sparkles size={15} className="text-[#3B6CE7]" />}
+            >
+              Explore Features
+            </GradientButton>
           </a>
         </div>
+
+        {/* Interactive Editor Dashboard Mockup Frame */}
+        <div className="reveal-on-scroll delay-400 mt-12 w-full max-w-4xl">
+          <HeroPreview />
+        </div>
+
       </div>
     </section>
   );

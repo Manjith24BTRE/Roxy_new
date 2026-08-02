@@ -31,10 +31,8 @@ export function ClipActionsPanel({
 
   const isAudioEnabled = clip.trackId === 'video' || clip.trackId === 'audio';
 
-  // Action order: Copy, Paste, Duplicate, Split, Trim, Speed, Transition, Keyframes, Reverse, Freeze, Mute, Detach, Replace, Rename, Lock/Unlock, Delete
+  // Action order: Duplicate, Split, Trim, Speed, Transition, Keyframes, Reverse, Freeze, Mute, Detach, Replace, Rename, Lock/Unlock, Delete
   const toolbarItems = [
-    { id: 'copy', label: 'Copy', icon: Clipboard, disabled: false, locked: isLocked },
-    { id: 'paste', label: 'Paste', icon: Clipboard, disabled: !hasClipboardPayload, locked: isLocked },
     { id: 'duplicate', label: 'Duplicate', icon: Copy, disabled: false, locked: isLocked },
     { id: 'split', label: 'Split', icon: Scissors, disabled: false, locked: isLocked },
     { id: 'trim', label: 'Trim', icon: ChevronRight, disabled: false, locked: isLocked },

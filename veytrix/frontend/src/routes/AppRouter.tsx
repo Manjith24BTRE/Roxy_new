@@ -1,15 +1,13 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { RootLayout } from '../layouts/RootLayout';
 import { ProjectMediaProvider } from '../contexts/ProjectMediaContext';
-import { AuthProvider } from '../contexts/AuthContext';
+import { AuthProvider } from '../context/AuthContext';
+import { LegalModalProvider } from '../components/company/legal/LegalModalProvider';
 import { LandingPage } from '../features/landing/pages/LandingPage';
-import { SignInPage } from '../features/auth/pages/SignInPage';
-import { SignUpPage } from '../features/auth/pages/SignUpPage';
-import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
-import { HomePage } from '../features/home/pages/HomePage';
-import { DashboardPage } from '../features/dashboard/pages/DashboardPage';
-import { UploadPage } from '../features/upload/pages/UploadPage';
-import { ProcessingPage } from '../features/processing/pages/ProcessingPage';
+import { CompanyPage } from '../pages/company/CompanyPage';
+import { Homepage } from '../features/homepage/pages/Homepage';
+import { UploadPage } from '../components/upload/UploadPage';
+import { ProcessingPage } from '../components/processing/ProcessingPage';
 import { EditorMainScreen } from '../components/editor-main-screen/EditorMainScreen';
 import { SettingsPage } from '../features/settings/pages/SettingsPage';
 import { ProjectsPage } from '../features/projects/pages/ProjectsPage';
@@ -17,7 +15,7 @@ import { ProfilePage } from '../features/profile/pages/ProfilePage';
 import { HelpCenterPage } from '../features/help/pages/HelpCenterPage';
 import { ReportProblemPage } from '../features/report/pages/ReportProblemPage';
 import { WorkspaceLayout } from '../layouts/WorkspaceLayout';
-import { ProtectedRoute, PublicOnlyRoute } from '../components/ProtectedRoute';
+import { ProtectedRoute } from './ProtectedRoute';
 
 const router = createBrowserRouter([
   {
@@ -25,14 +23,7 @@ const router = createBrowserRouter([
     element: <RootLayout />,
     children: [
       { index: true, element: <LandingPage /> },
-      {
-        element: <PublicOnlyRoute />,
-        children: [
-          { path: 'signin', element: <SignInPage /> },
-          { path: 'signup', element: <SignUpPage /> },
-          { path: 'forgot-password', element: <ForgotPasswordPage /> },
-        ],
-      },
+      { path: 'company', element: <CompanyPage /> },
       {
         element: <ProtectedRoute />,
         children: [
@@ -42,8 +33,7 @@ const router = createBrowserRouter([
           {
             element: <WorkspaceLayout />,
             children: [
-              { path: 'home', element: <HomePage /> },
-              { path: 'dashboard', element: <DashboardPage /> },
+              { path: 'home', element: <Homepage /> },
               { path: 'projects', element: <ProjectsPage /> },
               { path: 'profile', element: <ProfilePage /> },
               { path: 'settings', element: <SettingsPage /> },
@@ -61,7 +51,9 @@ export function AppRouter() {
   return (
     <AuthProvider>
       <ProjectMediaProvider>
-        <RouterProvider router={router} />
+        <LegalModalProvider>
+          <RouterProvider router={router} />
+        </LegalModalProvider>
       </ProjectMediaProvider>
     </AuthProvider>
   );

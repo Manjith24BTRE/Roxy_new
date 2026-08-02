@@ -6,7 +6,6 @@ import {
 import { ClipActionsPanel } from '../../clip-actions/ClipActionsPanel';
 import { ClipTrimHandles } from '../../trim/ClipTrimHandles';
 import { useDuplicate } from '../../tools/duplicate';
-import { useCopyPaste } from '../../tools/copy-paste';
 import { useRename, RenameDialog } from '../../tools/rename';
 import { useReverse } from '../../tools/reverse';
 import { useDetach } from '../../tools/detach';
@@ -82,22 +81,6 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
   };
 
   const { duplicateClipTimeline } = useDuplicate({ showToast });
-
-  const { copy: copyTimelineClip, paste: pasteTimelineClip, hasClipboardPayload } = useCopyPaste({
-    getSelectedClip: () => {
-      if (!selectedClipId) return null;
-      return clips.find((c) => c.id === selectedClipId) || null;
-    },
-    onPasteTimeline: (updatedClips, pastedClips) => {
-      updateHistory(updatedClips);
-      if (pastedClips && pastedClips.length > 0) {
-        setSelectedClipId(pastedClips[0].id);
-      }
-    },
-    getClips: () => clips,
-    currentTime,
-    showToast,
-  });
 
   const {
     isOpen: isRenameOpen,
@@ -397,12 +380,6 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
       case 'add-transition':
         showToast(`Mock Action: Add transition before ${clip.name}`);
         break;
-      case 'copy':
-        copyTimelineClip();
-        break;
-      case 'paste':
-        pasteTimelineClip({ selectedClipId, currentTime });
-        break;
       case 'rename':
         openRename(clipId || clip?.id, clip?.name);
         break;
@@ -448,54 +425,39 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
             className="p-1.5 rounded hover:bg-surface-hover disabled:opacity-40 disabled:hover:bg-transparent transition cursor-pointer"
             title="Redo"
           >
-            <RotateCcw className="h-3.5 w-3.5 transform -scale-x-100" />
+            <RotateCcw className="h-3.5 w-3.5" />
           </button>
-          <div className="w-px h-4 bg-white/10 mx-1" />
-          <button
-            type="button"
-            onClick={handleSplit}
-            disabled={!selectedClipId}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-surface border border-border hover:bg-surface-hover disabled:opacity-50 transition cursor-pointer"
-            title="Split Clip at Playhead"
-          >
-            <Scissors className="h-3 w-3" />
-            <span>Split</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleDuplicate}
-            disabled={!selectedClipId}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-surface border border-border hover:bg-surface-hover disabled:opacity-50 transition cursor-pointer"
-            title="Duplicate Selected Clip"
-          >
-            <Copy className="h-3 w-3" />
-            <span>Duplicate</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={!selectedClipId}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-red-500/15 border border-red-500/20 text-red-400 hover:bg-red-500/25 disabled:opacity-50 transition cursor-pointer"
-            title="Delete Clip"
-          >
-            <Trash2 className="h-3 w-3" />
-            <span>Delete</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleRippleDelete}
-            disabled={!selectedClipId}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary/15 border border-sky-500/20 text-primary hover:bg-primary/25 disabled:opacity-50 transition cursor-pointer"
-            title="Ripple Delete Selected Clip"
-          >
-            <Trash2 className="h-3 w-3" />
-            <span>Ripple Del</span>
-          </button>
+          <div className="w-px h-4 bg-white/10" />
+          {selectedClipId && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleMenuAction('split', selectedClipId)}
+                className="px-2 py-1 rounded bg-[#E6F2F8] text-[#3B6CE7] border border-[#3B6CE7]/20 hover:bg-[#3B6CE7] hover:text-white transition text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Split
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMenuAction('duplicate', selectedClipId)}
+                className="px-2 py-1 rounded bg-[#E6F2F8] text-[#3B6CE7] border border-[#3B6CE7]/20 hover:bg-[#3B6CE7] hover:text-white transition text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Duplicate
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMenuAction('delete', selectedClipId)}
+                className="px-2 py-1 rounded bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500 hover:text-white transition text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Delete
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           {selectedClipId && (
-            <div className="flex items-center gap-1 bg-surface border border-border rounded-lg p-0.5">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => handleTrim('left', -0.5)}
@@ -718,7 +680,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
         clip={selectedClipId ? clips.find(c => c.id === selectedClipId) || null : null}
         isLocked={!!(selectedClipId && lockedClips[selectedClipId])}
         isMuted={!!(selectedClipId && mutedClips[selectedClipId])}
-        hasClipboardPayload={hasClipboardPayload}
+        hasClipboardPayload={false}
         onAction={(actionId) => handleMenuAction(actionId, selectedClipId!)}
       />
 

@@ -2,20 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, LogOut, User } from 'lucide-react';
 import { VeytrixLogo } from '../components/VeytrixLogo';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 const NAV = [
   { to: '/', label: 'Product' },
   { label: 'Features' },
-  { label: 'Templates' },
-  { label: 'Learning' },
-  { label: 'Company' },
+  { to: '/company', label: 'Company' },
 ];
 
 export function SiteHeader() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, userProfile, isSignedIn, signOut } = useAuth();
+  const { user, userProfile, isSignedIn, signOut, openAuthModal } = useAuth();
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -39,140 +37,149 @@ export function SiteHeader() {
   };
 
   return (
-    <header className={`sticky top-0 z-50 w-full transition-all duration-200 ${scrolled ? 'bg-white/95 backdrop-blur shadow-sm border-b border-[#1D2B64]/10 py-2' : 'bg-transparent py-4'}`}>
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6">
-        
-        {/* LEFT: Logo */}
-        <Link to={isSignedIn ? '/home' : '/'} className="flex items-center gap-2 group flex-shrink-0">
-          <VeytrixLogo className="h-7 w-7 text-[#1D2B64] transition-transform duration-300 group-hover:rotate-6" />
-          <span className="font-display text-lg font-bold tracking-tight text-[#1D2B64]">
-            VEYTRIX
-          </span>
-          <span className="ml-1 rounded-md bg-[#E6F2F8] px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest text-[#1D2B64] font-semibold border border-[#3B6CE7]/20">
-            beta
-          </span>
-        </Link>
+    <header className="fixed top-4 left-0 right-0 z-50 w-full transition-all duration-300 pointer-events-none">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className={`
+          mx-auto flex items-center justify-between px-6 py-3 rounded-full pointer-events-auto
+          transition-all duration-300 border
+          ${scrolled 
+            ? 'bg-white/80 backdrop-blur-md shadow-[0_8px_30px_rgb(29,43,100,0.04)] border-[#1D2B64]/5' 
+            : 'bg-white/40 backdrop-blur-[2px] border-transparent'
+          }
+        `}>
+          
+          {/* LEFT: Logo */}
+          <Link to={isSignedIn ? '/home' : '/'} className="flex items-center gap-2 group flex-shrink-0">
+            <VeytrixLogo className="h-7 w-7 text-[#1D2B64] transition-transform duration-300 group-hover:rotate-6" />
+            <span className="font-display text-lg font-bold tracking-tight text-[#1D2B64]">
+              VEYTRIX
+            </span>
+            <span className="ml-1 rounded-full bg-[#E6F2F8] px-2 py-0.5 text-[9px] font-mono uppercase tracking-widest text-[#1D2B64] font-bold border border-[#3B6CE7]/10">
+              beta
+            </span>
+          </Link>
 
-        {/* CENTER: Navigation */}
-        <nav className="hidden lg:flex items-center gap-1">
-          {NAV.map((item, idx) => {
-            if (item.to) {
-              const active = location.pathname === item.to || (item.to !== '/' && location.pathname.startsWith(item.to));
+          {/* CENTER: Navigation */}
+          <nav className="hidden lg:flex items-center gap-1">
+            {NAV.map((item, idx) => {
+              if (item.to) {
+                const active = location.pathname === item.to || (item.to !== '/' && location.pathname.startsWith(item.to));
+                return (
+                  <Link
+                    key={idx}
+                    to={item.to}
+                    className={[
+                      "relative px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors duration-200 rounded-full",
+                      active
+                        ? "text-[#3B6CE7] bg-[#E6F2F8]/60"
+                        : "text-[#1D2B64]/70 hover:text-[#1D2B64] hover:bg-[#E6F2F8]/30",
+                    ].join(" ")}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              }
+              
               return (
-                <Link
+                <span
                   key={idx}
-                  to={item.to}
-                  className={[
-                    "px-4 py-2 text-sm font-medium rounded-full transition-colors",
-                    active
-                      ? "text-[#1D2B64] bg-[#E6F2F8]"
-                      : "text-[#1D2B64]/70 hover:text-[#1D2B64] hover:bg-[#E6F2F8]/50",
-                  ].join(" ")}
+                  className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-[#1D2B64]/40 cursor-default"
                 >
                   {item.label}
-                </Link>
+                </span>
               );
-            }
-            
-            return (
-              <span
-                key={idx}
-                className="px-4 py-2 text-sm font-medium rounded-full text-[#1D2B64]/70 cursor-default"
-              >
-                {item.label}
-              </span>
-            );
-          })}
-        </nav>
+            })}
+          </nav>
 
-        {/* RIGHT: Auth & CTA */}
-        <div className="hidden lg:flex items-center gap-4 flex-shrink-0">
-          {isSignedIn ? (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowUserMenu((v) => !v)}
-                className="flex items-center gap-2.5 rounded-full bg-white px-2 py-1 border border-[#1D2B64]/10 hover:border-[#3B6CE7]/40 shadow-sm transition-colors"
-              >
-                <img
-                  src={avatarUrl}
-                  alt={displayName}
-                  className="h-8 w-8 rounded-full border border-[#3B6CE7]/20 object-cover"
-                />
-              </button>
+          {/* RIGHT: Auth & CTA */}
+          <div className="hidden lg:flex items-center gap-4 flex-shrink-0">
+            {isSignedIn ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowUserMenu((v) => !v)}
+                  className="flex items-center gap-2.5 rounded-full bg-white px-2 py-1 border border-[#1D2B64]/5 hover:border-[#3B6CE7]/20 shadow-sm transition-all"
+                >
+                  <img
+                    src={avatarUrl}
+                    alt={displayName}
+                    className="h-8 w-8 rounded-full border border-[#3B6CE7]/10 object-cover"
+                  />
+                </button>
 
-              {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-52 rounded-2xl bg-white border border-[#1D2B64]/10 shadow-xl py-2 z-50">
-                  <div className="px-4 py-2 mb-2 border-b border-[#1D2B64]/5">
-                    <div className="text-sm font-semibold text-[#1D2B64] truncate">{displayName}</div>
-                    <div className="text-[10px] text-[#1D2B64]/60 truncate">{email}</div>
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-52 rounded-2xl bg-white border border-[#1D2B64]/5 shadow-xl py-2 z-50">
+                    <div className="px-4 py-2 mb-2 border-b border-[#1D2B64]/5">
+                      <div className="text-sm font-semibold text-[#1D2B64] truncate">{displayName}</div>
+                      <div className="text-[10px] text-[#1D2B64]/60 truncate">{email}</div>
+                    </div>
+                    <Link
+                      to="/home"
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-[#1D2B64]/80 hover:bg-[#E6F2F8] hover:text-[#1D2B64] transition-colors"
+                      onClick={() => setShowUserMenu(false)}
+                    >
+                      <User className="h-4 w-4" />
+                      Home
+                    </Link>
+                    <Link
+                      to="/settings"
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-[#1D2B64]/80 hover:bg-[#E6F2F8] hover:text-[#1D2B64] transition-colors"
+                      onClick={() => setShowUserMenu(false)}
+                    >
+                      <User className="h-4 w-4" />
+                      Settings
+                    </Link>
+                    <div className="h-px bg-[#1D2B64]/5 mx-3 my-1" />
+                    <button
+                      type="button"
+                      onClick={handleSignOut}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sign Out
+                    </button>
                   </div>
-                  <Link
-                    to="/home"
-                    className="flex items-center gap-2 px-4 py-2 text-sm text-[#1D2B64]/80 hover:bg-[#E6F2F8] hover:text-[#1D2B64] transition-colors"
-                    onClick={() => setShowUserMenu(false)}
-                  >
-                    <User className="h-4 w-4" />
-                    Home
-                  </Link>
-                  <Link
-                    to="/settings"
-                    className="flex items-center gap-2 px-4 py-2 text-sm text-[#1D2B64]/80 hover:bg-[#E6F2F8] hover:text-[#1D2B64] transition-colors"
-                    onClick={() => setShowUserMenu(false)}
-                  >
-                    <User className="h-4 w-4" />
-                    Settings
-                  </Link>
-                  <div className="h-px bg-[#1D2B64]/5 mx-3 my-1" />
-                  <button
-                    type="button"
-                    onClick={handleSignOut}
-                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Sign Out
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => openAuthModal('signin')}
+                className="text-xs font-semibold uppercase tracking-wider text-[#1D2B64]/70 hover:text-[#1D2B64] transition-colors"
+              >
+                Sign in
+              </button>
+            )}
+
             <Link
-              to="/signin"
-              className="text-sm font-medium text-[#1D2B64]/70 hover:text-[#1D2B64] transition-colors"
+              to="/home"
+              className="inline-flex items-center justify-center rounded-full bg-[#1D2B64] px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-sm hover:bg-[#3B6CE7] transition-all duration-200"
             >
-              Sign in
+              Get Started
             </Link>
-          )}
+          </div>
 
-          <Link
-            to="/home"
-            className="inline-flex items-center justify-center rounded-full bg-[#1D2B64] px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#3B6CE7] transition-all duration-200"
+          {/* Mobile Menu Toggle */}
+          <button
+            className="lg:hidden inline-flex items-center justify-center rounded-full p-2 text-[#1D2B64] hover:bg-[#E6F2F8] transition-colors"
+            onClick={() => setOpen((v) => !v)}
+            aria-label="Toggle menu"
           >
-            Homepage
-          </Link>
+            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
-
-        {/* Mobile Menu Toggle */}
-        <button
-          className="lg:hidden inline-flex items-center justify-center rounded-lg p-2 text-[#1D2B64] hover:bg-[#E6F2F8] transition-colors"
-          onClick={() => setOpen((v) => !v)}
-          aria-label="Toggle menu"
-        >
-          {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </button>
       </div>
 
       {/* Mobile Menu */}
       {open && (
-        <div className="lg:hidden absolute top-full left-0 right-0 border-b border-[#1D2B64]/10 bg-white/98 backdrop-blur-md shadow-lg">
-          <nav className="flex flex-col p-4 gap-2">
+        <div className="lg:hidden absolute top-full left-4 right-4 mt-2 border border-[#1D2B64]/5 bg-white/95 backdrop-blur-md rounded-3xl shadow-xl p-4 pointer-events-auto">
+          <nav className="flex flex-col gap-1">
             {NAV.map((item, idx) => {
               if (item.to) {
                 return (
                   <Link
                     key={idx}
                     to={item.to}
-                    className="px-4 py-3 text-base font-medium rounded-xl text-[#1D2B64]/80 hover:text-[#1D2B64] hover:bg-[#E6F2F8] transition-colors"
+                    className="px-4 py-3 text-sm font-semibold uppercase tracking-wider rounded-2xl text-[#1D2B64]/80 hover:text-[#1D2B64] hover:bg-[#E6F2F8] transition-colors"
                     onClick={() => setOpen(false)}
                   >
                     {item.label}
@@ -183,14 +190,14 @@ export function SiteHeader() {
               return (
                 <span
                   key={idx}
-                  className="px-4 py-3 text-base font-medium rounded-xl text-[#1D2B64]/60 cursor-default"
+                  className="px-4 py-3 text-sm font-semibold uppercase tracking-wider text-[#1D2B64]/40 cursor-default"
                 >
                   {item.label}
                 </span>
               );
             })}
             
-            <div className="h-px bg-[#1D2B64]/10 my-2 mx-4" />
+            <div className="h-px bg-[#1D2B64]/5 my-2 mx-4" />
             
             {isSignedIn ? (
               <>
@@ -198,7 +205,7 @@ export function SiteHeader() {
                   <img
                     src={avatarUrl}
                     alt={displayName}
-                    className="h-10 w-10 rounded-full border border-[#3B6CE7]/20 object-cover"
+                    className="h-10 w-10 rounded-full border border-[#3B6CE7]/10 object-cover"
                   />
                   <div>
                     <div className="text-sm font-semibold text-[#1D2B64]">{displayName}</div>
@@ -207,7 +214,7 @@ export function SiteHeader() {
                 </div>
                 <Link
                   to="/home"
-                  className="px-4 py-3 text-base font-medium rounded-xl text-[#1D2B64]/80 hover:bg-[#E6F2F8] hover:text-[#1D2B64]"
+                  className="px-4 py-3 text-sm font-semibold uppercase tracking-wider rounded-2xl text-[#1D2B64]/80 hover:bg-[#E6F2F8] hover:text-[#1D2B64]"
                   onClick={() => setOpen(false)}
                 >
                   Home Dashboard
@@ -215,27 +222,26 @@ export function SiteHeader() {
                 <button
                   type="button"
                   onClick={() => { handleSignOut(); setOpen(false); }}
-                  className="px-4 py-3 text-base font-medium rounded-xl text-red-600 hover:bg-red-50 text-left"
+                  className="px-4 py-3 text-sm font-semibold uppercase tracking-wider rounded-2xl text-red-600 hover:bg-red-50 text-left"
                 >
                   Sign Out
                 </button>
               </>
             ) : (
-              <Link
-                to="/signin"
-                className="px-4 py-3 text-base font-medium rounded-xl text-[#1D2B64]/80 hover:bg-[#E6F2F8] hover:text-[#1D2B64]"
-                onClick={() => setOpen(false)}
+              <button
+                onClick={() => { openAuthModal('signin'); setOpen(false); }}
+                className="px-4 py-3 text-sm font-semibold uppercase tracking-wider rounded-2xl text-[#1D2B64]/80 hover:bg-[#E6F2F8] hover:text-[#1D2B64] text-left"
               >
                 Sign in
-              </Link>
+              </button>
             )}
             
             <Link
               to="/home"
-              className="mt-4 flex items-center justify-center rounded-xl bg-[#1D2B64] px-4 py-4 text-base font-medium text-white shadow-sm"
+              className="mt-4 flex items-center justify-center rounded-full bg-[#1D2B64] px-4 py-4 text-xs font-bold uppercase tracking-wider text-white shadow-sm"
               onClick={() => setOpen(false)}
             >
-              Homepage
+              Get Started
             </Link>
           </nav>
         </div>
