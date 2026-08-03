@@ -24,31 +24,27 @@ export function ClipActionsPanel({
   hasClipboardPayload = false,
   onAction
 }: ClipActionsPanelProps) {
-  if (!clip) {
-    // When no clip is selected, keep only minimal toolbar-height empty area
-    return <div className="flex-shrink-0 h-[68px] bg-background border-t border-border" />;
-  }
-
-  const isAudioEnabled = clip.trackId === 'video' || clip.trackId === 'audio';
+  const hasClip = !!clip;
+  const isAudioEnabled = clip ? (clip.trackId === 'video' || clip.trackId === 'audio') : false;
 
   // Action order: Duplicate, Split, Trim, Speed, Transition, Keyframes, Reverse, Freeze, Mute, Extract, Replace, Rename, Lock/Unlock, Delete
   const toolbarItems = [
-    { id: 'duplicate', label: 'Duplicate', icon: Copy, disabled: false, locked: isLocked },
-    { id: 'split', label: 'Split', icon: Scissors, disabled: false, locked: isLocked },
-    { id: 'trim', label: 'Trim', icon: ChevronRight, disabled: false, locked: isLocked },
-    { id: 'speed', label: 'Speed', icon: Gauge, disabled: false, locked: isLocked },
-    { id: 'add-transition', label: 'Transition', icon: CornerDownRight, disabled: false, locked: isLocked },
-    { id: 'reverse', label: 'Reverse', icon: RotateCcw, disabled: clip.trackId !== 'video', locked: isLocked },
-    { id: 'freeze-frame', label: 'Freeze', icon: Snowflake, disabled: clip.trackId !== 'video', locked: isLocked },
-    { id: 'keyframes', label: 'Keyframe', icon: Key, disabled: false, locked: isLocked },
-    { id: 'mute-audio', label: isMuted ? 'Unmute' : 'Mute', icon: VolumeX, disabled: !isAudioEnabled, active: isMuted, locked: isLocked },
-    { id: 'extract-audio', label: 'Extract', icon: Link2Off, disabled: clip.trackId !== 'video', locked: isLocked },
-    { id: 'replace-media', label: 'Replace', icon: Replace, disabled: false, locked: isLocked },
-    { id: 'rename', label: 'Rename', icon: Edit3, disabled: false, locked: isLocked },
+    { id: 'duplicate', label: 'Duplicate', icon: Copy, disabled: !hasClip, locked: isLocked },
+    { id: 'split', label: 'Split', icon: Scissors, disabled: !hasClip, locked: isLocked },
+    { id: 'trim', label: 'Trim', icon: ChevronRight, disabled: !hasClip, locked: isLocked },
+    { id: 'speed', label: 'Speed', icon: Gauge, disabled: !hasClip, locked: isLocked },
+    { id: 'add-transition', label: 'Transition', icon: CornerDownRight, disabled: !hasClip, locked: isLocked },
+    { id: 'reverse', label: 'Reverse', icon: RotateCcw, disabled: !hasClip || clip?.trackId !== 'video', locked: isLocked },
+    { id: 'freeze-frame', label: 'Freeze', icon: Snowflake, disabled: !hasClip || clip?.trackId !== 'video', locked: isLocked },
+    { id: 'keyframes', label: 'Keyframe', icon: Key, disabled: !hasClip, locked: isLocked },
+    { id: 'mute-audio', label: isMuted ? 'Unmute' : 'Mute', icon: VolumeX, disabled: !hasClip || !isAudioEnabled, active: isMuted, locked: isLocked },
+    { id: 'extract-audio', label: 'Extract', icon: Link2Off, disabled: !hasClip || clip?.trackId !== 'video', locked: isLocked },
+    { id: 'replace-media', label: 'Replace', icon: Replace, disabled: !hasClip, locked: isLocked },
+    { id: 'rename', label: 'Rename', icon: Edit3, disabled: !hasClip, locked: isLocked },
     isLocked 
-      ? { id: 'unlock', label: 'Unlock', icon: Unlock, disabled: false, active: true, locked: false }
-      : { id: 'lock', label: 'Lock', icon: Lock, disabled: false, locked: false },
-    { id: 'delete', label: 'Delete', icon: Trash2, disabled: false, danger: true, locked: isLocked }
+      ? { id: 'unlock', label: 'Unlock', icon: Unlock, disabled: !hasClip, active: true, locked: false }
+      : { id: 'lock', label: 'Lock', icon: Lock, disabled: !hasClip, locked: false },
+    { id: 'delete', label: 'Delete', icon: Trash2, disabled: !hasClip, danger: true, locked: isLocked }
   ];
 
   return (
@@ -85,7 +81,7 @@ export function ClipActionsPanel({
                 key={item.id}
                 type="button"
                 disabled={item.disabled}
-                onClick={() => onAction(item.id, clip.id)}
+                onClick={() => clip && onAction(item.id, clip.id)}
                 title={item.locked ? 'Clip is locked' : item.label}
                 className={btnClass}
               >

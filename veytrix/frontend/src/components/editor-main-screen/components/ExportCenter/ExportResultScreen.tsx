@@ -322,7 +322,7 @@ export function ExportResultScreen({
                   <HardDrive size={15} style={styles.metaIcon} />
                   <div>
                     <div style={styles.metaLabel}>File Size</div>
-                    <div style={styles.metaValue}>{formatFileSize(exportJob?.file_size_bytes)}</div>
+                    <div style={styles.metaValue}>{formatFileSize((exportJob as any)?.file_size_bytes || (exportJob as any)?.fileSize)}</div>
                   </div>
                 </div>
 
@@ -551,7 +551,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   timeText: {
     fontSize: 12,
-    fontMonospace: true,
+    fontFamily: 'monospace',
     color: '#94a3b8',
     minWidth: 42,
   },
