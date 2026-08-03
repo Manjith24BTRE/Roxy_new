@@ -6,7 +6,7 @@ import {
   Wand2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   ZoomIn, ZoomOut, Scissors, Split, Plus, Search,
   FolderPlus, Maximize2, RotateCcw, Image as ImageIcon,
-  Languages, Crop, Lock, Unlock, Gauge, Replace, ArrowRightLeft, Sliders, Activity
+  Languages, Crop, Lock, Unlock, Gauge, Replace, ArrowRightLeft, Sliders, Activity, Edit3
 } from 'lucide-react';
 import { VeytrixLogo } from '../VeytrixLogo';
 import { useProjectMedia } from '../../contexts/ProjectMediaContext';
@@ -74,7 +74,7 @@ export function EditorMainScreen() {
 
 function EditorMainScreenContent() {
   const navigate = useNavigate();
-  const { mediaFiles, activeMediaId, setActiveMediaId, addMediaFiles } = useProjectMedia();
+  const { mediaFiles, activeMediaId, setActiveMediaId, addMediaFiles, updateMediaName } = useProjectMedia();
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
   const importFileInputRef = useRef<HTMLInputElement>(null);
@@ -131,9 +131,24 @@ function EditorMainScreenContent() {
     confirmRename,
   } = useRename({
     getClips: () => timelineClips,
-    onRenameSuccess: (updatedClips) => {
+    onRenameSuccess: (updatedClips, targetClipId, newName) => {
       beginTransaction('Rename clip', getProjectState());
-      setTimelineClips(updatedClips);
+      
+      const targetClip = timelineClips.find(c => c.id === targetClipId || c.mediaId === targetClipId);
+      const mediaId = targetClip?.mediaId || targetClip?.id || targetClipId;
+
+      if (mediaId) {
+        updateMediaName(mediaId, newName);
+      }
+
+      const syncedClips = (updatedClips || timelineClips).map(c => {
+        if (c.id === targetClipId || (mediaId && (c.mediaId === mediaId || c.id === mediaId))) {
+          return { ...c, name: newName };
+        }
+        return c;
+      });
+
+      setTimelineClips(syncedClips);
       commitTransaction(getProjectState());
     },
     showToast,
@@ -2542,6 +2557,17 @@ function EditorMainScreenContent() {
                         <div className="absolute top-1 left-1 rounded bg-black/70 px-1 py-0.5 text-[8px] font-mono text-foreground truncate max-w-[80px]">
                           {item.name}
                         </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openRename(item.id, item.name);
+                          }}
+                          className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 rounded bg-black/80 hover:bg-black text-white transition z-10"
+                          title="Rename Asset"
+                        >
+                          <Edit3 className="h-2.5 w-2.5" />
+                        </button>
                       </div>
                     ))}
                   </div>

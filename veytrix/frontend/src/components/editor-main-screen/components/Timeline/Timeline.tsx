@@ -90,8 +90,17 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
     confirmRename,
   } = useRename({
     getClips: () => clips,
-    onRenameSuccess: (updatedClips) => {
-      updateHistory(updatedClips);
+    onRenameSuccess: (updatedClips, targetClipId, newName) => {
+      const targetClip = clips.find(c => c.id === targetClipId || c.mediaId === targetClipId);
+      const mediaId = targetClip?.mediaId || targetClip?.id || targetClipId;
+
+      const syncedClips = (updatedClips || clips).map(c => {
+        if (c.id === targetClipId || (mediaId && (c.mediaId === mediaId || c.id === mediaId))) {
+          return { ...c, name: newName };
+        }
+        return c;
+      });
+      updateHistory(syncedClips);
     },
     showToast,
   });

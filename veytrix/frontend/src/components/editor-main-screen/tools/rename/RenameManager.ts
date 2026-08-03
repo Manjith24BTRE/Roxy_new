@@ -39,15 +39,7 @@ export class RenameManager {
       validation.sanitizedName
     );
 
-    if (!targetClip) {
-      return {
-        success: false,
-        updatedClips: clips,
-        message: 'Target clip not found',
-      };
-    }
-
-    const message = `Renamed clip to: "${validation.sanitizedName}"`;
+    const message = `Renamed to: "${validation.sanitizedName}"`;
     if (options.showToast) {
       options.showToast(message);
     }

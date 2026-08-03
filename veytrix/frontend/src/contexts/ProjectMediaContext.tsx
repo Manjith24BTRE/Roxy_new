@@ -17,6 +17,7 @@ interface ProjectMediaContextType {
   activeMediaId: string | null;
   addMediaFiles: (files: File[]) => Promise<void>;
   removeMediaFile: (id: string) => void;
+  updateMediaName: (id: string, name: string) => void;
   setActiveMediaId: (id: string | null) => void;
   clearMedia: () => void;
 }
@@ -123,6 +124,12 @@ export const ProjectMediaProvider: React.FC<{ children: React.ReactNode }> = ({ 
     });
   };
 
+  const updateMediaName = (id: string, name: string) => {
+    setMediaFiles((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, name } : item))
+    );
+  };
+
   const removeMediaFile = (id: string) => {
     setMediaFiles((prev) => {
       const filtered = prev.filter((item) => item.id !== id);
@@ -145,6 +152,7 @@ export const ProjectMediaProvider: React.FC<{ children: React.ReactNode }> = ({ 
         activeMediaId,
         addMediaFiles,
         removeMediaFile,
+        updateMediaName,
         setActiveMediaId,
         clearMedia,
       }}
