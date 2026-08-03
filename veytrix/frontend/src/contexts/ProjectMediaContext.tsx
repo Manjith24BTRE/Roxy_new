@@ -1,15 +1,18 @@
 import React, { createContext, useContext, useState } from 'react';
+import { uploadAsset } from '../services/asset.service';
 
 export interface MediaItem {
   id: string;
   file: File;
-  url: string;
+  url: string; // Blob URL for immediate local preview
+  serverUrl?: string; // Permanent Supabase storage URL
   name: string;
   size: string;
   type: 'video' | 'image';
   duration: number;
   durationFormatted: string;
   thumbnails: string[];
+  uploadStatus?: 'uploading' | 'completed' | 'error';
 }
 
 interface ProjectMediaContextType {
@@ -20,6 +23,7 @@ interface ProjectMediaContextType {
   updateMediaName: (id: string, name: string) => void;
   setActiveMediaId: (id: string | null) => void;
   clearMedia: () => void;
+  getPermanentMediaUrl: (mediaIdOrUrl: string) => Promise<string>;
 }
 
 const ProjectMediaContext = createContext<ProjectMediaContextType | undefined>(undefined);
@@ -84,35 +88,55 @@ export const ProjectMediaProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     for (const file of files) {
       const isVideo = file.type.startsWith('video');
-      const url = URL.createObjectURL(file);
+      const blobUrl = URL.createObjectURL(file);
       let duration = 5;
 
       if (isVideo) {
         duration = await new Promise<number>((resolve) => {
           const tempVid = document.createElement('video');
-          tempVid.src = url;
+          tempVid.src = blobUrl;
           tempVid.onloadedmetadata = () => resolve(tempVid.duration || 5);
           tempVid.onerror = () => resolve(5);
         });
       }
 
       const thumbnails = isVideo
-        ? await generateVideoThumbnails(url, duration, 4)
-        : [url];
+        ? await generateVideoThumbnails(blobUrl, duration, 4)
+        : [blobUrl];
 
+      const itemId = Math.random().toString(36).substring(2, 9);
       const item: MediaItem = {
-        id: Math.random().toString(36).substring(2, 9),
+        id: itemId,
         file,
-        url,
+        url: blobUrl,
         name: file.name,
         size: formatFileSize(file.size),
         type: isVideo ? 'video' : 'image',
         duration,
         durationFormatted: formatDuration(duration),
         thumbnails,
+        uploadStatus: 'uploading',
       };
 
       newItems.push(item);
+
+      // Trigger immediate background upload to Supabase Storage
+      uploadAsset(file, isVideo ? 'VIDEO' : 'IMAGE')
+        .then((result) => {
+          setMediaFiles((prev) =>
+            prev.map((m) =>
+              m.id === itemId
+                ? { ...m, serverUrl: result.file_url, uploadStatus: 'completed' }
+                : m
+            )
+          );
+        })
+        .catch((err) => {
+          console.warn('Background media asset upload warning:', err);
+          setMediaFiles((prev) =>
+            prev.map((m) => (m.id === itemId ? { ...m, uploadStatus: 'error' } : m))
+          );
+        });
     }
 
     setMediaFiles((prev) => {
@@ -122,6 +146,28 @@ export const ProjectMediaProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
       return updated;
     });
+  };
+
+  const getPermanentMediaUrl = async (mediaIdOrUrl: string): Promise<string> => {
+    const target = mediaFiles.find(
+      (m) => m.id === mediaIdOrUrl || m.url === mediaIdOrUrl || m.serverUrl === mediaIdOrUrl
+    );
+    if (!target) return mediaIdOrUrl;
+
+    if (target.serverUrl) return target.serverUrl;
+
+    // If upload is still in progress or hasn't run, upload now
+    try {
+      const result = await uploadAsset(target.file, target.type === 'video' ? 'VIDEO' : 'IMAGE');
+      target.serverUrl = result.file_url;
+      target.uploadStatus = 'completed';
+      setMediaFiles((prev) =>
+        prev.map((m) => (m.id === target.id ? { ...m, serverUrl: result.file_url, uploadStatus: 'completed' } : m))
+      );
+      return result.file_url;
+    } catch {
+      return mediaIdOrUrl;
+    }
   };
 
   const updateMediaName = (id: string, name: string) => {
@@ -155,6 +201,7 @@ export const ProjectMediaProvider: React.FC<{ children: React.ReactNode }> = ({ 
         updateMediaName,
         setActiveMediaId,
         clearMedia,
+        getPermanentMediaUrl,
       }}
     >
       {children}

@@ -1,5 +1,6 @@
 import os
-from typing import Dict, Optional, Tuple
+import urllib.request
+from typing import Dict, Optional, Tuple, Union
 from uuid import uuid4
 from fastapi import HTTPException, UploadFile, status
 from app.core.config import settings
@@ -92,8 +93,10 @@ class StorageService:
                 detail=f"File size exceeds maximum limit of {max_mb} MB for {asset_type.value}",
             )
 
-    def get_bucket_for_type(self, asset_type: AssetType) -> str:
-        """Returns target bucket name for an asset type."""
+    def get_bucket_for_type(self, asset_type: Union[AssetType, str]) -> str:
+        """Returns target bucket name for an asset type or bucket string."""
+        if isinstance(asset_type, str):
+            return asset_type
         return BUCKET_ROUTING.get(asset_type, "assets")
 
     async def upload_file(
@@ -113,24 +116,37 @@ class StorageService:
         unique_name = f"{uuid4()}{extension}"
         storage_path = f"{user_id}/{asset_type.value.lower()}/{unique_name}"
 
-        # Upload to Supabase Storage if client is connected
         file_url = f"{settings.SUPABASE_URL}/storage/v1/object/public/{bucket_name}/{storage_path}"
+        uploaded = False
 
         if self.supabase:
             try:
-                res = self.supabase.storage.from_(bucket_name).upload(
+                self.supabase.storage.from_(bucket_name).upload(
                     path=storage_path,
                     file=file_bytes,
                     file_options={"content-type": file.content_type or "application/octet-stream", "upsert": "true"},
                 )
+                uploaded = True
                 logger.info(f"Successfully uploaded file to Supabase storage bucket '{bucket_name}' at path '{storage_path}'")
-                
-                # Fetch public URL if available
-                public_res = self.supabase.storage.from_(bucket_name).get_public_url(storage_path)
-                if public_res:
-                    file_url = public_res
             except Exception as exc:
-                logger.warning(f"Supabase storage upload fallback activated ({exc}). Using generated storage URL.")
+                logger.warning(f"Supabase SDK upload failed ({exc}). Trying HTTP REST upload fallback.")
+
+        if not uploaded and settings.SUPABASE_URL:
+            try:
+                upload_endpoint = f"{settings.SUPABASE_URL}/storage/v1/object/{bucket_name}/{storage_path}"
+                auth_key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_ANON_KEY
+                headers = {
+                    "Authorization": f"Bearer {auth_key}",
+                    "Content-Type": file.content_type or "application/octet-stream",
+                    "x-upsert": "true",
+                }
+                req = urllib.request.Request(upload_endpoint, data=file_bytes, headers=headers, method="POST")
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    if resp.status in (200, 201):
+                        uploaded = True
+                        logger.info(f"Successfully uploaded file via HTTP REST to Supabase storage '{bucket_name}/{storage_path}'")
+            except Exception as exc:
+                logger.error(f"Supabase HTTP REST upload error: {exc}")
 
         return file_url, storage_path
 
@@ -148,6 +164,7 @@ class StorageService:
             with open(local_file_path, "rb") as f:
                 file_bytes = f.read()
 
+            uploaded = False
             if self.supabase:
                 try:
                     self.supabase.storage.from_(bucket_name).upload(
@@ -155,24 +172,36 @@ class StorageService:
                         file=file_bytes,
                         file_options={"content-type": content_type, "upsert": "true"},
                     )
-                    public_res = self.supabase.storage.from_(bucket_name).get_public_url(storage_path)
-                    if public_res:
-                        file_url = public_res
-                    logger.info(f"Uploaded rendered export to Supabase storage '{bucket_name}/{storage_path}'")
+                    uploaded = True
+                    logger.info(f"Uploaded rendered export via SDK to Supabase storage '{bucket_name}/{storage_path}'")
                 except Exception as exc:
-                    logger.warning(f"Supabase storage upload fallback ({exc}). Using default file URL.")
+                    logger.warning(f"Supabase SDK upload failed ({exc}). Trying HTTP REST upload fallback.")
+
+            if not uploaded and settings.SUPABASE_URL:
+                try:
+                    upload_endpoint = f"{settings.SUPABASE_URL}/storage/v1/object/{bucket_name}/{storage_path}"
+                    auth_key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_ANON_KEY
+                    headers = {
+                        "Authorization": f"Bearer {auth_key}",
+                        "Content-Type": content_type,
+                        "x-upsert": "true",
+                    }
+                    req = urllib.request.Request(upload_endpoint, data=file_bytes, headers=headers, method="POST")
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        if resp.status in (200, 201):
+                            uploaded = True
+                            logger.info(f"Uploaded rendered export via HTTP REST to Supabase storage '{bucket_name}/{storage_path}'")
+                except Exception as exc:
+                    logger.error(f"Supabase HTTP REST export upload error: {exc}")
 
         return file_url, storage_path
 
-    def delete_file(self, storage_path: str, asset_type_or_bucket: "AssetType | str") -> bool:
+    def delete_file(self, storage_path: str, asset_type_or_bucket: Union[AssetType, str]) -> bool:
         """Deletes file from storage bucket. Accepts AssetType enum or bucket name string."""
         if not storage_path:
             return False
 
-        if isinstance(asset_type_or_bucket, str) and asset_type_or_bucket not in AssetType.__members__.values():
-            bucket_name = asset_type_or_bucket
-        else:
-            bucket_name = self.get_bucket_for_type(asset_type_or_bucket)
+        bucket_name = self.get_bucket_for_type(asset_type_or_bucket)
         if self.supabase:
             try:
                 self.supabase.storage.from_(bucket_name).remove([storage_path])

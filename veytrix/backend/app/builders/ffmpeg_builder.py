@@ -375,31 +375,56 @@ class FFmpegBuilder:
 
         duration = max(1.0, timeline.duration)
 
-        # 2. Prepare Base Inputs
+        # 2. Prepare Base Inputs & Clip File Bindings
         inputs: List[FFmpegInput] = []
         filter_nodes: List[FilterNode] = []
 
-        # Synthetic Canvas Input (Input 0)
-        inputs.append(
-            FFmpegInput(
-                index=0,
-                path=f"testsrc=duration={duration:.2f}:size={width}x{height}:rate={fps}",
-                format="lavfi",
-            )
-        )
+        # Find all clips with valid media sources
+        media_clips: List[Tuple[int, ClipModel, str]] = []
+        for track in timeline.tracks:
+            for clip in track.clips:
+                clip_src = (
+                    clip.file_path
+                    or clip.media_url
+                    or clip.metadata.get("src")
+                    or clip.metadata.get("url")
+                    or clip.metadata.get("path")
+                )
+                if clip_src and not str(clip_src).startswith("blob:"):
+                    input_idx = len(inputs)
+                    inputs.append(FFmpegInput(index=input_idx, path=str(clip_src)))
+                    media_clips.append((input_idx, clip, str(clip_src)))
 
-        # Base Canvas Filter Node
-        base_v_filters = [f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"]
-        filter_nodes.append(
-            FilterNode(
-                inputs=["0:v"],
-                filter_name="scale",
-                args=f"{width}:{height}",
-                outputs=["v_canvas"],
+        # Fallback background canvas if no real video media inputs were found
+        if not inputs:
+            inputs.append(
+                FFmpegInput(
+                    index=0,
+                    path=f"color=c=black:duration={duration:.2f}:size={width}x{height}:rate={fps}",
+                    format="lavfi",
+                )
             )
-        )
-
-        curr_v_label = "v_canvas"
+            filter_nodes.append(
+                FilterNode(
+                    inputs=["0:v"],
+                    filter_name="scale",
+                    args=f"{width}:{height}",
+                    outputs=["v_canvas"],
+                )
+            )
+            curr_v_label = "v_canvas"
+        else:
+            # Map first media video stream as starting canvas
+            first_idx, first_clip, _ = media_clips[0]
+            filter_nodes.append(
+                FilterNode(
+                    inputs=[f"{first_idx}:v"],
+                    filter_name=f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2",
+                    args="",
+                    outputs=["v_base"],
+                )
+            )
+            curr_v_label = "v_base"
 
         # Process Video Tracks & Clips via AssetResolver
         for track in timeline.tracks:
@@ -432,7 +457,6 @@ class FFmpegBuilder:
                     )
                     curr_v_label = next_v_label
 
-
         # 3. Apply Watermark Overlay Node
         wm_node, wm_input = self.watermark_builder.build_watermark_node(
             input_label=curr_v_label,
@@ -458,23 +482,39 @@ class FFmpegBuilder:
             )
             final_v_label = "outv"
 
-        # 4. Audio Synthetic Source (Input 1)
-        inputs.append(
-            FFmpegInput(
-                index=1,
-                path=f"sine=frequency=440:duration={duration:.2f}",
-                format="lavfi",
-            )
-        )
+        # 4. Audio Inputs or Silent Fallback
+        audio_input_found = False
+        for idx, clip, _ in media_clips:
+            if clip.asset_type in (AssetType.AUDIO, AssetType.VIDEO) and not clip.muted:
+                a_filters = AudioBuilder.build_clip_audio_filters(clip)
+                filter_nodes.append(
+                    FilterNode(
+                        inputs=[f"{idx}:a"],
+                        filter_name=",".join(a_filters) if a_filters else "anull",
+                        args="",
+                        outputs=["outa"],
+                    )
+                )
+                audio_input_found = True
+                break
 
-        filter_nodes.append(
-            FilterNode(
-                inputs=["1:a"],
-                filter_name="volume",
-                args="1.0",
-                outputs=["outa"],
+        if not audio_input_found:
+            audio_idx = len(inputs)
+            inputs.append(
+                FFmpegInput(
+                    index=audio_idx,
+                    path=f"anullsrc=channel_layout=stereo:sample_rate=44100:duration={duration:.2f}",
+                    format="lavfi",
+                )
             )
-        )
+            filter_nodes.append(
+                FilterNode(
+                    inputs=[f"{audio_idx}:a"],
+                    filter_name="volume",
+                    args="1.0",
+                    outputs=["outa"],
+                )
+            )
 
         # 5. Optimize Filter Nodes
         optimized_nodes = CommandOptimizer.optimize(filter_nodes)
@@ -493,6 +533,8 @@ class FFmpegBuilder:
             "-map", "[outv]",
             "-map", "[outa]",
             "-c:v", vcodec,
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
             "-b:v", target_bitrate,
             "-c:a", "aac",
             "-b:a", "192k",

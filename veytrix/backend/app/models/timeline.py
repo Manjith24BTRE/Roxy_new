@@ -69,6 +69,8 @@ class ClipModel(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     track_id: str = Field(..., description="Parent track identifier")
     asset_id: Optional[UUID] = Field(None, description="Referenced asset UUID if applicable")
+    media_url: Optional[str] = Field(None, description="Direct URL or media source path")
+    file_path: Optional[str] = Field(None, description="Local file system path")
     asset_type: AssetType = Field(default=AssetType.VIDEO, description="Type of asset/clip")
     start_time: float = Field(..., ge=0.0, description="Clip start time on timeline in seconds")
     end_time: float = Field(..., ge=0.0, description="Clip end time on timeline in seconds")

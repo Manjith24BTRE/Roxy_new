@@ -220,7 +220,7 @@ class RenderWorker:
                 progress_callback(task.export_id, 92, "Uploading rendered video to Supabase Storage", ExportStatus.UPLOADING)
 
             # Step 3: Upload completed video container to Supabase Storage
-            storage_path = f"{task.user_id}/exports/{task.export_id}.{task.settings.format}"
+            storage_path = f"{task.export_id}.{task.settings.format}"
             file_url, final_storage_path = await self.storage_service.upload_file_path(
                 local_file_path=temp_output_path,
                 bucket_name="exports",

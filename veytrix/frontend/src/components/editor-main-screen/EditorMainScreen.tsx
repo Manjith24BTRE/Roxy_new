@@ -4197,8 +4197,12 @@ function EditorMainScreenContent() {
       <ExportCenter
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
-        projectId="current-project"
+        projectId="00000000-0000-0000-0000-000000000000"
         projectTitle="My Project"
+        timelineJson={{
+          clips: timelineClips,
+          duration: getProjectTotalDuration(timelineClips),
+        }}
       />
     </div>
   );

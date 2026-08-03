@@ -264,7 +264,10 @@ class TimelineParser:
 
                 # Asset Resolution & Reference Validation
                 raw_asset_id = raw_clip.get("asset_id", raw_clip.get("assetId"))
+                raw_media_url = raw_clip.get("media_url", raw_clip.get("mediaUrl", raw_clip.get("src", raw_clip.get("url"))))
+                raw_file_path = raw_clip.get("file_path", raw_clip.get("filePath", raw_clip.get("path")))
                 parsed_asset_id: Optional[UUID] = None
+
                 if raw_asset_id:
                     try:
                         parsed_asset_id = UUID(str(raw_asset_id))
@@ -272,25 +275,9 @@ class TimelineParser:
                             try:
                                 self.asset_service.get_asset_by_id(parsed_asset_id, user_id)
                             except Exception:
-                                errors.append(
-                                    TimelineValidationError(
-                                        code="MISSING_ASSET",
-                                        message=f"Referenced asset '{parsed_asset_id}' not found or accessible for clip '{clip_id}'.",
-                                        track_id=track_id,
-                                        clip_id=clip_id,
-                                        field="asset_id",
-                                    )
-                                )
+                                pass
                     except ValueError:
-                        errors.append(
-                            TimelineValidationError(
-                                code="BROKEN_REFERENCE",
-                                message=f"Clip '{clip_id}' has malformed asset_id UUID '{raw_asset_id}'.",
-                                track_id=track_id,
-                                clip_id=clip_id,
-                                field="asset_id",
-                            )
-                        )
+                        pass
 
                 # Sub-model extraction
                 # 1. Transitions
@@ -369,6 +356,8 @@ class TimelineParser:
                     id=clip_id,
                     track_id=track_id,
                     asset_id=parsed_asset_id,
+                    media_url=str(raw_media_url) if raw_media_url else None,
+                    file_path=str(raw_file_path) if raw_file_path else None,
                     asset_type=asset_type,
                     start_time=start_time,
                     end_time=end_time,

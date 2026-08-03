@@ -35,7 +35,13 @@ export async function apiRequest<T = any>(
   const responseData = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const errorMsg = responseData?.message || responseData?.detail?.message || responseData?.error || 'An error occurred during API request.';
+    let errorMsg = responseData?.message || responseData?.detail?.message || responseData?.error || 'An error occurred during API request.';
+    if (responseData?.message === 'Validation Error' && Array.isArray(responseData?.error) && responseData.error.length > 0) {
+      const details = responseData.error.map((err: any) => `${err?.loc?.join('.') || 'field'}: ${err?.msg || 'invalid'}`).join('; ');
+      errorMsg = `Validation Error (${details})`;
+    } else if (typeof responseData?.error === 'string') {
+      errorMsg = responseData.error;
+    }
     throw new Error(errorMsg);
   }
 

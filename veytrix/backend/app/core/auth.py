@@ -120,14 +120,36 @@ async def get_current_user(
     """Reusable FastAPI dependency that resolves the authenticated user.
 
     Exposes the verified user's identity and profile information for protected endpoints.
-    Rejects requests without valid tokens with structured 401 JSON error responses.
+    In DEVELOPER_MODE, falls back to a default developer profile if unauthenticated.
     """
     if not credentials or not credentials.credentials:
+        if settings.DEVELOPER_MODE:
+            return sync_user_profile(
+                UserProfile(
+                    id="00000000-0000-0000-0000-000000000001",
+                    email="developer@veytrix.local",
+                    full_name="Developer User",
+                    role="authenticated",
+                )
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"error": "UNAUTHORIZED", "message": "Authentication required."},
         )
 
-    user = verify_jwt_token(credentials.credentials)
-    synchronized_user = sync_user_profile(user)
-    return synchronized_user
+    try:
+        user = verify_jwt_token(credentials.credentials)
+        synchronized_user = sync_user_profile(user)
+        return synchronized_user
+    except HTTPException:
+        if settings.DEVELOPER_MODE:
+            return sync_user_profile(
+                UserProfile(
+                    id="00000000-0000-0000-0000-000000000001",
+                    email="developer@veytrix.local",
+                    full_name="Developer User",
+                    role="authenticated",
+                )
+            )
+        raise
+

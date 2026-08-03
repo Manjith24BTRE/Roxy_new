@@ -17,11 +17,13 @@ except ImportError:
 
 _supabase_client: Optional[Any] = None
 _supabase_admin_client: Optional[Any] = None
+_warned_client: bool = False
+_warned_admin: bool = False
 
 
 def init_supabase_client() -> Optional[Any]:
     """Initialize and return the shared Supabase client singleton."""
-    global _supabase_client
+    global _supabase_client, _warned_client
 
     if _supabase_client is not None:
         return _supabase_client
@@ -30,7 +32,9 @@ def init_supabase_client() -> Optional[Any]:
     key = settings.SUPABASE_ANON_KEY or settings.SUPABASE_SERVICE_ROLE_KEY
 
     if not url or not key or not create_client:
-        logger.warning("Supabase credentials or client library not configured.")
+        if not _warned_client:
+            logger.warning("Supabase credentials or client library not configured.")
+            _warned_client = True
         return None
 
     try:
@@ -38,13 +42,15 @@ def init_supabase_client() -> Optional[Any]:
         logger.info("Supabase client initialized successfully")
         return _supabase_client
     except Exception as exc:
-        logger.error(f"Failed to initialize Supabase client: {exc}")
+        if not _warned_client:
+            logger.error(f"Failed to initialize Supabase client: {exc}")
+            _warned_client = True
         return None
 
 
 def init_supabase_admin_client() -> Optional[Any]:
     """Initialize and return the shared Supabase admin client using service role key."""
-    global _supabase_admin_client
+    global _supabase_admin_client, _warned_admin
 
     if _supabase_admin_client is not None:
         return _supabase_admin_client
@@ -53,7 +59,9 @@ def init_supabase_admin_client() -> Optional[Any]:
     service_key = settings.SUPABASE_SERVICE_ROLE_KEY
 
     if not url or not service_key or not create_client:
-        logger.warning("Supabase service role key or client library not configured.")
+        if not _warned_admin:
+            logger.warning("Supabase service role key or client library not configured.")
+            _warned_admin = True
         return None
 
     try:
@@ -61,7 +69,9 @@ def init_supabase_admin_client() -> Optional[Any]:
         logger.info("Supabase admin client initialized successfully")
         return _supabase_admin_client
     except Exception as exc:
-        logger.error(f"Failed to initialize Supabase admin client: {exc}")
+        if not _warned_admin:
+            logger.error(f"Failed to initialize Supabase admin client: {exc}")
+            _warned_admin = True
         return None
 
 

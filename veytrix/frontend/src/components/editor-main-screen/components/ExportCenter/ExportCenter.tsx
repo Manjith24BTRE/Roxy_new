@@ -23,10 +23,14 @@ import {
   getExportDownload,
   cancelExport,
 } from '../../../../services/export.service';
+import { useProjectMedia } from '../../../../contexts/ProjectMediaContext';
+import { ExportResultScreen } from './ExportResultScreen';
 
 type Phase = 'settings' | 'progress' | 'done' | 'error';
 
 export function ExportCenter({ isOpen, onClose, projectId, projectTitle, timelineJson }: ExportCenterProps) {
+  const { getPermanentMediaUrl } = useProjectMedia();
+
   const [phase, setPhase] = useState<Phase>('settings');
   const [settings, setSettings] = useState<ExportSettings>({ ...DEFAULT_EXPORT_SETTINGS });
   const [currentJob, setCurrentJob] = useState<ExportJob | null>(null);
@@ -34,6 +38,7 @@ export function ExportCenter({ isOpen, onClose, projectId, projectTitle, timelin
   const [errorMsg, setErrorMsg] = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
   const [fileName, setFileName] = useState('');
+  const [stageLabel, setStageLabel] = useState('Preparing workspace & assets...');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Cleanup polling on unmount
@@ -95,24 +100,54 @@ export function ExportCenter({ isOpen, onClose, projectId, projectTitle, timelin
     }, POLL_INTERVAL_MS);
   }, [stopPolling]);
 
-  const [stageLabel, setStageLabel] = useState('Preparing workspace & assets...');
-
   const handleStartExport = async () => {
+    console.log('[1] Export button clicked');
+    console.log('[2] Export handler entered: handleStartExport');
+    console.log('[3] Validation started: Checking timeline JSON & media assets...');
     setPhase('progress');
     setProgress(0);
     setErrorMsg('');
-    setStageLabel('Queued in render pipeline...');
+    setStageLabel('Uploading & validating media assets...');
     try {
+      // Sanitize timelineJson clips: resolve every blob URL to permanent Supabase Storage URL
+      const rawClips = Array.isArray(timelineJson?.clips) ? timelineJson.clips : [];
+      const sanitizedClips = await Promise.all(
+        rawClips.map(async (clip: any) => {
+          let mediaUrl = clip.media_url || clip.url || clip.src || '';
+          if (!mediaUrl || mediaUrl.startsWith('blob:')) {
+            const resolved = await getPermanentMediaUrl(clip.mediaId || clip.id || mediaUrl);
+            if (resolved && !resolved.startsWith('blob:')) {
+              mediaUrl = resolved;
+            }
+          }
+          return {
+            ...clip,
+            media_url: mediaUrl,
+            url: mediaUrl,
+          };
+        })
+      );
+
+      const sanitizedTimelineJson = {
+        ...timelineJson,
+        clips: sanitizedClips,
+      };
+
+      console.log('[4] Validation passed: All timeline media references sanitized');
+      console.log('[5] Calling createExport() with project:', projectId);
+
+      setStageLabel('Queued in render pipeline...');
       const job = await createExport({
         project_id: projectId,
         title: projectTitle,
-        timeline_json: timelineJson,
+        timeline_json: sanitizedTimelineJson,
         settings,
       });
       setCurrentJob(job);
       setProgress(job.progress);
       startPolling(job.id);
     } catch (err: any) {
+      console.error('[!] Export handler failed:', err);
       setErrorMsg(err?.message || 'Failed to start export.');
       setPhase('error');
     }
@@ -136,12 +171,24 @@ export function ExportCenter({ isOpen, onClose, projectId, projectTitle, timelin
     setProgress(0);
   };
 
-  const handleDownload = () => {
-    if (downloadUrl) {
+  const handleDownload = async () => {
+    if (!downloadUrl) return;
+    try {
+      const response = await fetch(downloadUrl);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = blobUrl;
+      a.download = fileName || 'export.mp4';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch {
       const a = document.createElement('a');
       a.href = downloadUrl;
       a.download = fileName || 'export.mp4';
-      a.target = '_blank';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -157,7 +204,34 @@ export function ExportCenter({ isOpen, onClose, projectId, projectTitle, timelin
     setSettings((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleDeleteExport = async () => {
+    if (currentJob) {
+      try {
+        await cancelExport(currentJob.id);
+      } catch {
+        // Ignore errors
+      }
+    }
+    handleClose();
+  };
+
   if (!isOpen) return null;
+
+  if (phase === 'done') {
+    return (
+      <ExportResultScreen
+        isOpen={isOpen}
+        onContinueEditing={handleClose}
+        onDeleteExport={handleDeleteExport}
+        exportJob={currentJob}
+        downloadUrl={downloadUrl}
+        fileName={fileName}
+        projectTitle={projectTitle || 'My Project'}
+        settings={settings}
+        duration={Number((timelineJson as any)?.duration) || 0}
+      />
+    );
+  }
 
   return (
     <div style={styles.overlay} onClick={handleClose}>
@@ -262,14 +336,6 @@ export function ExportCenter({ isOpen, onClose, projectId, projectTitle, timelin
             </div>
           )}
 
-          {phase === 'done' && (
-            <div style={styles.doneSection}>
-              <CheckCircle2 size={48} style={{ color: '#22c55e' }} />
-              <p style={styles.doneTitle}>Export Complete!</p>
-              <p style={styles.doneSub}>Your video is ready for download.</p>
-            </div>
-          )}
-
           {phase === 'error' && (
             <div style={styles.errorSection}>
               <AlertCircle size={48} style={{ color: '#f87171' }} />
@@ -296,17 +362,6 @@ export function ExportCenter({ isOpen, onClose, projectId, projectTitle, timelin
             <button type="button" style={styles.dangerBtn} onClick={handleCancel}>
               Cancel Export
             </button>
-          )}
-          {phase === 'done' && (
-            <>
-              <button type="button" style={styles.secondaryBtn} onClick={handleClose}>
-                Close
-              </button>
-              <button type="button" style={styles.primaryBtn} onClick={handleDownload}>
-                <Download size={14} />
-                <span>Download</span>
-              </button>
-            </>
           )}
           {phase === 'error' && (
             <>

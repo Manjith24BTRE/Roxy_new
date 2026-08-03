@@ -19,10 +19,20 @@ const BASE = '/exports';
 
 /** Trigger a new project export job */
 export async function createExport(payload: ExportCreatePayload): Promise<ExportJob> {
-  return apiRequest<ExportJob>(BASE, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  console.log('[6] API request started: POST /api/v1/exports');
+  console.log('[7] Request payload:', payload);
+  try {
+    const res = await apiRequest<ExportJob>(BASE, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    console.log('[8] Response received:', res);
+    console.log('[9] Export job created successfully, ID:', res.id);
+    return res;
+  } catch (err) {
+    console.error('[!] API request failed:', err);
+    throw err;
+  }
 }
 
 /** List export jobs for the authenticated user */
