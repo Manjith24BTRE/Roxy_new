@@ -239,8 +239,10 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
       return;
     }
 
-    updateHistory(clips.filter((c) => c.id !== selectedClipId));
-    setSelectedClipId(null);
+    const remaining = clips.filter((c) => c.id !== selectedClipId);
+    updateHistory(remaining);
+    const nextClip = remaining.find(c => currentTime >= c.start && currentTime <= c.start + c.duration) || remaining[0];
+    setSelectedClipId(nextClip?.id || null);
     showToast('Deleted clip');
   };
 
@@ -329,17 +331,20 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
     setSelectedClipId(clip.id); // Also select it visually
   };
 
-  // Handle Context Menu item triggers
   const handleMenuAction = (actionId: string, clipId: string) => {
-    const clip = clips.find((c) => c.id === clipId);
+    const targetId = clipId || selectedClipId || (clips.find(c => currentTime >= c.start && currentTime <= c.start + c.duration) || clips[0])?.id;
+    const clip = clips.find((c) => c.id === targetId);
     if (!clip) return;
 
     switch (actionId) {
-      case 'delete':
-        updateHistory(clips.filter((c) => c.id !== clipId));
-        setSelectedClipId(null);
+      case 'delete': {
+        const remaining = clips.filter((c) => c.id !== clip.id);
+        updateHistory(remaining);
+        const nextClip = remaining.find(c => currentTime >= c.start && currentTime <= c.start + c.duration) || remaining[0];
+        setSelectedClipId(nextClip?.id || null);
         showToast(`Deleted: ${clip.name}`);
         break;
+      }
       case 'duplicate': {
         const res = duplicateClipTimeline(clips, clipId, { lockedTracks, lockedClips }, `Duplicated: ${clip.name}`);
         if (res) {
@@ -411,7 +416,8 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
   };
 
   const scaleFactor = (zoom / 100) * 15;
-  const totalTimelineWidth = 35 * scaleFactor;
+  const maxClipTime = clips.reduce((max, c) => Math.max(max, c.start + c.duration), 0);
+  const totalTimelineWidth = maxClipTime * scaleFactor;
 
   return (
     <div className="flex flex-col h-full bg-surface border-t border-border text-foreground relative">
@@ -571,7 +577,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
 
         {/* RIGHT scrollable Track list panel */}
         <div className="flex-1 overflow-auto relative select-none bg-background" style={{ cursor: 'crosshair' }}>
-          <div className="relative h-full flex flex-col justify-between" style={{ width: `${totalTimelineWidth}px` }}>
+          <div className="relative min-h-full flex flex-col justify-start" style={{ width: `${totalTimelineWidth}px` }}>
 
             {/* Time Ruler and Markers */}
             <div className="h-6 border-b border-border bg-background relative flex items-center text-[9px] font-mono text-muted-foreground">
@@ -613,7 +619,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
             </div>
 
             {/* Tracks Container */}
-            <div className="flex-1 flex flex-col divide-y divide-white/5">
+            <div className="flex flex-col divide-y divide-white/5">
               {(['video', 'audio', 'text', 'effect'] as const).map((trackId) => {
                 const isHidden = hiddenTracks[trackId];
                 const isLocked = lockedTracks[trackId];
@@ -682,11 +688,14 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
 
       {/* BOTTOM ACTION PANEL */}
       <ClipActionsPanel
-        clip={selectedClipId ? clips.find(c => c.id === selectedClipId) || null : null}
+        clip={selectedClipId 
+          ? (clips.find(c => c.id === selectedClipId) || null)
+          : (clips.find(c => currentTime >= c.start && currentTime <= c.start + c.duration) || clips[0] || null)
+        }
         isLocked={!!(selectedClipId && lockedClips[selectedClipId])}
         isMuted={!!(selectedClipId && mutedClips[selectedClipId])}
         hasClipboardPayload={false}
-        onAction={(actionId) => handleMenuAction(actionId, selectedClipId!)}
+        onAction={(actionId) => handleMenuAction(actionId, selectedClipId || '')}
       />
 
       {/* RENDER TOAST ALERT NOTIFICATION */}

@@ -52,7 +52,7 @@ import { ClipTrimHandles } from './trim/ClipTrimHandles';
 import { EditorHistoryProvider, useEditorHistory, ProjectState } from './history';
 
 const getProjectTotalDuration = (clips: any[]): number => {
-  if (!clips || clips.length === 0) return 5;
+  if (!clips || clips.length === 0) return 0;
   const videoClips = clips.filter(
     (c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio
   );
@@ -61,7 +61,7 @@ const getProjectTotalDuration = (clips: any[]): number => {
     const startSec = clip.timelineStart ?? clip.start ?? 0;
     return Math.max(max, startSec + (clip.duration || 0));
   }, 0);
-  return Math.max(5, maxEnd);
+  return maxEnd;
 };
 
 export function EditorMainScreen() {
@@ -160,7 +160,7 @@ function EditorMainScreenContent() {
     ? (timelineClips.find(c => c.id === activeSelectedClipId) || null)
     : (activeMediaId
       ? (timelineClips.find(c => c.id === activeMediaId || c.mediaId === activeMediaId) || null)
-      : null);
+      : (timelineClips.find(c => currentTime >= c.timelineStart && currentTime <= c.timelineStart + c.duration) || timelineClips[0] || null));
   const activeClipLocalTime = activeSelectedClip ? Math.max(0, currentTime - activeSelectedClip.timelineStart) : 0;
 
   // Reverse hook initialization
@@ -487,30 +487,36 @@ function EditorMainScreenContent() {
     if (relativePlayhead > 0.2 && relativePlayhead < clip.duration - 0.2) {
       setTimelineClips((prev) => {
         const updated = prev.map((c) => {
-          if (c.id === clipId) {
+          if (c.id === clipId || c.detachedAudioId === clipId || c.sourceClipId === clipId) {
             const currentPlaybackRate = c.playbackRate || 1;
             if (side === 'start') {
               const trimmedSource = relativePlayhead * currentPlaybackRate;
-              const newSourceStart = c.startOffset + trimmedSource;
+              const newSourceStart = (c.startOffset || 0) + trimmedSource;
               const newSourceDur = getSourceDuration(c) - trimmedSource;
               return {
                 ...c,
                 startOffset: newSourceStart,
                 baseDuration: newSourceDur,
-                duration: c.duration - relativePlayhead
+                duration: Math.max(0.5, c.duration - relativePlayhead)
               };
             } else {
               const newSourceDur = relativePlayhead * currentPlaybackRate;
               return {
                 ...c,
                 baseDuration: newSourceDur,
-                duration: relativePlayhead
+                duration: Math.max(0.5, relativePlayhead)
               };
             }
           }
           return c;
         });
-        return recalculateSequence(updated);
+        const recalculated = recalculateSequence(updated);
+        const newTotalDur = getProjectTotalDuration(recalculated);
+        setDuration(newTotalDur);
+        if (currentTime > newTotalDur) {
+          handleSeek(Math.max(0, newTotalDur));
+        }
+        return recalculated;
       });
       showToast(`Trimmed ${side} to playhead`);
     } else {
@@ -569,11 +575,11 @@ function EditorMainScreenContent() {
         keyframes: []
       };
 
+      // Enforce single effect per single clip
       setTimelineClips((prev) =>
         prev.map((c) => {
           if (c.id === activeClip.id) {
-            const appliedEffects = c.appliedEffects ? [...c.appliedEffects, newEffect] : [newEffect];
-            return { ...c, appliedEffects };
+            return { ...c, appliedEffects: [newEffect] };
           }
           return c;
         })
@@ -717,9 +723,21 @@ function EditorMainScreenContent() {
   const handleDeleteClip = (clipId: string) => {
     if (!validateCanEdit(clipId, 'delete')) return;
     const updated = timelineClips.filter(c => c.id !== clipId);
-    setTimelineClips(recalculateSequence(updated));
+    const recalculated = recalculateSequence(updated);
+    setTimelineClips(recalculated);
+
+    const newTotalDur = getProjectTotalDuration(recalculated);
+    setDuration(newTotalDur);
+    if (currentTime > newTotalDur) {
+      handleSeek(Math.max(0, newTotalDur));
+    }
+
+    const nextClip = recalculated.find(c => currentTime >= c.timelineStart && currentTime <= c.timelineStart + c.duration) || recalculated[0];
+    if (activeSelectedClipId === clipId) {
+      setActiveSelectedClipId(nextClip?.id || null);
+    }
     if (activeMediaId === clipId) {
-      setActiveMediaId(updated[0]?.mediaId || null);
+      setActiveMediaId(nextClip?.mediaId || nextClip?.id || null);
     }
     showToast('Deleted clip');
   };
@@ -745,26 +763,41 @@ function EditorMainScreenContent() {
   const handleTrimUpdate = (clipId: string, newTimelineStart: number, newSourceStart: number, newDuration: number) => {
     // During drag: update sourceStart and duration, then reflow sequential positions.
     setTimelineClips((prev) => {
+      const targetClip = prev.find(c => c.id === clipId);
       const updated = prev.map(c => {
-        if (c.id === clipId) {
+        if (c.id === clipId || (targetClip && (c.detachedAudioId === targetClip.id || c.sourceClipId === clipId || (targetClip.detachedAudioId && c.id === targetClip.detachedAudioId)))) {
           const isAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
           return {
             ...c,
-            timelineStart: isAudio ? newTimelineStart : c.timelineStart,
-            start: isAudio ? newTimelineStart : (c.start ?? c.timelineStart),
+            timelineStart: isAudio ? newTimelineStart : (c.id === clipId ? (newTimelineStart !== c.timelineStart ? newTimelineStart : c.timelineStart) : c.timelineStart),
+            start: isAudio ? newTimelineStart : (c.id === clipId ? (newTimelineStart !== c.timelineStart ? newTimelineStart : (c.start ?? c.timelineStart)) : (c.start ?? c.timelineStart)),
             startOffset: newSourceStart,
-            duration: newDuration
+            duration: Math.max(0.5, newDuration)
           };
         }
         return c;
       });
-      return recalculateSequence(updated);
+      const recalculated = recalculateSequence(updated);
+      const newTotalDur = getProjectTotalDuration(recalculated);
+      setDuration(newTotalDur);
+      if (currentTime > newTotalDur) {
+        handleSeek(Math.max(0, newTotalDur));
+      }
+      return recalculated;
     });
   };
 
   const handleTrimCommit = () => {
     // On pointer up: ensure sequential reflow is committed and show toast.
-    setTimelineClipsState((prev) => recalculateSequence(prev));
+    setTimelineClipsState((prev) => {
+      const recalculated = recalculateSequence(prev);
+      const newTotalDur = getProjectTotalDuration(recalculated);
+      setDuration(newTotalDur);
+      if (currentTime > newTotalDur) {
+        handleSeek(Math.max(0, newTotalDur));
+      }
+      return recalculated;
+    });
     const endState = getProjectState();
     commitTransaction(endState);
     showToast('Trimmed clip');
@@ -2187,12 +2220,12 @@ function EditorMainScreenContent() {
 
   // Keep the duration state updated and clamp playhead if clips list changes
   useEffect(() => {
-    const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0);
+    const totalDur = getProjectTotalDuration(timelineClips);
     setDuration(totalDur);
     if (currentTime > totalDur) {
       handleSeek(totalDur);
     }
-  }, [timelineClips, currentTime]);
+  }, [timelineClips]);
 
   const toggleMute = () => {
     setIsMutedState((prev) => {
@@ -3689,7 +3722,7 @@ function EditorMainScreenContent() {
 
               return (
                 <div
-                  className="relative h-full flex flex-col justify-between pb-3"
+                  className="relative min-h-full flex flex-col justify-start pb-3"
                   style={{
                     width: `${160 + totalTimelineWidth}px`,
                     paddingLeft: 'calc(50vw - 10rem)',
@@ -3727,7 +3760,7 @@ function EditorMainScreenContent() {
                   </div>
 
                   {/* Tracks Row Grid Container */}
-                  <div className="flex flex-col divide-y divide-white/5 flex-1">
+                  <div className="flex flex-col divide-y divide-white/5">
                     {/* Row 1: Audio Track */}
                     <div className="flex flex-row h-8 items-center bg-surface">
                       <div
@@ -3742,8 +3775,8 @@ function EditorMainScreenContent() {
                           .filter((c) => c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio)
                           .map((clip) => {
                             const startSec = clip.timelineStart ?? clip.start ?? 0;
-                            const clipLeftPx = startSec * pxPerSec + 4;
-                            const clipWidthPx = Math.max(24, clip.duration * pxPerSec - 8);
+                            const clipLeftPx = startSec * pxPerSec;
+                            const clipWidthPx = Math.max(24, clip.duration * pxPerSec);
                             const isSelected = activeSelectedClipId ? clip.id === activeSelectedClipId : (activeMediaId === clip.id || activeMediaId === clip.mediaId);
                             const isMuted = !!mutedClips[clip.id] || !!clip.isMuted;
                             const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
@@ -3922,12 +3955,15 @@ function EditorMainScreenContent() {
                           .filter((c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio)
                           .reduce<React.ReactNode[]>((acc, clip, idx, videoClipsArray) => {
                             const clipWidthPx = clip.duration * pxPerSec;
+                            const isMulti = videoClipsArray.length > 1;
                             const isFirst = idx === 0;
                             const isLast = idx === videoClipsArray.length - 1;
-                            const startGapPx = isFirst ? 4 : 16;
-                            const endGapPx = isLast ? 4 : 16;
-                            const clipLeftPx = clip.timelineStart * pxPerSec + startGapPx;
-                            const clipComputedWidth = Math.max(12, clipWidthPx - (startGapPx + endGapPx));
+
+                            const gapLeft = (isMulti && !isFirst) ? 8 : 0;
+                            const gapRight = (isMulti && !isLast) ? 8 : 0;
+
+                            const clipLeftPx = clip.timelineStart * pxPerSec + gapLeft;
+                            const clipComputedWidth = Math.max(12, clipWidthPx - (gapLeft + gapRight));
 
                             const numThumbnails = Math.max(1, Math.floor(clipComputedWidth / 48));
                             const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;

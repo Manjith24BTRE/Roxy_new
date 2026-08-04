@@ -342,7 +342,7 @@ export function Effects({
             {activeClip && (
               <div className="space-y-2">
                 <h4 className="text-[10px] uppercase font-mono tracking-wider text-slate-400 flex items-center justify-between">
-                  <span>Clip FX Stack ({activeClip.appliedEffects?.length || 0})</span>
+                  <span>Applied Effect ({activeClip.appliedEffects?.length || 0})</span>
                   <span className="text-[9px] text-slate-500 normal-case">{activeClip.name}</span>
                 </h4>
                 
