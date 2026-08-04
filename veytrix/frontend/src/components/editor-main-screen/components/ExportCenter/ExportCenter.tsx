@@ -109,29 +109,59 @@ export function ExportCenter({ isOpen, onClose, projectId, projectTitle, timelin
     setErrorMsg('');
     setStageLabel('Uploading & validating media assets...');
     try {
-      // Sanitize timelineJson clips: resolve every blob URL to permanent Supabase Storage URL
-      const rawClips = Array.isArray(timelineJson?.clips) ? timelineJson.clips : [];
-      const sanitizedClips = await Promise.all(
-        rawClips.map(async (clip: any) => {
-          let mediaUrl = clip.media_url || clip.url || clip.src || '';
-          if (!mediaUrl || mediaUrl.startsWith('blob:')) {
-            const resolved = await getPermanentMediaUrl(clip.mediaId || clip.id || mediaUrl);
-            if (resolved && !resolved.startsWith('blob:')) {
-              mediaUrl = resolved;
-            }
-          }
-          return {
-            ...clip,
-            media_url: mediaUrl,
-            url: mediaUrl,
-          };
-        })
-      );
+      // Sanitize timelineJson clips & tracks: resolve every blob URL to permanent Supabase Storage URL
+      let sanitizedTimelineJson = { ...timelineJson };
 
-      const sanitizedTimelineJson = {
-        ...timelineJson,
-        clips: sanitizedClips,
-      };
+      if (Array.isArray(timelineJson?.tracks)) {
+        const sanitizedTracks = await Promise.all(
+          timelineJson.tracks.map(async (track: any) => {
+            const rawTrackClips = Array.isArray(track?.clips) ? track.clips : [];
+            const sanitizedTrackClips = await Promise.all(
+              rawTrackClips.map(async (clip: any) => {
+                let mediaUrl = clip.media_url || clip.url || clip.src || clip.file_path || '';
+                if (!mediaUrl || mediaUrl.startsWith('blob:')) {
+                  const resolved = await getPermanentMediaUrl(clip.mediaId || clip.id || clip.asset_id || mediaUrl);
+                  if (resolved && !resolved.startsWith('blob:')) {
+                    mediaUrl = resolved;
+                  }
+                }
+                return {
+                  ...clip,
+                  media_url: mediaUrl,
+                  url: mediaUrl,
+                  src: mediaUrl,
+                  file_path: mediaUrl,
+                };
+              })
+            );
+            return { ...track, clips: sanitizedTrackClips };
+          })
+        );
+        sanitizedTimelineJson.tracks = sanitizedTracks;
+      }
+
+      if (Array.isArray(timelineJson?.clips)) {
+        const rawClips = timelineJson.clips;
+        const sanitizedClips = await Promise.all(
+          rawClips.map(async (clip: any) => {
+            let mediaUrl = clip.media_url || clip.url || clip.src || clip.file_path || '';
+            if (!mediaUrl || mediaUrl.startsWith('blob:')) {
+              const resolved = await getPermanentMediaUrl(clip.mediaId || clip.id || clip.asset_id || mediaUrl);
+              if (resolved && !resolved.startsWith('blob:')) {
+                mediaUrl = resolved;
+              }
+            }
+            return {
+              ...clip,
+              media_url: mediaUrl,
+              url: mediaUrl,
+              src: mediaUrl,
+              file_path: mediaUrl,
+            };
+          })
+        );
+        sanitizedTimelineJson.clips = sanitizedClips;
+      }
 
       console.log('[4] Validation passed: All timeline media references sanitized');
       console.log('[5] Calling createExport() with project:', projectId);

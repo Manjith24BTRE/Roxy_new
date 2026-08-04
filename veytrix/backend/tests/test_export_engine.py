@@ -16,6 +16,11 @@ from main import app
 
 
 @pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
+@pytest.fixture
 def queue_manager():
     return QueueManager()
 
@@ -25,9 +30,13 @@ def render_worker():
     return RenderWorker()
 
 
+from unittest.mock import AsyncMock
+
 @pytest.fixture
 def export_service():
-    return ExportService()
+    svc = ExportService()
+    svc.render_worker._execute_ffmpeg_command = AsyncMock(return_value=True)
+    return svc
 
 
 @pytest.mark.anyio
@@ -120,3 +129,120 @@ def test_metrics_health_api_endpoint():
 
 def test_temp_file_cleanup():
     cleanup_orphaned_temp_files()
+
+
+@pytest.mark.anyio
+async def test_ffmpeg_failure_handling(render_worker):
+    """Verify that FFmpeg non-zero exit code stops export, raises error with stderr/exit code, and creates no fallback file."""
+    from unittest.mock import AsyncMock, patch
+
+    export_id = uuid4()
+    project_id = uuid4()
+    cmd_args = ["ffmpeg", "-i", "nonexistent.mp4", "output.mp4"]
+
+    mock_proc = AsyncMock()
+    mock_proc.returncode = 1
+    mock_proc.communicate.return_value = (b"", b"Error opening input file: No such file or directory\n")
+
+    with patch.object(render_worker.ffmpeg_service, "get_ffmpeg_binary", return_value="ffmpeg"), \
+         patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+        with pytest.raises(RuntimeError) as exc_info:
+            await render_worker._execute_ffmpeg_command(
+                export_id=export_id,
+                project_id=project_id,
+                cmd_args=cmd_args,
+                output_path="output.mp4",
+                duration=5.0,
+            )
+
+        err_str = str(exc_info.value)
+        assert "exit code 1" in err_str
+        assert "Error opening input file" in err_str
+        assert str(export_id) in err_str
+        assert str(project_id) in err_str
+
+
+def test_generate_fallback_disabled(export_service):
+    """Verify that _generate_fallback_file is disabled and raises RuntimeError if invoked."""
+    with pytest.raises(RuntimeError) as exc_info:
+        export_service.ffmpeg_service._generate_fallback_file("some_path.mp4", 5.0)
+    assert "disabled" in str(exc_info.value).lower()
+
+
+@pytest.mark.anyio
+async def test_requeued_tasks_are_processed_until_terminal_state(export_service):
+    """Verify that worker loop continuously processes requeued tasks through all retries until terminal FAILED state with no orphaned tasks."""
+    from unittest.mock import AsyncMock, patch
+
+    user_id = "00000000-0000-0000-0000-000000000001"
+    project_id = uuid4()
+
+    payload = ExportCreate(
+        project_id=project_id,
+        title="Retry Worker Loop Test",
+        timeline_json={"duration": 1.0, "tracks": []},
+        settings=ExportSettings(resolution="720p", fps=30, format="mp4"),
+    )
+
+    # Patch process_task to always return failure
+    with patch.object(
+        export_service.render_worker,
+        "process_task",
+        new_callable=AsyncMock,
+        return_value=(False, None, None, "Mocked render failure"),
+    ) as mock_process:
+        export_res = await export_service.create_export(data=payload, user_id=user_id)
+
+        # Allow worker loop to run through retries
+        import asyncio
+        await asyncio.sleep(0.1)
+
+        # Check final status
+        status_res = export_service.get_export_status(export_res.id, user_id)
+        assert status_res.status == ExportStatus.FAILED
+        assert status_res.progress == 0
+        assert "Mocked render failure" in (status_res.error_message or "")
+
+        # Verify no orphaned entries remain in queue
+        assert export_service.queue_manager.get_queue_size() == 0
+        assert export_service.queue_manager.get_active_count() == 0
+
+        # Verify process_task was called 4 times (1 initial + 3 retries)
+        assert mock_process.call_count == 4
+
+
+def test_ffmpeg_resolver_success():
+    """Verify that FFmpeg executable resolver discovers a valid executable and verify_version succeeds."""
+    import sys
+    from app.services.ffmpeg_service import FFmpegService
+    svc = FFmpegService(ffmpeg_bin=sys.executable)
+    binary_path = svc.get_ffmpeg_binary()
+    assert binary_path is not None
+    assert len(binary_path) > 0
+    from pathlib import Path
+    assert Path(binary_path).is_file()
+
+    version_str = svc.verify_version()
+    assert len(version_str) > 0
+
+
+def test_ffmpeg_resolver_missing():
+    """Verify that FFmpeg service raises a clear configuration RuntimeError if no executable is found."""
+    from unittest.mock import patch, MagicMock
+    from app.services.ffmpeg_service import FFmpegService
+
+    svc = FFmpegService(ffmpeg_bin=None)
+    mock_local_path = MagicMock()
+    mock_local_path.is_file.return_value = False
+    with patch("shutil.which", return_value=None), \
+         patch.object(svc, "_get_local_project_ffmpeg_path", return_value=mock_local_path), \
+         patch.object(svc, "_auto_download_ffmpeg", side_effect=RuntimeError("Download disabled in test")), \
+         patch("app.services.ffmpeg_service.STATIC_FFMPEG_PATH", None), \
+         patch("os.getenv", return_value=""):
+        with pytest.raises(RuntimeError) as exc_info:
+            svc.get_ffmpeg_binary()
+
+        assert "FFmpeg is not installed or configured" in str(exc_info.value)
+
+
+

@@ -50,6 +50,10 @@ def preview_render_graph(
     return service.generate_render_graph(data=data, user_id=current_user.id)
 
 
+import traceback
+from app.core.logging import logger
+
+
 @router.post("", response_model=ExportResponse, status_code=status.HTTP_201_CREATED)
 async def create_export(
     data: ExportCreate,
@@ -57,7 +61,21 @@ async def create_export(
     service: ExportService = Depends(get_export_service),
 ) -> ExportResponse:
     """Triggers project video export pipeline."""
-    return await service.create_export(data=data, user_id=current_user.id)
+    logger.info(
+        f"[POST /api/v1/exports] ENTER - User ID: {current_user.id}, Project ID: {data.project_id}, Title: '{data.title}'"
+    )
+    try:
+        res = await service.create_export(data=data, user_id=current_user.id)
+        logger.info(
+            f"[POST /api/v1/exports] EXIT - Created Export ID: {res.id}, Status: {res.status}, Project ID: {res.project_id}"
+        )
+        return res
+    except Exception as exc:
+        logger.error(
+            f"[POST /api/v1/exports] EXCEPTION - Type: {type(exc).__name__}, Message: {str(exc)}, Project ID: {data.project_id}\n"
+            f"Stack Trace:\n{traceback.format_exc()}"
+        )
+        raise
 
 
 @router.get("", response_model=ExportListResponse, status_code=status.HTTP_200_OK)

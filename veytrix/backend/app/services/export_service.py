@@ -63,9 +63,9 @@ class ExportService:
         self.project_service = project_service or ProjectService()
         self.timeline_parser = timeline_parser or TimelineParser()
         self.asset_resolver = asset_resolver or AssetResolver(entitlement_service=self.entitlement_service)
-        self.ffmpeg_builder = ffmpeg_builder or FFmpegBuilder(entitlement_service=self.entitlement_service)
+        self.ffmpeg_builder = ffmpeg_builder or FFmpegBuilder(entitlement_service=self.entitlement_service, ffmpeg_service=self.ffmpeg_service)
         self.queue_manager = queue_manager or _GLOBAL_QUEUE_MANAGER
-        self.render_worker = render_worker or _GLOBAL_RENDER_WORKER
+        self.render_worker = render_worker or RenderWorker(ffmpeg_service=self.ffmpeg_service, storage_service=self.storage_service)
         self.supabase = get_supabase_admin_client()
 
     def generate_render_graph(self, data: ExportCreate, user_id: str) -> RenderGraphDefinition:
@@ -175,6 +175,24 @@ class ExportService:
 
     async def create_export(self, data: ExportCreate, user_id: str) -> ExportResponse:
         """Triggers a new export workflow: validates project, plan, credits, parses timeline, and enqueues FFmpeg rendering."""
+        logger.info(
+            f"[ExportService.create_export] ENTER - Project ID: {data.project_id}, User ID: {user_id}, Title: '{data.title}'"
+        )
+        try:
+            res = await self._create_export_internal(data=data, user_id=user_id)
+            logger.info(
+                f"[ExportService.create_export] EXIT - Created Export ID: {res.id}, Status: {res.status}, Project ID: {res.project_id}"
+            )
+            return res
+        except Exception as exc:
+            import traceback
+            logger.error(
+                f"[ExportService.create_export] EXCEPTION - Type: {type(exc).__name__}, Message: {str(exc)}, Project ID: {data.project_id}, User ID: {user_id}, Stage: Pre-Queue\n"
+                f"Stack Trace:\n{traceback.format_exc()}"
+            )
+            raise
+
+    async def _create_export_internal(self, data: ExportCreate, user_id: str) -> ExportResponse:
         owner_id = UUID(user_id)
 
         # Validate project existence & ownership
@@ -293,91 +311,110 @@ class ExportService:
 
         return self._convert_model_to_response(export_model)
 
-    async def _process_queue_task(self, export_id: UUID):
-        """Processes queued export task through RenderWorker."""
-        task = await self.queue_manager.dequeue()
-        if not task:
-            return
+    async def _process_queue_task(self, export_id: Optional[UUID] = None):
+        """Persistent worker loop that continuously dequeues and processes export tasks from QueueManager until empty."""
+        logger.info(f"[ExportService._process_queue_task] ENTER - Starting queue worker loop (trigger export_id: {export_id})")
+        try:
+            await self._process_queue_task_internal()
+            logger.info("[ExportService._process_queue_task] EXIT - Queue worker loop finished (queue empty)")
+        except Exception as exc:
+            import traceback
+            logger.error(
+                f"[ExportService._process_queue_task] EXCEPTION - Type: {type(exc).__name__}, Message: {str(exc)}, Trigger Export ID: {export_id}\n"
+                f"Stack Trace:\n{traceback.format_exc()}"
+            )
 
-        export_model = _LOCAL_EXPORTS.get(export_id)
-        if not export_model:
-            return
+    async def _process_queue_task_internal(self):
+        while True:
+            task = await self.queue_manager.dequeue()
+            if not task:
+                break
 
-        start_time = datetime.now(timezone.utc)
+            current_export_id = task.export_id
+            export_model = _LOCAL_EXPORTS.get(current_export_id)
+            if not export_model:
+                continue
 
-        def on_progress(eid: UUID, p: int, msg: str, stage_status: ExportStatus):
-            _EXPORT_PROGRESS[eid] = p
-            _EXPORT_STAGES[eid] = msg
-            export_model.status = stage_status
+            start_time = datetime.now(timezone.utc)
+
+            def on_progress(eid: UUID, p: int, msg: str, stage_status: ExportStatus):
+                _EXPORT_PROGRESS[eid] = p
+                _EXPORT_STAGES[eid] = msg
+                export_model.status = stage_status
+                export_model.updated_at = datetime.now(timezone.utc)
+
+                # Broadcast WebSocket progress update
+                asyncio.create_task(
+                    ws_manager.broadcast_to_user(
+                        str(export_model.user_id),
+                        {
+                            "event": "export_progress",
+                            "export_id": str(eid),
+                            "status": stage_status.value,
+                            "progress": p,
+                            "stage": msg,
+                        },
+                    )
+                )
+
+            export_model.status = ExportStatus.RENDERING
             export_model.updated_at = datetime.now(timezone.utc)
 
-            # Broadcast WebSocket progress update
-            asyncio.create_task(
-                ws_manager.broadcast_to_user(
-                    str(export_model.user_id),
-                    {
-                        "event": "export_progress",
-                        "export_id": str(eid),
-                        "status": stage_status.value,
-                        "progress": p,
-                        "stage": msg,
-                    },
-                )
+            success, file_url, storage_path, error_msg = await self.render_worker.process_task(
+                task=task,
+                queue_manager=self.queue_manager,
+                progress_callback=on_progress,
             )
 
-        export_model.status = ExportStatus.RENDERING
-        export_model.updated_at = datetime.now(timezone.utc)
+            end_time = datetime.now(timezone.utc)
+            render_duration = (end_time - start_time).total_seconds()
 
-        success, file_url, storage_path, error_msg = await self.render_worker.process_task(
-            task=task,
-            queue_manager=self.queue_manager,
-            progress_callback=on_progress,
-        )
-
-        end_time = datetime.now(timezone.utc)
-        render_duration = (end_time - start_time).total_seconds()
-
-        if success:
-            await self.queue_manager.mark_completed(export_id)
-            export_model.status = ExportStatus.COMPLETED
-            export_model.file_url = file_url
-            export_model.storage_path = storage_path
-            export_model.error_message = None
-            export_model.render_duration_seconds = render_duration
-            export_model.completed_at = end_time
-            export_model.updated_at = end_time
-            _EXPORT_PROGRESS[export_id] = 100
-            _EXPORT_STAGES[export_id] = "Completed"
-
-            await ws_manager.broadcast_to_user(
-                str(export_model.user_id),
-                {
-                    "event": "export_completed",
-                    "export_id": str(export_id),
-                    "status": "completed",
-                    "progress": 100,
-                    "file_url": file_url,
-                    "render_duration": render_duration,
-                },
-            )
-        else:
-            requeued = await self.queue_manager.mark_failed(export_id, task)
-            if not requeued:
-                export_model.status = ExportStatus.CANCELLED if task.cancelled else ExportStatus.FAILED
-                export_model.error_message = error_msg or "Render job failed after maximum retries."
-                export_model.updated_at = datetime.now(timezone.utc)
-                _EXPORT_PROGRESS[export_id] = 0
-                _EXPORT_STAGES[export_id] = "Failed" if not task.cancelled else "Cancelled"
+            if success:
+                await self.queue_manager.mark_completed(current_export_id)
+                export_model.status = ExportStatus.COMPLETED
+                export_model.file_url = file_url
+                export_model.storage_path = storage_path
+                export_model.error_message = None
+                export_model.render_duration_seconds = render_duration
+                export_model.completed_at = end_time
+                export_model.updated_at = end_time
+                _EXPORT_PROGRESS[current_export_id] = 100
+                _EXPORT_STAGES[current_export_id] = "Completed"
 
                 await ws_manager.broadcast_to_user(
                     str(export_model.user_id),
                     {
-                        "event": "export_failed" if not task.cancelled else "export_cancelled",
-                        "export_id": str(export_id),
-                        "status": export_model.status.value,
-                        "error_message": export_model.error_message,
+                        "event": "export_completed",
+                        "export_id": str(current_export_id),
+                        "status": "completed",
+                        "progress": 100,
+                        "file_url": file_url,
+                        "render_duration": render_duration,
                     },
                 )
+            else:
+                requeued = await self.queue_manager.mark_failed(current_export_id, task)
+                if not requeued:
+                    export_model.status = ExportStatus.CANCELLED if task.cancelled else ExportStatus.FAILED
+                    export_model.error_message = error_msg or "Render job failed after maximum retries."
+                    export_model.updated_at = datetime.now(timezone.utc)
+                    _EXPORT_PROGRESS[current_export_id] = 0
+                    _EXPORT_STAGES[current_export_id] = "Failed" if not task.cancelled else "Cancelled"
+
+                    await ws_manager.broadcast_to_user(
+                        str(export_model.user_id),
+                        {
+                            "event": "export_failed" if not task.cancelled else "export_cancelled",
+                            "export_id": str(current_export_id),
+                            "status": export_model.status.value,
+                            "error_message": export_model.error_message,
+                        },
+                    )
+                else:
+                    logger.info(
+                        f"Export {current_export_id} failed on attempt {task.retry_count}/{task.max_retries}. Requeued for immediate retry."
+                    )
+                    _EXPORT_STAGES[current_export_id] = f"Retrying (attempt {task.retry_count}/{task.max_retries})"
 
     async def retry_export(self, export_id: UUID, user_id: str) -> ExportResponse:
         """Retries a failed or cancelled export job."""

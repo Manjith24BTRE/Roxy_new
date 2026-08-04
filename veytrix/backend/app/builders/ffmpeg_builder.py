@@ -315,6 +315,13 @@ class CommandOptimizer:
 from app.services.asset_resolver import AssetResolver, StackedRenderDefinition
 
 
+import traceback
+from app.core.logging import logger
+
+
+from app.services.ffmpeg_service import FFmpegService
+
+
 class FFmpegBuilder:
     """Central production FFmpeg Command & Filter Graph Builder."""
 
@@ -324,10 +331,12 @@ class FFmpegBuilder:
         graph_validator: Optional[GraphValidator] = None,
         watermark_builder: Optional[WatermarkBuilder] = None,
         asset_resolver: Optional[AssetResolver] = None,
+        ffmpeg_service: Optional[FFmpegService] = None,
     ):
         self.validator = graph_validator or GraphValidator(entitlement_service=entitlement_service)
         self.watermark_builder = watermark_builder or WatermarkBuilder(entitlement_service=entitlement_service)
         self.asset_resolver = asset_resolver or AssetResolver(entitlement_service=entitlement_service)
+        self.ffmpeg_service = ffmpeg_service or FFmpegService()
 
     def build_render_definition(
         self,
@@ -341,6 +350,42 @@ class FFmpegBuilder:
         output_filename: str = "output.mp4",
     ) -> RenderGraphDefinition:
         """Translates normalized TimelineModel into complete FFmpeg CLI command definition WITHOUT executing FFmpeg."""
+        logger.info(
+            f"[FFmpegBuilder.build_render_definition] ENTER - Resolution: {resolution}, FPS: {fps}, Codec: {codec}, Bitrate: {bitrate}, Watermark: {watermark}, Output: '{output_filename}'"
+        )
+        try:
+            res = self._build_render_definition_internal(
+                timeline=timeline,
+                user_id=user_id,
+                resolution=resolution,
+                fps=fps,
+                codec=codec,
+                bitrate=bitrate,
+                watermark=watermark,
+                output_filename=output_filename,
+            )
+            logger.info(
+                f"[FFmpegBuilder.build_render_definition] EXIT - Output File: {output_filename}, Filter Nodes: {len(res.filter_graph)}, Inputs: {len(res.inputs)}"
+            )
+            return res
+        except Exception as exc:
+            logger.error(
+                f"[FFmpegBuilder.build_render_definition] EXCEPTION - Type: {type(exc).__name__}, Message: {str(exc)}, User ID: {user_id}\n"
+                f"Stack Trace:\n{traceback.format_exc()}"
+            )
+            raise
+
+    def _build_render_definition_internal(
+        self,
+        timeline: TimelineModel,
+        user_id: Optional[str] = None,
+        resolution: str = "1080p",
+        fps: int = 30,
+        codec: str = "h264",
+        bitrate: str = "standard",
+        watermark: bool = True,
+        output_filename: str = "output.mp4",
+    ) -> RenderGraphDefinition:
         # 1. Validation
         validation_errors = self.validator.validate(timeline, user_id)
         if validation_errors:
@@ -381,6 +426,7 @@ class FFmpegBuilder:
 
         # Find all clips with valid media sources
         media_clips: List[Tuple[int, ClipModel, str]] = []
+        local_static_prefix = f"/static/storage/"
         for track in timeline.tracks:
             for clip in track.clips:
                 clip_src = (
@@ -391,22 +437,30 @@ class FFmpegBuilder:
                     or clip.metadata.get("path")
                 )
                 if clip_src and not str(clip_src).startswith("blob:"):
+                    src_str = str(clip_src)
+                    if local_static_prefix in src_str:
+                        rel_path = src_str.split(local_static_prefix)[-1]
+                        local_abs = (Path(__file__).resolve().parent.parent.parent / "storage" / rel_path).resolve()
+                        if local_abs.is_file():
+                            src_str = str(local_abs)
+
                     input_idx = len(inputs)
-                    inputs.append(FFmpegInput(index=input_idx, path=str(clip_src)))
-                    media_clips.append((input_idx, clip, str(clip_src)))
+                    inputs.append(FFmpegInput(index=input_idx, path=src_str))
+                    media_clips.append((input_idx, clip, src_str))
 
         # Fallback background canvas if no real video media inputs were found
-        if not inputs:
+        if not media_clips:
+            canvas_idx = len(inputs)
             inputs.append(
                 FFmpegInput(
-                    index=0,
+                    index=canvas_idx,
                     path=f"color=c=black:duration={duration:.2f}:size={width}x{height}:rate={fps}",
                     format="lavfi",
                 )
             )
             filter_nodes.append(
                 FilterNode(
-                    inputs=["0:v"],
+                    inputs=[f"{canvas_idx}:v"],
                     filter_name="scale",
                     args=f"{width}:{height}",
                     outputs=["v_canvas"],
@@ -522,7 +576,8 @@ class FFmpegBuilder:
         # 6. Assemble FFmpeg CLI Arguments Array
         filter_graph_str = ";".join(n.to_filter_string() for n in optimized_nodes)
 
-        cmd_args: List[str] = ["ffmpeg", "-y"]
+        ffmpeg_bin = self.ffmpeg_service.get_ffmpeg_binary()
+        cmd_args: List[str] = [ffmpeg_bin, "-y"]
         for inp in inputs:
             if inp.format:
                 cmd_args.extend(["-f", inp.format])

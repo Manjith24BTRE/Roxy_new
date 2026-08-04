@@ -74,7 +74,7 @@ export function EditorMainScreen() {
 
 function EditorMainScreenContent() {
   const navigate = useNavigate();
-  const { mediaFiles, activeMediaId, setActiveMediaId, addMediaFiles, updateMediaName } = useProjectMedia();
+  const { projectId, projectTitle, mediaFiles, activeMediaId, setActiveMediaId, addMediaFiles, updateMediaName } = useProjectMedia();
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
   const importFileInputRef = useRef<HTMLInputElement>(null);
@@ -4197,8 +4197,8 @@ function EditorMainScreenContent() {
       <ExportCenter
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
-        projectId="00000000-0000-0000-0000-000000000000"
-        projectTitle="My Project"
+        projectId={projectId}
+        projectTitle={projectTitle || 'My Project'}
         timelineJson={{
           clips: timelineClips,
           duration: getProjectTotalDuration(timelineClips),

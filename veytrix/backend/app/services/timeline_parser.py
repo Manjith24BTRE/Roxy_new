@@ -34,6 +34,9 @@ class TimelineParserError(HTTPException):
         super().__init__(status_code=status_code, detail=detail)
 
 
+import traceback
+
+
 class TimelineParser:
     """Production Timeline Parser that converts frontend timeline JSON into a normalized internal TimelineModel."""
 
@@ -49,6 +52,36 @@ class TimelineParser:
         default_aspect_ratio: str = "16:9",
     ) -> TimelineModel:
         """Parses, validates, normalizes, and resolves assets for a raw frontend timeline structure."""
+        logger.info(
+            f"[TimelineParser.parse] ENTER - User ID: {user_id}, Resolution: {default_resolution}, FPS: {default_fps}, Aspect Ratio: {default_aspect_ratio}"
+        )
+        try:
+            res = self._parse_internal(
+                timeline_json=timeline_json,
+                user_id=user_id,
+                default_resolution=default_resolution,
+                default_fps=default_fps,
+                default_aspect_ratio=default_aspect_ratio,
+            )
+            logger.info(
+                f"[TimelineParser.parse] EXIT - Timeline Duration: {res.duration}s, Tracks: {len(res.tracks)}, FPS: {res.frame_rate}"
+            )
+            return res
+        except Exception as exc:
+            logger.error(
+                f"[TimelineParser.parse] EXCEPTION - Type: {type(exc).__name__}, Message: {str(exc)}, User ID: {user_id}\n"
+                f"Stack Trace:\n{traceback.format_exc()}"
+            )
+            raise
+
+    def _parse_internal(
+        self,
+        timeline_json: Union[Dict[str, Any], List[Any], None],
+        user_id: Optional[str] = None,
+        default_resolution: str = "1080p",
+        default_fps: int = 30,
+        default_aspect_ratio: str = "16:9",
+    ) -> TimelineModel:
         errors: List[TimelineValidationError] = []
 
         if timeline_json is None:
@@ -275,7 +308,15 @@ class TimelineParser:
                             try:
                                 self.asset_service.get_asset_by_id(parsed_asset_id, user_id)
                             except Exception:
-                                pass
+                                errors.append(
+                                    TimelineValidationError(
+                                        code="MISSING_ASSET",
+                                        message=f"Referenced asset '{parsed_asset_id}' could not be found.",
+                                        track_id=track_id,
+                                        clip_id=clip_id,
+                                        field="asset_id",
+                                    )
+                                )
                     except ValueError:
                         pass
 
@@ -352,11 +393,27 @@ class TimelineParser:
                         timing=raw_text.get("timing"),
                     )
 
+                raw_media_url_str = str(raw_media_url) if raw_media_url else None
+                if raw_media_url_str and "/storage/v1/object/public/" in raw_media_url_str:
+                    parts = raw_media_url_str.split("/storage/v1/object/public/")
+                    prefix = parts[0] + "/storage/v1/object/public/"
+                    remainder = parts[1]
+                    known_buckets = ["videos", "assets", "images", "audio", "uploads", "exports", "thumbnails"]
+                    if not any(remainder.startswith(f"{b}/") for b in known_buckets):
+                        if asset_type == AssetType.VIDEO:
+                            raw_media_url_str = f"{prefix}videos/{remainder}"
+                        elif asset_type == AssetType.AUDIO:
+                            raw_media_url_str = f"{prefix}audio/{remainder}"
+                        elif asset_type == AssetType.IMAGE:
+                            raw_media_url_str = f"{prefix}images/{remainder}"
+                        else:
+                            raw_media_url_str = f"{prefix}assets/{remainder}"
+                
                 clip_model = ClipModel(
                     id=clip_id,
                     track_id=track_id,
                     asset_id=parsed_asset_id,
-                    media_url=str(raw_media_url) if raw_media_url else None,
+                    media_url=raw_media_url_str,
                     file_path=str(raw_file_path) if raw_file_path else None,
                     asset_type=asset_type,
                     start_time=start_time,

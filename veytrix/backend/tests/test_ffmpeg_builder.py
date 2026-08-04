@@ -75,7 +75,8 @@ def test_ffmpeg_builder_basic_command_generation(parser, ffmpeg_builder):
 
     # Command line array verification
     cmd_str = render_def.command_string
-    assert "ffmpeg -y" in cmd_str
+    assert "-y" in cmd_str
+    assert "ffmpeg" in cmd_str.lower()
     assert "-filter_complex" in cmd_str
     assert "-map [outv]" in cmd_str
     assert "-map [outa]" in cmd_str

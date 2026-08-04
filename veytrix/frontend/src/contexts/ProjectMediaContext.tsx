@@ -16,6 +16,9 @@ export interface MediaItem {
 }
 
 interface ProjectMediaContextType {
+  projectId: string;
+  projectTitle: string;
+  setProjectTitle: (title: string) => void;
   mediaFiles: MediaItem[];
   activeMediaId: string | null;
   addMediaFiles: (files: File[]) => Promise<void>;
@@ -80,6 +83,8 @@ async function generateVideoThumbnails(url: string, duration: number, count: num
 }
 
 export const ProjectMediaProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [projectId] = useState<string>(() => crypto.randomUUID());
+  const [projectTitle, setProjectTitle] = useState<string>('My Project');
   const [mediaFiles, setMediaFiles] = useState<MediaItem[]>([]);
   const [activeMediaId, setActiveMediaId] = useState<string | null>(null);
 
@@ -194,6 +199,9 @@ export const ProjectMediaProvider: React.FC<{ children: React.ReactNode }> = ({ 
   return (
     <ProjectMediaContext.Provider
       value={{
+        projectId,
+        projectTitle,
+        setProjectTitle,
         mediaFiles,
         activeMediaId,
         addMediaFiles,

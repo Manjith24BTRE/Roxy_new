@@ -94,10 +94,24 @@ class StorageService:
             )
 
     def get_bucket_for_type(self, asset_type: Union[AssetType, str]) -> str:
-        """Returns target bucket name for an asset type or bucket string."""
-        if isinstance(asset_type, str):
-            return asset_type
-        return BUCKET_ROUTING.get(asset_type, "assets")
+        """Returns target Supabase Storage bucket name for an asset type or bucket string."""
+        if isinstance(asset_type, AssetType):
+            return BUCKET_ROUTING.get(asset_type, "assets")
+
+        val_str = str(asset_type).lower().replace("assettype.", "")
+        if "video" in val_str:
+            return "videos"
+        elif "image" in val_str:
+            return "images"
+        elif "audio" in val_str:
+            return "audio"
+        elif "export" in val_str:
+            return "exports"
+        elif "thumbnail" in val_str:
+            return "thumbnails"
+        elif val_str in ("assets", "images", "videos", "audio", "thumbnails", "exports"):
+            return val_str
+        return "assets"
 
     async def upload_file(
         self,
