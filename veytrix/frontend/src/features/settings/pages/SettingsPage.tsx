@@ -1,47 +1,75 @@
-import React from 'react';
-import { Settings, Monitor, Bell, Shield } from 'lucide-react';
+import React, { useState, Suspense } from 'react';
+import { SettingsHeader, SettingsSidebar, SettingsLayout } from '../components';
+
+// Lazy load category panels for premium performance and code splitting
+const AccountPanel = React.lazy(() => import('../panels/AccountPanel').then(module => ({ default: module.AccountPanel })));
+const ProfilePanel = React.lazy(() => import('../panels/ProfilePanel').then(module => ({ default: module.ProfilePanel })));
+const WorkspacePanel = React.lazy(() => import('../panels/WorkspacePanel').then(module => ({ default: module.WorkspacePanel })));
+const AppearancePanel = React.lazy(() => import('../panels/AppearancePanel').then(module => ({ default: module.AppearancePanel })));
+const NotificationsPanel = React.lazy(() => import('../panels/NotificationsPanel').then(module => ({ default: module.NotificationsPanel })));
+const PrivacyPanel = React.lazy(() => import('../panels/PrivacyPanel').then(module => ({ default: module.PrivacyPanel })));
+const SecurityPanel = React.lazy(() => import('../panels/SecurityPanel').then(module => ({ default: module.SecurityPanel })));
+const StoragePanel = React.lazy(() => import('../panels/StoragePanel').then(module => ({ default: module.StoragePanel })));
+const KeyboardShortcutsPanel = React.lazy(() => import('../panels/KeyboardShortcutsPanel').then(module => ({ default: module.KeyboardShortcutsPanel })));
+const AccessibilityPanel = React.lazy(() => import('../panels/AccessibilityPanel').then(module => ({ default: module.AccessibilityPanel })));
+const ConnectedAppsPanel = React.lazy(() => import('../panels/ConnectedAppsPanel').then(module => ({ default: module.ConnectedAppsPanel })));
+const BillingPanel = React.lazy(() => import('../panels/BillingPanel').then(module => ({ default: module.BillingPanel })));
+const ExportPanel = React.lazy(() => import('../panels/ExportPanel').then(module => ({ default: module.ExportPanel })));
+const AboutPanel = React.lazy(() => import('../panels/AboutPanel').then(module => ({ default: module.AboutPanel })));
+const AdvancedPanel = React.lazy(() => import('../panels/AdvancedPanel').then(module => ({ default: module.AdvancedPanel })));
 
 export function SettingsPage() {
+  const [activeCategory, setActiveCategory] = useState<string>('account');
+
+  const renderActivePanel = () => {
+    switch (activeCategory) {
+      case 'account': return <AccountPanel />;
+      case 'profile': return <ProfilePanel />;
+      case 'workspace': return <WorkspacePanel />;
+      case 'appearance': return <AppearancePanel />;
+      case 'notifications': return <NotificationsPanel />;
+      case 'privacy': return <PrivacyPanel />;
+      case 'security': return <SecurityPanel />;
+      case 'storage': return <StoragePanel />;
+      case 'shortcuts': return <KeyboardShortcutsPanel />;
+      case 'accessibility': return <AccessibilityPanel />;
+      case 'connected': return <ConnectedAppsPanel />;
+      case 'billing': return <BillingPanel />;
+      case 'export': return <ExportPanel />;
+      case 'about': return <AboutPanel />;
+      case 'advanced': return <AdvancedPanel />;
+      default: return <AccountPanel />;
+    }
+  };
+
   return (
-    <div className="px-4 md:px-6 xl:px-8 py-8 w-full max-w-4xl mx-auto flex flex-col h-full">
-      <h1 className="text-2xl md:text-[32px] font-display font-bold text-[#1D2B64] mb-8">Settings</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        
-        {/* Navigation Sidebar */}
-        <div className="col-span-1 flex flex-col gap-1">
-          <button className="flex items-center gap-3 px-4 py-3 bg-[#F8FBFD] text-[#3B6CE7] rounded-xl font-medium text-sm text-left">
-            <Settings size={18} /> Account
-          </button>
-          <button className="flex items-center gap-3 px-4 py-3 text-[#1D2B64]/60 hover:bg-[#FAFAFC] hover:text-[#1D2B64] rounded-xl font-medium text-sm text-left transition-colors cursor-not-allowed opacity-50">
-            <Monitor size={18} /> Appearance
-          </button>
-          <button className="flex items-center gap-3 px-4 py-3 text-[#1D2B64]/60 hover:bg-[#FAFAFC] hover:text-[#1D2B64] rounded-xl font-medium text-sm text-left transition-colors cursor-not-allowed opacity-50">
-            <Bell size={18} /> Notifications
-          </button>
-          <button className="flex items-center gap-3 px-4 py-3 text-[#1D2B64]/60 hover:bg-[#FAFAFC] hover:text-[#1D2B64] rounded-xl font-medium text-sm text-left transition-colors cursor-not-allowed opacity-50">
-            <Shield size={18} /> Privacy
-          </button>
-        </div>
+    <div className="px-4 md:px-6 xl:px-8 py-8 w-full max-w-[1600px] mx-auto flex flex-col h-full relative">
+      <SettingsHeader />
 
-        {/* Content Area */}
-        <div className="col-span-1 md:col-span-2 space-y-6">
-          <div className="bg-white border border-[#1D2B64]/10 rounded-2xl p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-[#1D2B64] mb-4">Account Information</h2>
-            <p className="text-sm text-[#1D2B64]/60 mb-6">Manage your account settings and preferences.</p>
-            
-            <div className="space-y-4">
-              <div className="opacity-50 pointer-events-none">
-                <label className="block text-xs font-semibold text-[#1D2B64]/60 mb-1.5">Language</label>
-                <select className="w-full bg-[#FAFAFC] border border-[#1D2B64]/10 rounded-lg px-3 py-2 text-sm text-[#1D2B64]">
-                  <option>English (US)</option>
-                </select>
-              </div>
-            </div>
+      <SettingsLayout
+        sidebar={
+          <div>
+            <h2 className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#1D2B64]/40 mb-3 pl-3 select-none">
+              Preferences
+            </h2>
+            <SettingsSidebar 
+              activeCategory={activeCategory} 
+              onSelectCategory={setActiveCategory} 
+            />
           </div>
-        </div>
-
-      </div>
+        }
+        content={
+          <Suspense fallback={
+            <div className="w-full py-12 flex items-center justify-center">
+              <div className="h-6 w-6 rounded-full border-2 border-[#3B6CE7]/20 border-t-[#3B6CE7] animate-spin" />
+            </div>
+          }>
+            {renderActivePanel()}
+          </Suspense>
+        }
+      />
     </div>
   );
 }
+
+export default SettingsPage;

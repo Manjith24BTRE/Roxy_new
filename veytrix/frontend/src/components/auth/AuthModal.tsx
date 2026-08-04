@@ -1,20 +1,26 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { LoginForm } from './LoginForm';
 import { SignupForm } from './SignupForm';
 import { ForgotPassword } from './ForgotPassword';
 import { VeytrixLogo } from '../VeytrixLogo';
+import { LoginLegalModal } from '../../features/auth/components/LoginLegal';
 
 export function AuthModal() {
   const { isAuthModalOpen, authModalMode, closeAuthModal } = useAuth();
+  const [activeLegalModal, setActiveLegalModal] = useState<'terms' | 'privacy' | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
   // Esc Key to close modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        closeAuthModal();
+        if (activeLegalModal) {
+          setActiveLegalModal(null);
+        } else {
+          closeAuthModal();
+        }
       }
     };
     if (isAuthModalOpen) {
@@ -25,9 +31,33 @@ export function AuthModal() {
       window.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = 'unset';
     };
-  }, [isAuthModalOpen, closeAuthModal]);
+  }, [isAuthModalOpen, activeLegalModal, closeAuthModal]);
+
+  // Reset legal view if auth modal closes
+  useEffect(() => {
+    if (!isAuthModalOpen) {
+      setActiveLegalModal(null);
+    }
+  }, [isAuthModalOpen]);
 
   if (!isAuthModalOpen) return null;
+
+  if (activeLegalModal) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        {/* Dark Backdrop overlay with blur */}
+        <div 
+          className="absolute inset-0 bg-[#1D2B64]/40 backdrop-blur-sm transition-all duration-300"
+          onClick={closeAuthModal}
+        />
+        
+        <LoginLegalModal 
+          type={activeLegalModal} 
+          onClose={() => setActiveLegalModal(null)} 
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -45,7 +75,7 @@ export function AuthModal() {
         {/* Close Button */}
         <button 
           onClick={closeAuthModal}
-          className="absolute top-4 right-4 text-[#1D2B64]/40 hover:text-[#1D2B64] transition rounded-full p-1"
+          className="absolute top-4 right-4 text-[#1D2B64]/40 hover:text-[#1D2B64] transition rounded-full p-1 cursor-pointer"
           aria-label="Close modal"
         >
           <X size={18} />
@@ -67,8 +97,21 @@ export function AuthModal() {
         {/* Modal Footer Terms */}
         <div className="mt-6 pt-4 border-t border-[#1D2B64]/5 text-center text-[10px] text-[#1D2B64]/40 leading-relaxed font-semibold">
           By signing in, you agree to our{' '}
-          <a href="#" className="hover:underline text-[#3B6CE7]">Terms of Service</a> and{' '}
-          <a href="#" className="hover:underline text-[#3B6CE7]">Privacy Policy</a>.
+          <button
+            type="button"
+            onClick={() => setActiveLegalModal('terms')}
+            className="hover:underline text-[#3B6CE7] font-semibold cursor-pointer"
+          >
+            Terms of Service
+          </button>{' '}
+          and{' '}
+          <button
+            type="button"
+            onClick={() => setActiveLegalModal('privacy')}
+            className="hover:underline text-[#3B6CE7] font-semibold cursor-pointer"
+          >
+            Privacy Policy
+          </button>.
         </div>
       </div>
     </div>

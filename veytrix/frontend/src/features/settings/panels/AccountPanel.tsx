@@ -1,0 +1,195 @@
+import React, { useState } from 'react';
+import { User, Mail, Phone, Globe, Languages, Clock, RotateCcw } from 'lucide-react';
+
+export function AccountPanel() {
+  const [formData, setFormData] = useState({
+    displayName: 'Mavros Member',
+    username: 'mavros_member',
+    email: 'member@mavros.in',
+    phone: '+91 98765 43210',
+    country: 'India',
+    language: 'English (US)',
+    timezone: 'UTC+5:30 (IST)'
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSave = () => {
+    console.log("Account saved:", formData);
+  };
+
+  const handleReset = () => {
+    setFormData({
+      displayName: 'Mavros Member',
+      username: 'mavros_member',
+      email: 'member@mavros.in',
+      phone: '+91 98765 43210',
+      country: 'India',
+      language: 'English (US)',
+      timezone: 'UTC+5:30 (IST)'
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-left-4 duration-200">
+      <div>
+        <h2 className="text-lg font-display font-bold text-[#1D2B64]">Account Settings</h2>
+        <p className="text-xs text-[#1D2B64]/50 font-medium">Manage your personal account information and credentials.</p>
+      </div>
+
+      {/* Profile Picture */}
+      <div className="flex items-center gap-4 p-4 bg-[#E6F2F8]/30 border border-[#1D2B64]/5 rounded-2xl">
+        <div className="h-16 w-16 rounded-full bg-[#1D2B64] flex items-center justify-center text-white text-xl font-bold select-none">
+          MM
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-bold text-[#1D2B64]">Profile Picture</span>
+          <div className="flex gap-2">
+            <button type="button" className="px-3 py-1.5 rounded-lg bg-[#1D2B64] text-white text-[10px] font-bold hover:bg-[#3B6CE7] transition cursor-pointer">
+              Upload New
+            </button>
+            <button type="button" className="px-3 py-1.5 rounded-lg border border-[#1D2B64]/10 text-[#1D2B64]/60 text-[10px] font-bold hover:bg-white transition cursor-pointer">
+              Remove
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Form Fields */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-bold text-[#1D2B64]/60 uppercase tracking-wider">Display Name</label>
+          <div className="relative">
+            <User size={14} className="absolute left-3 top-3 text-[#1D2B64]/40" />
+            <input
+              type="text"
+              name="displayName"
+              value={formData.displayName}
+              onChange={handleChange}
+              className="w-full bg-[#FAFAFC] border border-[#1D2B64]/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#1D2B64] focus:outline-none focus:border-[#3B6CE7]"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-bold text-[#1D2B64]/60 uppercase tracking-wider">Username</label>
+          <div className="relative">
+            <span className="absolute left-3 top-[11px] text-[10px] font-bold text-[#1D2B64]/40">@</span>
+            <input
+              type="text"
+              name="username"
+              value={formData.username}
+              onChange={handleChange}
+              className="w-full bg-[#FAFAFC] border border-[#1D2B64]/10 rounded-xl pl-7 pr-3 py-2.5 text-xs text-[#1D2B64] focus:outline-none focus:border-[#3B6CE7]"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1 md:col-span-2">
+          <label className="text-[10px] font-bold text-[#1D2B64]/60 uppercase tracking-wider">Email Address</label>
+          <div className="relative">
+            <Mail size={14} className="absolute left-3 top-3 text-[#1D2B64]/40" />
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              className="w-full bg-[#FAFAFC] border border-[#1D2B64]/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#1D2B64] focus:outline-none focus:border-[#3B6CE7]"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-bold text-[#1D2B64]/60 uppercase tracking-wider">Phone Number</label>
+          <div className="relative">
+            <Phone size={14} className="absolute left-3 top-3 text-[#1D2B64]/40" />
+            <input
+              type="text"
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
+              className="w-full bg-[#FAFAFC] border border-[#1D2B64]/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#1D2B64] focus:outline-none focus:border-[#3B6CE7]"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-bold text-[#1D2B64]/60 uppercase tracking-wider">Country</label>
+          <div className="relative">
+            <Globe size={14} className="absolute left-3 top-[13px] text-[#1D2B64]/40" />
+            <select
+              name="country"
+              value={formData.country}
+              onChange={handleChange}
+              className="w-full bg-[#FAFAFC] border border-[#1D2B64]/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#1D2B64] focus:outline-none focus:border-[#3B6CE7] appearance-none"
+            >
+              <option>India</option>
+              <option>United States</option>
+              <option>United Kingdom</option>
+              <option>Germany</option>
+              <option>Singapore</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-bold text-[#1D2B64]/60 uppercase tracking-wider">Preferred Language</label>
+          <div className="relative">
+            <Languages size={14} className="absolute left-3 top-[13px] text-[#1D2B64]/40" />
+            <select
+              name="language"
+              value={formData.language}
+              onChange={handleChange}
+              className="w-full bg-[#FAFAFC] border border-[#1D2B64]/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#1D2B64] focus:outline-none focus:border-[#3B6CE7] appearance-none"
+            >
+              <option>English (US)</option>
+              <option>Spanish</option>
+              <option>Hindi</option>
+              <option>French</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-bold text-[#1D2B64]/60 uppercase tracking-wider">Timezone</label>
+          <div className="relative">
+            <Clock size={14} className="absolute left-3 top-[13px] text-[#1D2B64]/40" />
+            <select
+              name="timezone"
+              value={formData.timezone}
+              onChange={handleChange}
+              className="w-full bg-[#FAFAFC] border border-[#1D2B64]/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#1D2B64] focus:outline-none focus:border-[#3B6CE7] appearance-none"
+            >
+              <option>UTC+5:30 (IST)</option>
+              <option>UTC-5:00 (EST)</option>
+              <option>UTC+0:00 (GMT)</option>
+              <option>UTC+8:00 (SGT)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Save / Reset panel footer */}
+      <div className="flex justify-between items-center border-t border-[#1D2B64]/5 pt-4 mt-4 select-none">
+        <button
+          type="button"
+          onClick={handleReset}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#1D2B64]/10 text-xs text-[#1D2B64]/60 hover:text-[#1D2B64] hover:bg-[#FAFAFC] transition cursor-pointer font-medium"
+        >
+          <RotateCcw size={12} /> Reset to Default
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          className="px-5 py-2 rounded-full bg-[#1D2B64] text-white text-xs font-semibold hover:bg-[#3B6CE7] transition shadow-[0_4px_12px_rgba(29,43,100,0.15)] cursor-pointer"
+        >
+          Save Changes
+        </button>
+      </div>
+    </div>
+  );
+}
+export default AccountPanel;
