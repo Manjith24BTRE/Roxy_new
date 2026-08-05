@@ -30,6 +30,7 @@ import { useRename, RenameDialog } from './tools/rename';
 import { useReverse, reversedAudioEngine } from './tools/reverse';
 import { SplitService } from './tools/split';
 import { DeleteService } from './tools/delete';
+import { ProjectDB, useProjectSave, SaveModal } from './tools/project-save';
 import { useDetach } from './tools/Extract';
 import { useLock } from './tools/lock';
 import { useFreeze } from './tools/freeze';
@@ -110,6 +111,8 @@ function EditorMainScreenContent() {
   const [mutedClips, setMutedClipsState] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<string | null>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [lastSavedTime, setLastSavedTime] = useState<number | null>(null);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -2397,6 +2400,70 @@ function EditorMainScreenContent() {
     ? activeClipAtPlayhead.name
     : (mediaFiles.find((m) => m.id === activeMediaId)?.name || 'untitled-project.vxp');
 
+  // Project Save & Restore initialization
+  const getProjectPayload = useCallback(() => {
+    return {
+      id: displayVideoName || 'default_project',
+      name: displayVideoName || 'Untitled Project',
+      updatedAt: Date.now(),
+      timelineClips,
+      textOverlays,
+      captions,
+      aspectRatio,
+      currentTime,
+      activeSelectedClipId,
+      activeMediaId,
+      volume,
+      isMuted,
+      mutedClips,
+      lockedClips,
+      zoomLevel,
+      mediaFiles,
+    };
+  }, [
+    displayVideoName,
+    timelineClips,
+    textOverlays,
+    captions,
+    aspectRatio,
+    currentTime,
+    activeSelectedClipId,
+    activeMediaId,
+    volume,
+    isMuted,
+    mutedClips,
+    lockedClips,
+    zoomLevel,
+    mediaFiles,
+  ]);
+
+  const { performSave, isSaving } = useProjectSave(getProjectPayload, showToast);
+
+  // Restore saved project state on mount
+  useEffect(() => {
+    const projectId = displayVideoName || 'default_project';
+    ProjectDB.loadProject(projectId).then((saved) => {
+      if (saved) {
+        if (saved.timelineClips && saved.timelineClips.length > 0) {
+          setTimelineClipsState(saved.timelineClips);
+        }
+        if (saved.textOverlays) setTextOverlays(saved.textOverlays);
+        if (saved.captions) setCaptions(saved.captions);
+        if (saved.aspectRatio) setAspectRatio(saved.aspectRatio);
+        if (saved.currentTime !== undefined) setCurrentTime(saved.currentTime);
+        if (saved.activeSelectedClipId !== undefined) setActiveSelectedClipId(saved.activeSelectedClipId);
+        if (saved.activeMediaId !== undefined) setActiveMediaId(saved.activeMediaId);
+        if (saved.volume !== undefined) setVolume(saved.volume);
+        if (saved.isMuted !== undefined) setIsMutedState(saved.isMuted);
+        if (saved.mutedClips) setMutedClipsState(saved.mutedClips);
+        if (saved.lockedClips) setLockedClipsState(saved.lockedClips);
+        if (saved.zoomLevel !== undefined) setZoomLevel(saved.zoomLevel);
+
+        showToast('Project Restored');
+      }
+    });
+  }, [displayVideoName]);
+
   return (
     <div className="veytrix-editor h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden font-sans select-none">
       {/* ---------------- TOP BAR ---------------- */}
@@ -2425,10 +2492,17 @@ function EditorMainScreenContent() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-surface-hover hover:bg-surface-hover text-foreground transition"
+            onClick={async () => {
+              const ok = await performSave(false);
+              if (ok) setLastSavedTime(Date.now());
+              setIsSaveModalOpen(true);
+            }}
+            disabled={isSaving}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-surface-hover hover:bg-surface-hover text-foreground transition cursor-pointer disabled:opacity-50"
+            title="Save Project Options"
           >
-            <Save className="h-3.5 w-3.5" />
-            <span>Save</span>
+            <Save className={`h-3.5 w-3.5 ${isSaving ? 'animate-spin' : ''}`} />
+            <span>{isSaving ? 'Saving...' : 'Save'}</span>
           </button>
           <button
             type="button"
@@ -4424,6 +4498,20 @@ function EditorMainScreenContent() {
             mutedClips: mutedClips,
           };
         })()}
+      />
+
+      {/* Save Project Options Modal */}
+      <SaveModal
+        isOpen={isSaveModalOpen}
+        onClose={() => setIsSaveModalOpen(false)}
+        getPayload={getProjectPayload}
+        onSave={async () => {
+          const ok = await performSave(false);
+          if (ok) setLastSavedTime(Date.now());
+          return ok;
+        }}
+        isSaving={isSaving}
+        lastSavedTime={lastSavedTime}
       />
     </div>
   );
