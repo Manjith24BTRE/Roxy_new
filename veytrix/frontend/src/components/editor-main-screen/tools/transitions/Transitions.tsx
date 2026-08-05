@@ -154,50 +154,103 @@ export function Transitions({ activeTransitionId, onSelectTransition, searchQuer
     visibleRows.push({ rowIndex: r, items: rowItems });
   }
 
-  // Preview overlay animation styles per category
-  const getPreviewStyles = (category: string) => {
-    switch (category) {
-      case 'zoom':
-        return {
-          clipA: 'group-hover:scale-50 group-hover:opacity-0 transition-all duration-700 ease-in-out',
-          clipB: 'scale-150 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-700 ease-in-out'
-        };
-      case 'slide':
-        return {
-          clipA: 'group-hover:-translate-x-full transition-transform duration-600 ease-in-out',
-          clipB: 'translate-x-full group-hover:translate-x-0 transition-transform duration-600 ease-in-out'
-        };
-      case 'spin':
-        return {
-          clipA: 'group-hover:rotate-180 group-hover:scale-0 group-hover:opacity-0 transition-all duration-700 ease-in-out',
-          clipB: '-rotate-180 scale-0 opacity-0 group-hover:rotate-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-700 ease-in-out'
-        };
-      case 'blur':
-        return {
-          clipA: 'group-hover:blur-md group-hover:opacity-0 transition-all duration-600 ease-in-out',
-          clipB: 'blur-md opacity-0 group-hover:blur-0 group-hover:opacity-100 transition-all duration-600 ease-in-out'
-        };
-      case 'glitch':
-        return {
-          clipA: 'group-hover:skew-x-12 group-hover:scale-95 group-hover:opacity-0 transition-all duration-500 ease-out',
-          clipB: 'skew-x-[-12deg] scale-105 opacity-0 group-hover:skew-x-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-500 ease-out'
-        };
-      case 'light':
-        return {
-          clipA: 'group-hover:brightness-[3] group-hover:opacity-0 transition-all duration-600 ease-in-out',
-          clipB: 'brightness-[0.3] opacity-0 group-hover:brightness-100 group-hover:opacity-100 transition-all duration-600 ease-in-out'
-        };
-      case 'camera':
-        return {
-          clipA: 'group-hover:translate-y-2 group-hover:scale-90 group-hover:opacity-0 transition-all duration-600 ease-in-out',
-          clipB: '-translate-y-2 scale-110 opacity-0 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-600 ease-in-out'
-        };
-      default: // basic
-        return {
-          clipA: 'group-hover:opacity-0 transition-opacity duration-600 ease-in-out',
-          clipB: 'opacity-0 group-hover:opacity-100 transition-opacity duration-600 ease-in-out'
-        };
+  // Preview overlay animation styles per transition ID, direction, & category
+  const getPreviewStyles = (item: TransitionItem) => {
+    const id = item.id.toLowerCase();
+    const cat = item.category.toLowerCase();
+    const dir = (item.direction || '').toLowerCase();
+
+    // 1. Directional Slide / Push / Whip
+    if (id.includes('right') || dir === 'right') {
+      return {
+        clipA: 'group-hover:translate-x-full transition-transform duration-500 ease-in-out',
+        clipB: '-translate-x-full group-hover:translate-x-0 transition-transform duration-500 ease-in-out',
+      };
     }
+    if (id.includes('left') || dir === 'left') {
+      return {
+        clipA: 'group-hover:-translate-x-full transition-transform duration-500 ease-in-out',
+        clipB: 'translate-x-full group-hover:translate-x-0 transition-transform duration-500 ease-in-out',
+      };
+    }
+    if (id.includes('up') || dir === 'up') {
+      return {
+        clipA: 'group-hover:-translate-y-full transition-transform duration-500 ease-in-out',
+        clipB: 'translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-in-out',
+      };
+    }
+    if (id.includes('down') || dir === 'down') {
+      return {
+        clipA: 'group-hover:translate-y-full transition-transform duration-500 ease-in-out',
+        clipB: '-translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-in-out',
+      };
+    }
+
+    // 2. Zoom / Scale Variations
+    if (id.includes('zoom-out') || id.includes('shrink')) {
+      return {
+        clipA: 'group-hover:scale-50 group-hover:opacity-0 transition-all duration-600 ease-in-out',
+        clipB: 'scale-150 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-600 ease-in-out',
+      };
+    }
+    if (id.includes('zoom-in') || id.includes('grow') || cat === 'zoom') {
+      return {
+        clipA: 'group-hover:scale-150 group-hover:opacity-0 transition-all duration-600 ease-in-out',
+        clipB: 'scale-50 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-600 ease-in-out',
+      };
+    }
+
+    // 3. Spin Variations
+    if (id.includes('ccw') || id.includes('counter')) {
+      return {
+        clipA: 'group-hover:-rotate-180 group-hover:scale-0 group-hover:opacity-0 transition-all duration-600 ease-in-out',
+        clipB: 'rotate-180 scale-0 opacity-0 group-hover:rotate-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-600 ease-in-out',
+      };
+    }
+    if (id.includes('cw') || id.includes('spin') || cat === 'spin') {
+      return {
+        clipA: 'group-hover:rotate-180 group-hover:scale-0 group-hover:opacity-0 transition-all duration-600 ease-in-out',
+        clipB: '-rotate-180 scale-0 opacity-0 group-hover:rotate-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-600 ease-in-out',
+      };
+    }
+
+    // 4. Glitch / RGB Split
+    if (id.includes('glitch') || id.includes('rgb') || cat === 'glitch') {
+      return {
+        clipA: 'group-hover:skew-x-12 group-hover:scale-95 group-hover:opacity-0 transition-all duration-300 ease-out',
+        clipB: 'skew-x-[-12deg] scale-105 opacity-0 group-hover:skew-x-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-300 ease-out',
+      };
+    }
+
+    // 5. Light / Flash / Burn
+    if (id.includes('flash') || id.includes('burn') || id.includes('light') || cat === 'light') {
+      return {
+        clipA: 'group-hover:brightness-[3] group-hover:opacity-0 transition-all duration-500 ease-in-out',
+        clipB: 'brightness-[0.2] opacity-0 group-hover:brightness-100 group-hover:opacity-100 transition-all duration-500 ease-in-out',
+      };
+    }
+
+    // 6. Blur / Motion Blur
+    if (id.includes('blur') || cat === 'blur') {
+      return {
+        clipA: 'group-hover:blur-md group-hover:opacity-0 transition-all duration-500 ease-in-out',
+        clipB: 'blur-md opacity-0 group-hover:blur-0 group-hover:opacity-100 transition-all duration-500 ease-in-out',
+      };
+    }
+
+    // 7. Camera / Shutter
+    if (cat === 'camera' || id.includes('camera') || id.includes('shutter')) {
+      return {
+        clipA: 'group-hover:translate-y-2 group-hover:scale-90 group-hover:opacity-0 transition-all duration-500 ease-in-out',
+        clipB: '-translate-y-2 scale-110 opacity-0 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-500 ease-in-out',
+      };
+    }
+
+    // Default basic / cross dissolve
+    return {
+      clipA: 'group-hover:opacity-0 transition-opacity duration-500 ease-in-out',
+      clipB: 'opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-in-out',
+    };
   };
 
   return (
@@ -276,7 +329,7 @@ export function Transitions({ activeTransitionId, onSelectTransition, searchQuer
                     {row.items.map(t => {
                       const isSelected = t.id === activeTransitionId;
                       const isFav = favorites.includes(t.id);
-                      const animation = getPreviewStyles(t.category);
+                      const animation = getPreviewStyles(t);
 
                       return (
                         <div

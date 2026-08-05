@@ -11,6 +11,8 @@ import { useReverse } from '../../tools/reverse';
 import { useDetach } from '../../tools/Extract';
 import { useLock } from '../../tools/lock';
 import { useFreeze } from '../../tools/freeze';
+import { SplitService } from '../../tools/split';
+import { DeleteService } from '../../tools/delete';
 
 export interface TimelineClip {
   id: string;
@@ -184,41 +186,15 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
       return;
     }
 
-    // Check if playhead cuts the clip
-    if (currentTime > clip.start && currentTime < clip.start + clip.duration) {
-      const firstPartDuration = currentTime - clip.start;
-      const secondPartDuration = clip.start + clip.duration - currentTime;
-      const deepCloneArr = <T,>(arr?: T[]): T[] => arr ? JSON.parse(JSON.stringify(arr)) : [];
-
-      const firstPart: TimelineClip = {
-        ...clip,
-        id: clip.id,
-        duration: firstPartDuration,
-        appliedEffects: deepCloneArr((clip as any).appliedEffects),
-        filters: deepCloneArr((clip as any).filters),
-        keyframes: deepCloneArr((clip as any).keyframes),
-        transitions: deepCloneArr((clip as any).transitions)
-      };
-      const secondPartId = `${clip.id}-split-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-      const secondPart: TimelineClip = {
-        ...clip,
-        id: secondPartId,
-        name: `${clip.name} (Split)`,
-        start: currentTime,
-        duration: secondPartDuration,
-        isLocked: false,
-        appliedEffects: deepCloneArr((clip as any).appliedEffects),
-        filters: deepCloneArr((clip as any).filters),
-        keyframes: deepCloneArr((clip as any).keyframes),
-        transitions: deepCloneArr((clip as any).transitions)
-      };
-
-      const updatedClips = clips.filter((c) => c.id !== clip.id).concat(firstPart, secondPart);
-      updateHistory(updatedClips);
-      setSelectedClipId(secondPart.id);
-      showToast('Split clip at playhead');
+    const res = SplitService.splitClip(clips, selectedClipId, currentTime);
+    if (res.success && res.updatedTimelineClips) {
+      updateHistory(res.updatedTimelineClips);
+      if (res.rightClip) {
+        setSelectedClipId(res.rightClip.id);
+      }
+      showToast(res.message || 'Split clip at playhead');
     } else {
-      showToast('Seek playhead inside clip to split');
+      showToast(res.message || 'Seek playhead inside clip to split');
     }
   };
 
@@ -233,43 +209,32 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
 
   const handleDelete = () => {
     if (!selectedClipId) return;
-    const clip = clips.find((c) => c.id === selectedClipId);
-    if (!clip || lockedTracks[clip.trackId] || lockedClips[clip.id] || clip.isLocked) {
-      if (clip && (lockedClips[clip.id] || clip.isLocked)) showToast('This clip is locked. Unlock it to make changes.');
-      return;
+    const res = DeleteService.deleteClip(clips, selectedClipId, currentTime, {
+      lockedTracks,
+      lockedClips,
+    });
+    if (res.success && res.updatedTimelineClips) {
+      updateHistory(res.updatedTimelineClips);
+      setSelectedClipId(res.nextSelectedClip?.id || null);
+      showToast(res.message || 'Deleted clip');
+    } else if (res.message) {
+      showToast(res.message);
     }
-
-    const remaining = clips.filter((c) => c.id !== selectedClipId);
-    updateHistory(remaining);
-    const nextClip = remaining.find(c => currentTime >= c.start && currentTime <= c.start + c.duration) || remaining[0];
-    setSelectedClipId(nextClip?.id || null);
-    showToast('Deleted clip');
   };
 
   const handleRippleDelete = () => {
     if (!selectedClipId) return;
-    const clip = clips.find((c) => c.id === selectedClipId);
-    if (!clip || lockedTracks[clip.trackId] || lockedClips[clip.id] || clip.isLocked) {
-      if (clip && (lockedClips[clip.id] || clip.isLocked)) showToast('This clip is locked. Unlock it to make changes.');
-      return;
+    const res = DeleteService.rippleDeleteClip(clips, selectedClipId, currentTime, {
+      lockedTracks,
+      lockedClips,
+    });
+    if (res.success && res.updatedTimelineClips) {
+      updateHistory(res.updatedTimelineClips);
+      setSelectedClipId(null);
+      showToast(res.message || 'Ripple deleted clip');
+    } else if (res.message) {
+      showToast(res.message);
     }
-
-    const deletedStart = clip.start;
-    const deletedDuration = clip.duration;
-    const track = clip.trackId;
-
-    const updatedClips = clips
-      .filter((c) => c.id !== selectedClipId)
-      .map((c) => {
-        if (c.trackId === track && c.start > deletedStart) {
-          return { ...c, start: Math.max(0, c.start - deletedDuration) };
-        }
-        return c;
-      });
-
-    updateHistory(updatedClips);
-    setSelectedClipId(null);
-    showToast('Ripple deleted clip');
   };
 
   const handleTrimUpdate = (clipId: string, newTimelineStart: number, newSourceStart: number, newDuration: number) => {
