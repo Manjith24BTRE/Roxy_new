@@ -5,7 +5,7 @@ import sys
 
 # Configure Windows asyncio event loop policy for subprocess support BEFORE uvicorn/fastapi initialization
 if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())  # type: ignore
 
 import uvicorn
 from app.core.config import settings

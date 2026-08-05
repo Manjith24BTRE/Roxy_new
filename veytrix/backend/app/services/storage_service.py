@@ -98,7 +98,7 @@ class StorageService:
         if isinstance(asset_type, AssetType):
             return BUCKET_ROUTING.get(asset_type, "assets")
 
-        val_str = str(asset_type).lower().replace("assettype.", "")
+        val_str = asset_type.lower().replace("assettype.", "")
         if "video" in val_str:
             return "videos"
         elif "image" in val_str:

@@ -24,8 +24,7 @@ class CreditService:
 
         credits_obj = _credits_store.get(u_id)
 
-        if not credits_obj and init_supabase_client():
-            client = init_supabase_client()
+        if not credits_obj and (client := init_supabase_client()):
             try:
                 res = client.table("credits").select("*").eq("user_id", u_id).execute()
                 if res.data and len(res.data) > 0:

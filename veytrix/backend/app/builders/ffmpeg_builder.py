@@ -9,7 +9,7 @@ from app.models.enums import AssetType, PlanType
 from app.models.render_graph import FFmpegInput, FilterNode, RenderGraphDefinition
 from app.models.timeline import ClipModel, TimelineModel, TrackModel, TrackType
 from app.services.entitlement_service import EntitlementService
-
+from pathlib import Path
 
 class GraphValidator:
     """Validates timeline model and rendering options before building FFmpeg commands."""
@@ -42,14 +42,28 @@ class VideoBuilder:
     def build_clip_video_filters(clip: ClipModel, width: int, height: int) -> List[str]:
         filters: List[str] = []
 
-        # Trim & Speed
-        if clip.playback_speed != 1.0 and clip.playback_speed > 0:
-            pts_factor = 1.0 / clip.playback_speed
-            filters.append(f"setpts={pts_factor:.4f}*PTS")
+        # Trim
+        trim_start = max(0.0, clip.trim_start)
+        trim_end = max(0.0, clip.trim_end)
+        if trim_end > trim_start:
+            filters.append(f"trim=start={trim_start:.4f}:end={trim_end:.4f}")
+        elif clip.duration > 0:
+            filters.append(f"trim=start={trim_start:.4f}:duration={clip.duration:.4f}")
 
         # Reverse
         if clip.metadata.get("reverse", False):
             filters.append("reverse")
+
+        # PTS Shift for compositing
+        pts_expr = "PTS-STARTPTS"
+        if clip.playback_speed != 1.0 and clip.playback_speed > 0:
+            pts_factor = 1.0 / clip.playback_speed
+            pts_expr = f"{pts_factor:.4f}*(PTS-STARTPTS)"
+        
+        if clip.start_time > 0:
+            pts_expr = f"{pts_expr}+{clip.start_time:.4f}/TB"
+            
+        filters.append(f"setpts={pts_expr}")
 
         # Freeze frame
         if clip.metadata.get("freeze_frame", False):
@@ -86,14 +100,25 @@ class AudioBuilder:
             filters.append("volume=0.0")
             return filters
 
+        # Trim
+        trim_start = max(0.0, clip.trim_start)
+        trim_end = max(0.0, clip.trim_end)
+        if trim_end > trim_start:
+            filters.append(f"atrim=start={trim_start:.4f}:end={trim_end:.4f}")
+        elif clip.duration > 0:
+            filters.append(f"atrim=start={trim_start:.4f}:duration={clip.duration:.4f}")
+
+        # Speed / Tempo adjustment & PTS
+        if clip.playback_speed != 1.0 and clip.playback_speed > 0:
+            tempo = max(0.5, min(100.0, clip.playback_speed))
+            filters.append("asetpts=PTS-STARTPTS")
+            filters.append(f"atempo={tempo:.2f}")
+        else:
+            filters.append("asetpts=PTS-STARTPTS")
+
         # Volume
         if clip.volume != 1.0:
             filters.append(f"volume={clip.volume:.2f}")
-
-        # Speed / Tempo adjustment
-        if clip.playback_speed != 1.0 and clip.playback_speed > 0:
-            tempo = max(0.5, min(100.0, clip.playback_speed))
-            filters.append(f"atempo={tempo:.2f}")
 
         # Fade in / out metadata
         fade_in = float(clip.metadata.get("fade_in", 0.0))
@@ -448,41 +473,32 @@ class FFmpegBuilder:
                     inputs.append(FFmpegInput(index=input_idx, path=src_str))
                     media_clips.append((input_idx, clip, src_str))
 
-        # Fallback background canvas if no real video media inputs were found
-        if not media_clips:
-            canvas_idx = len(inputs)
-            inputs.append(
-                FFmpegInput(
-                    index=canvas_idx,
-                    path=f"color=c=black:duration={duration:.2f}:size={width}x{height}:rate={fps}",
-                    format="lavfi",
-                )
+        # 2a. Setup Base Canvas
+        canvas_idx = len(inputs)
+        inputs.append(
+            FFmpegInput(
+                index=canvas_idx,
+                path=f"color=c=black:duration={duration:.2f}:size={width}x{height}:rate={fps}",
+                format="lavfi",
             )
-            filter_nodes.append(
-                FilterNode(
-                    inputs=[f"{canvas_idx}:v"],
-                    filter_name="scale",
-                    args=f"{width}:{height}",
-                    outputs=["v_canvas"],
-                )
+        )
+        filter_nodes.append(
+            FilterNode(
+                inputs=[f"{canvas_idx}:v"],
+                filter_name="scale",
+                args=f"{width}:{height}",
+                outputs=["v_canvas"],
             )
-            curr_v_label = "v_canvas"
-        else:
-            # Map first media video stream as starting canvas
-            first_idx, first_clip, _ = media_clips[0]
-            filter_nodes.append(
-                FilterNode(
-                    inputs=[f"{first_idx}:v"],
-                    filter_name=f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2",
-                    args="",
-                    outputs=["v_base"],
-                )
-            )
-            curr_v_label = "v_base"
+        )
+        curr_v_label = "v_canvas"
 
         # Process Video Tracks & Clips via AssetResolver
         for track in timeline.tracks:
             for clip in track.clips:
+                clip_idx = next((idx for idx, c, _ in media_clips if c.id == clip.id), None)
+                if clip_idx is None:
+                    continue
+
                 # Resolve Asset Render Definitions (Effects, Filters, Transitions)
                 clip_stack: StackedRenderDefinition = self.asset_resolver.resolve_clip_stack(clip, user_id)
 
@@ -498,18 +514,40 @@ class FFmpegBuilder:
                 if text_filter:
                     v_filters.append(text_filter)
 
+                clip_id_clean = clip.id.replace("-", "")
+                next_v_label = f"v_clip_processed_{clip_id_clean}"
+                
                 if v_filters:
-                    next_v_label = f"v_clip_{clip.id}"
                     chain_str = ",".join(v_filters)
                     filter_nodes.append(
                         FilterNode(
-                            inputs=[curr_v_label],
+                            inputs=[f"{clip_idx}:v"],
                             filter_name="format=rgba," + chain_str if "format" not in chain_str else chain_str,
                             args="",
                             outputs=[next_v_label],
                         )
                     )
-                    curr_v_label = next_v_label
+                else:
+                    filter_nodes.append(
+                        FilterNode(
+                            inputs=[f"{clip_idx}:v"],
+                            filter_name="copy",
+                            args="",
+                            outputs=[next_v_label],
+                        )
+                    )
+                
+                comp_label = f"v_comp_{clip_id_clean}"
+                overlay_filter = f"overlay=enable='between(t,{clip.start_time:.4f},{clip.end_time:.4f})':x='(W-w)/2':y='(H-h)/2'"
+                filter_nodes.append(
+                    FilterNode(
+                        inputs=[curr_v_label, next_v_label],
+                        filter_name=overlay_filter,
+                        args="",
+                        outputs=[comp_label],
+                    )
+                )
+                curr_v_label = comp_label
 
         # 3. Apply Watermark Overlay Node
         wm_node, wm_input = self.watermark_builder.build_watermark_node(
@@ -537,22 +575,22 @@ class FFmpegBuilder:
             final_v_label = "outv"
 
         # 4. Audio Inputs or Silent Fallback
-        audio_input_found = False
+        audio_labels = []
         for idx, clip, _ in media_clips:
             if clip.asset_type in (AssetType.AUDIO, AssetType.VIDEO) and not clip.muted:
                 a_filters = AudioBuilder.build_clip_audio_filters(clip)
+                a_label = f"a_clip_{clip.id.replace('-', '')}"
                 filter_nodes.append(
                     FilterNode(
                         inputs=[f"{idx}:a"],
                         filter_name=",".join(a_filters) if a_filters else "anull",
                         args="",
-                        outputs=["outa"],
+                        outputs=[a_label],
                     )
                 )
-                audio_input_found = True
-                break
+                audio_labels.append(a_label)
 
-        if not audio_input_found:
+        if not audio_labels:
             audio_idx = len(inputs)
             inputs.append(
                 FFmpegInput(
@@ -569,6 +607,25 @@ class FFmpegBuilder:
                     outputs=["outa"],
                 )
             )
+        else:
+            if len(audio_labels) == 1:
+                filter_nodes.append(
+                    FilterNode(
+                        inputs=[audio_labels[0]],
+                        filter_name="anull",
+                        args="",
+                        outputs=["outa"],
+                    )
+                )
+            else:
+                filter_nodes.append(
+                    FilterNode(
+                        inputs=audio_labels,
+                        filter_name=f"amix=inputs={len(audio_labels)}:duration=longest",
+                        args="",
+                        outputs=["outa"],
+                    )
+                )
 
         # 5. Optimize Filter Nodes
         optimized_nodes = CommandOptimizer.optimize(filter_nodes)

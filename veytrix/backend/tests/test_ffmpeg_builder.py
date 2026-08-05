@@ -43,6 +43,7 @@ def test_ffmpeg_builder_basic_command_generation(parser, ffmpeg_builder):
                 "clips": [
                     {
                         "id": "clip-1",
+                        "file_path": "dummy.mp4",
                         "start_time": 0.0,
                         "duration": 5.0,
                         "playback_speed": 1.2,
@@ -80,7 +81,7 @@ def test_ffmpeg_builder_basic_command_generation(parser, ffmpeg_builder):
     assert "-filter_complex" in cmd_str
     assert "-map [outv]" in cmd_str
     assert "-map [outa]" in cmd_str
-    assert "setpts=0.8333*PTS" in cmd_str
+    assert "setpts=0.8333*(PTS-STARTPTS)" in cmd_str
     assert "rotate=1.5708" in cmd_str
     assert "colorchannelmixer=aa=0.90" in cmd_str
 

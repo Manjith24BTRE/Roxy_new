@@ -23,9 +23,9 @@ def parse_uuid(val: UUID | str) -> UUID:
     if isinstance(val, UUID):
         return val
     try:
-        return UUID(str(val))
+        return UUID(val)
     except ValueError:
-        return uuid5(NAMESPACE_DNS, str(val))
+        return uuid5(NAMESPACE_DNS, val)
 
 
 class ProjectService:
@@ -82,8 +82,7 @@ class ProjectService:
 
         project = _projects_store.get(p_id)
 
-        if not project and init_supabase_client():
-            client = init_supabase_client()
+        if not project and (client := init_supabase_client()):
             try:
                 res = client.table("projects").select("*").eq("id", p_id).execute()
                 if res.data and len(res.data) > 0:

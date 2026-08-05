@@ -13,6 +13,7 @@ from tempfile import mkdtemp
 import tempfile
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
+import platform
 
 from app.core.logging import logger
 from app.models.enums import ExportStatus

@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Any, cast
 from app.models.enums import AssetType, PlanType
 from app.schemas.asset import CatalogItemResponse
 
@@ -41,7 +41,8 @@ def get_effects_catalog() -> List[CatalogItemResponse]:
                 user_has_access=True,
                 metadata=item["metadata"],
             )
-            for item in _EFFECTS_RAW
+            for item_raw in _EFFECTS_RAW
+            for item in [cast(Dict[str, Any], item_raw)]
         ]
     return _EFFECTS_CATALOG
 
@@ -64,7 +65,8 @@ def get_filters_catalog() -> List[CatalogItemResponse]:
                 user_has_access=True,
                 metadata=item["metadata"],
             )
-            for item in _FILTERS_RAW
+            for item_raw in _FILTERS_RAW
+            for item in [cast(Dict[str, Any], item_raw)]
         ]
     return _FILTERS_CATALOG
 
@@ -87,6 +89,7 @@ def get_transitions_catalog() -> List[CatalogItemResponse]:
                 user_has_access=True,
                 metadata=item["metadata"],
             )
-            for item in _TRANSITIONS_RAW
+            for item_raw in _TRANSITIONS_RAW
+            for item in [cast(Dict[str, Any], item_raw)]
         ]
     return _TRANSITIONS_CATALOG
