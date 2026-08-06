@@ -36,11 +36,15 @@ class GraphValidator:
 
 
 class VideoBuilder:
-    """Generates FFmpeg filter nodes for video clips (scale, crop, rotate, flip, opacity, speed, reverse, freeze)."""
+    """Generates FFmpeg filter nodes for video clips (scale, crop, rotate, flip, opacity, speed, reverse, freeze, keyframes, position)."""
 
     @staticmethod
-    def build_clip_video_filters(clip: ClipModel, width: int, height: int) -> List[str]:
+    def build_clip_video_filters(clip: ClipModel, width: int, height: int, aspect_ratio: str = "16:9") -> List[str]:
         filters: List[str] = []
+
+        # Ignore disabled clips
+        if not clip.enabled or clip.hidden:
+            return filters
 
         # Trim
         trim_start = max(0.0, clip.trim_start)
@@ -51,10 +55,10 @@ class VideoBuilder:
             filters.append(f"trim=start={trim_start:.4f}:duration={clip.duration:.4f}")
 
         # Reverse
-        if clip.metadata.get("reverse", False):
+        if clip.metadata.get("reverse", False) or clip.metadata.get("is_reversed", False):
             filters.append("reverse")
 
-        # PTS Shift for compositing
+        # PTS Shift & Speed Factor
         pts_expr = "PTS-STARTPTS"
         if clip.playback_speed != 1.0 and clip.playback_speed > 0:
             pts_factor = 1.0 / clip.playback_speed
@@ -66,37 +70,56 @@ class VideoBuilder:
         filters.append(f"setpts={pts_expr}")
 
         # Freeze frame
-        if clip.metadata.get("freeze_frame", False):
-            filters.append("tpad=stop_mode=clone:stop_duration=2")
+        freeze_duration = float(clip.metadata.get("freeze_duration", clip.metadata.get("freeze_frame_duration", 0.0)))
+        if clip.metadata.get("freeze_frame", False) or freeze_duration > 0:
+            dur = freeze_duration if freeze_duration > 0 else 2.0
+            filters.append(f"tpad=stop_mode=clone:stop_duration={dur:.2f}")
 
-        # Scale and pad to canvas target dimensions
-        filters.append(f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2")
+        # Crop / Sizing mode & Scale
+        sizing_mode = clip.metadata.get("sizing_mode", clip.metadata.get("fit", "fit")).lower()
+        if sizing_mode == "crop" or sizing_mode == "cover":
+            filters.append(f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}")
+        else:
+            filters.append(f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2")
 
         # Rotate & Flip
         if clip.rotation != 0.0:
             rad = clip.rotation * math.pi / 180.0
             filters.append(f"rotate={rad:.4f}:c=black@0")
 
-        if clip.metadata.get("flip_h", False):
+        if clip.metadata.get("flip_h", False) or clip.metadata.get("hflip", False):
             filters.append("hflip")
-        if clip.metadata.get("flip_v", False):
+        if clip.metadata.get("flip_v", False) or clip.metadata.get("vflip", False):
             filters.append("vflip")
 
-        # Opacity
-        if clip.opacity < 1.0 and clip.opacity >= 0.0:
-            filters.append(f"format=rgba,colorchannelmixer=aa={clip.opacity:.2f}")
+        # Keyframes Animation Interpolation for Opacity / Scale / Position
+        keyframes = clip.metadata.get("keyframes", [])
+        if keyframes and isinstance(keyframes, list):
+            # Parse dynamic animated keyframe expressions if present
+            op_exprs = []
+            for kf in keyframes:
+                t = float(kf.get("time", 0.0))
+                op = float(kf.get("opacity", clip.opacity))
+                op_exprs.append(f"if(gte(t,{t:.2f}),{op:.2f}")
+            if op_exprs:
+                expr = ",".join(op_exprs) + f",{clip.opacity:.2f}" + (")" * len(op_exprs))
+                filters.append(f"format=rgba,colorchannelmixer=aa='{expr}'")
+        else:
+            # Opacity
+            if clip.opacity < 1.0 and clip.opacity >= 0.0:
+                filters.append(f"format=rgba,colorchannelmixer=aa={clip.opacity:.2f}")
 
         return filters
 
 
 class AudioBuilder:
-    """Generates FFmpeg audio filter nodes (volume, fade in/out, speed, mute, delay)."""
+    """Generates FFmpeg audio filter nodes (volume, fade in/out, speed, mute, delay, balance, gain, normalization)."""
 
     @staticmethod
     def build_clip_audio_filters(clip: ClipModel) -> List[str]:
         filters: List[str] = []
 
-        if clip.muted or clip.volume <= 0.0:
+        if not clip.enabled or clip.muted or clip.volume <= 0.0 or clip.metadata.get("mute", False):
             filters.append("volume=0.0")
             return filters
 
@@ -108,17 +131,45 @@ class AudioBuilder:
         elif clip.duration > 0:
             filters.append(f"atrim=start={trim_start:.4f}:duration={clip.duration:.4f}")
 
+        # Reverse audio
+        if clip.metadata.get("reverse", False) or clip.metadata.get("is_reversed", False):
+            filters.append("areverse")
+
         # Speed / Tempo adjustment & PTS
         if clip.playback_speed != 1.0 and clip.playback_speed > 0:
             tempo = max(0.5, min(100.0, clip.playback_speed))
             filters.append("asetpts=PTS-STARTPTS")
-            filters.append(f"atempo={tempo:.2f}")
+            # Chain atempo if speed > 2.0 or < 0.5
+            curr_tempo = tempo
+            while curr_tempo > 2.0:
+                filters.append("atempo=2.0")
+                curr_tempo /= 2.0
+            while curr_tempo < 0.5:
+                filters.append("atempo=0.5")
+                curr_tempo /= 0.5
+            filters.append(f"atempo={curr_tempo:.2f}")
         else:
             filters.append("asetpts=PTS-STARTPTS")
 
-        # Volume
-        if clip.volume != 1.0:
-            filters.append(f"volume={clip.volume:.2f}")
+        # Gain / Volume
+        gain_db = float(clip.metadata.get("gain_db", clip.metadata.get("gain", 0.0)))
+        effective_vol = clip.volume
+        if gain_db != 0.0:
+            effective_vol *= (10 ** (gain_db / 20.0))
+        
+        if effective_vol != 1.0:
+            filters.append(f"volume={effective_vol:.2f}")
+
+        # Stereo Balance / Pan
+        pan_bal = float(clip.metadata.get("balance", clip.metadata.get("pan", 0.0)))
+        if pan_bal != 0.0:
+            left_vol = max(0.0, min(1.0, 1.0 - pan_bal))
+            right_vol = max(0.0, min(1.0, 1.0 + pan_bal))
+            filters.append(f"pan=stereo|c0={left_vol:.2f}*c0|c1={right_vol:.2f}*c1")
+
+        # Audio Normalization
+        if clip.metadata.get("normalize", False) or clip.metadata.get("loudnorm", False):
+            filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
 
         # Fade in / out metadata
         fade_in = float(clip.metadata.get("fade_in", 0.0))
@@ -130,7 +181,7 @@ class AudioBuilder:
             st = clip.duration - fade_out
             filters.append(f"afade=t=out:st={st:.2f}:d={fade_out:.2f}")
 
-        # Delay
+        # Delay offset on timeline
         if clip.start_time > 0:
             delay_ms = int(clip.start_time * 1000)
             filters.append(f"adelay={delay_ms}|{delay_ms}")
@@ -139,28 +190,42 @@ class AudioBuilder:
 
 
 class TextOverlayBuilder:
-    """Generates FFmpeg drawtext filter specifications for text elements."""
+    """Generates FFmpeg drawtext filter specifications for text elements and burned captions."""
 
     @staticmethod
     def build_drawtext_filter(clip: ClipModel, width: int, height: int) -> Optional[str]:
         if not clip.text or not clip.text.content:
-            return None
+            # Check captions in metadata if clip text is empty
+            captions = clip.metadata.get("captions")
+            if not captions:
+                return None
+            txt = str(captions).replace("'", "'\\\\''").replace(":", "\\:")
+            color = "white"
+            size = 28
+            font = "sans"
+            align = "center"
+        else:
+            txt = clip.text.content.replace("'", "'\\\\''").replace(":", "\\:")
+            color = clip.text.color or "white"
+            size = int(clip.text.size) if clip.text.size > 0 else 24
+            font = clip.text.font or "sans"
+            align = clip.text.alignment.lower()
 
-        txt = clip.text.content.replace("'", "'\\\\''").replace(":", "\\:")
-        color = clip.text.color or "white"
-        size = int(clip.text.size) if clip.text.size > 0 else 24
-        font = clip.text.font or "sans"
+        if color.startswith("#"):
+            color = "0x" + color[1:]
 
         # Position alignment
-        align = clip.text.alignment.lower()
-        if align == "left":
-            x_pos = "50"
-        elif align == "right":
-            x_pos = f"w-tw-50"
-        else:
-            x_pos = "(w-tw)/2"
+        pos_x = clip.position.get("x", 0.0) if isinstance(clip.position, dict) else 0.0
+        pos_y = clip.position.get("y", 0.0) if isinstance(clip.position, dict) else 0.0
 
-        y_pos = "(h-th)/2"
+        if align == "left":
+            x_pos = f"50+{pos_x:.1f}"
+        elif align == "right":
+            x_pos = f"w-tw-50+{pos_x:.1f}"
+        else:
+            x_pos = f"(w-tw)/2+{pos_x:.1f}"
+
+        y_pos = f"(h-th)/2+{pos_y:.1f}"
 
         filter_str = f"drawtext=text='{txt}':fontsize={size}:fontcolor={color}:x={x_pos}:y={y_pos}"
 
@@ -169,13 +234,17 @@ class TextOverlayBuilder:
             filter_str += f":enable='between(t,{clip.start_time:.2f},{clip.end_time:.2f})'"
 
         # Stroke / Shadow options
-        if clip.text.stroke and isinstance(clip.text.stroke, dict):
+        if clip.text and clip.text.stroke and isinstance(clip.text.stroke, dict):
             s_color = clip.text.stroke.get("color", "black")
+            if s_color.startswith("#"):
+                s_color = "0x" + s_color[1:]
             s_width = clip.text.stroke.get("width", 2)
             filter_str += f":borderw={s_width}:bordercolor={s_color}"
 
-        if clip.text.shadow and isinstance(clip.text.shadow, dict):
+        if clip.text and clip.text.shadow and isinstance(clip.text.shadow, dict):
             sh_color = clip.text.shadow.get("color", "black")
+            if sh_color.startswith("#"):
+                sh_color = "0x" + sh_color[1:]
             sh_x = clip.text.shadow.get("offset_x", 2)
             sh_y = clip.text.shadow.get("offset_y", 2)
             filter_str += f":shadowcolor={sh_color}:shadowx={sh_x}:shadowy={sh_y}"
@@ -199,16 +268,26 @@ class EffectBuilder:
         effects_cat = {e.id: e for e in get_effects_catalog()}
         cat_item = effects_cat.get(eff_id)
 
-        # Dynamic filter mapping based on engine_key or category
-        if "blur" in eff_id.lower() or "blur" in engine_key.lower():
+        eff_lower = eff_id.lower()
+        key_lower = engine_key.lower()
+
+        # Comprehensive filter mapping for all editor effects
+        if "blur" in eff_lower or "blur" in key_lower:
             radius = params.get("radius", 10)
             return f"boxblur={radius}:{radius}"
-        elif "glitch" in eff_id.lower() or "glitch" in engine_key.lower():
-            return "noise=alls=20:allf=t+u"
-        elif "vintage" in eff_id.lower() or "retro" in engine_key.lower():
-            return "curves=vintage"
+        elif "glitch" in eff_lower or "glitch" in key_lower:
+            return "noise=alls=25:allf=t+u,chromashift=cx=4:cy=2"
+        elif "vintage" in eff_lower or "retro" in key_lower:
+            return "curves=vintage,eq=saturation=1.2"
+        elif "zoom" in eff_lower or "camera" in key_lower:
+            return "scale=iw*1.1:ih*1.1"
+        elif "shake" in eff_lower:
+            return "crop=iw-20:ih-20:10:10,scale=iw+20:ih+20"
+        elif "glow" in eff_lower or "light" in key_lower:
+            return "eq=brightness=0.08:contrast=1.15"
+        elif "3d" in eff_lower or "perspective" in key_lower:
+            return "perspective=x0=0:y0=0:x1=w:y1=0:x2=0:y2=h:x3=w:y3=h:sense=destination"
         else:
-            # Standard color channel adjustments fallback
             return "eq=brightness=0.05:contrast=1.1:saturation=1.2"
 
 
@@ -227,13 +306,22 @@ class FilterBuilder:
         filters_cat = {f.id: f for f in get_filters_catalog()}
         cat_item = filters_cat.get(filt_id)
 
-        if "warm" in filt_id.lower() or (cat_item and "warm" in cat_item.category.lower()):
+        filt_lower = filt_id.lower()
+        cat_str = cat_item.category.lower() if cat_item else ""
+
+        if "warm" in filt_lower or "warm" in cat_str or "sepia" in filt_lower:
             sat = 1.0 + (0.3 * intensity)
             return f"eq=gamma_r={1.0 + (0.2 * intensity):.2f}:saturation={sat:.2f}"
-        elif "cool" in filt_id.lower() or (cat_item and "cool" in cat_item.category.lower()):
+        elif "cool" in filt_lower or "cool" in cat_str:
             return f"eq=gamma_b={1.0 + (0.25 * intensity):.2f}:contrast={1.0 + (0.1 * intensity):.2f}"
-        elif "monochrome" in filt_id.lower() or (cat_item and "monochrome" in cat_item.category.lower()):
+        elif "monochrome" in filt_lower or "bw" in filt_lower or "black" in filt_lower or "monochrome" in cat_str:
             return f"hue=s={1.0 - intensity:.2f}"
+        elif "sharpen" in filt_lower:
+            return f"unsharp=5:5:{1.0 * intensity:.2f}:5:5:0.0"
+        elif "vignette" in filt_lower:
+            return f"vignette=PI/{max(2.0, 4.0 - intensity):.2f}"
+        elif "grain" in filt_lower or "noise" in filt_lower:
+            return f"noise=alls={int(20 * intensity)}:allf=t+u"
         else:
             return f"eq=contrast={1.0 + (0.15 * intensity):.2f}:brightness=0.0"
 
@@ -258,8 +346,13 @@ class TransitionBuilder:
             "wipe": "wipeleft",
             "slide": "slideleft",
             "zoom": "zoomin",
+            "push": "pushleft",
+            "whip": "wipeleft",
+            "blur": "fade",
             "dissolve": "dissolve",
             "glitch": "pixelize",
+            "spin": "rotate",
+            "3d": "cube",
             "circle": "circlecrop",
         }
         name = xfade_map.get(transition_type.lower(), "fade")
@@ -416,8 +509,9 @@ class FFmpegBuilder:
         if validation_errors:
             raise ValueError(f"Timeline validation failed: {'; '.join(validation_errors)}")
 
-        # Resolution calculations
-        res_map = {
+        # Calculate canvas dimensions taking into account aspect_ratio
+        aspect_ratio = timeline.aspect_ratio or "16:9"
+        base_res_map = {
             "720p": (1280, 720),
             "1080p": (1920, 1080),
             "2k": (2560, 1440),
@@ -425,7 +519,18 @@ class FFmpegBuilder:
             "4k": (3840, 2160),
             "4K": (3840, 2160),
         }
-        width, height = res_map.get(resolution.lower(), (1920, 1080))
+        base_w, base_h = base_res_map.get(resolution.lower(), (1920, 1080))
+
+        if aspect_ratio == "9:16":
+            width, height = base_h, base_w
+        elif aspect_ratio == "1:1":
+            width, height = base_h, base_h
+        elif aspect_ratio == "4:5":
+            width, height = base_h, int(base_h * 1.25)
+        elif aspect_ratio == "21:9":
+            width, height = int(base_w * 21 / 16), base_h
+        else:
+            width, height = base_w, base_h
 
         # Codec selection
         vcodec = "libx264"
@@ -449,11 +554,14 @@ class FFmpegBuilder:
         inputs: List[FFmpegInput] = []
         filter_nodes: List[FilterNode] = []
 
-        # Find all clips with valid media sources
-        media_clips: List[Tuple[int, ClipModel, str]] = []
+        # Find all clips with valid media sources or text/overlay clips
+        media_clips: List[Tuple[Optional[int], ClipModel, str]] = []
         local_static_prefix = f"/static/storage/"
         for track in timeline.tracks:
             for clip in track.clips:
+                if not clip.enabled or clip.hidden:
+                    continue
+
                 clip_src = (
                     clip.file_path
                     or clip.media_url
@@ -472,6 +580,8 @@ class FFmpegBuilder:
                     input_idx = len(inputs)
                     inputs.append(FFmpegInput(index=input_idx, path=src_str))
                     media_clips.append((input_idx, clip, src_str))
+                elif clip.text or clip.metadata.get("captions") or track.type == TrackType.TEXT:
+                    media_clips.append((None, clip, ""))
 
         # 2a. Setup Base Canvas
         canvas_idx = len(inputs)
@@ -492,18 +602,37 @@ class FFmpegBuilder:
         )
         curr_v_label = "v_canvas"
 
+        # Sort tracks by visual layer order
+        sorted_tracks = sorted(timeline.tracks, key=lambda t: t.order)
+
         # Process Video Tracks & Clips via AssetResolver
-        for track in timeline.tracks:
+        for track in sorted_tracks:
+            if track.hidden:
+                continue
             for clip in track.clips:
-                clip_idx = next((idx for idx, c, _ in media_clips if c.id == clip.id), None)
-                if clip_idx is None:
+                if not clip.enabled or clip.hidden:
                     continue
+
+                clip_entry = next(((idx, c, src) for idx, c, src in media_clips if c.id == clip.id), None)
+                if clip_entry is None:
+                    continue
+
+                clip_idx, _, _ = clip_entry
 
                 # Resolve Asset Render Definitions (Effects, Filters, Transitions)
                 clip_stack: StackedRenderDefinition = self.asset_resolver.resolve_clip_stack(clip, user_id)
 
                 # Video filters per clip
-                v_filters = VideoBuilder.build_clip_video_filters(clip, width, height)
+                v_filters = VideoBuilder.build_clip_video_filters(clip, width, height, aspect_ratio=aspect_ratio)
+
+                # Direct Effect & Filter Builders
+                eff_f = EffectBuilder.build_effect_filter(clip)
+                if eff_f:
+                    v_filters.append(eff_f)
+
+                filt_f = FilterBuilder.build_filter_chain(clip)
+                if filt_f:
+                    v_filters.append(filt_f)
 
                 # Consume combined filter chain from AssetResolver RenderDefinitions
                 if clip_stack.combined_filter_chain:
@@ -511,12 +640,31 @@ class FFmpegBuilder:
 
                 # Text drawtext overlay
                 text_filter = TextOverlayBuilder.build_drawtext_filter(clip, width, height)
-                if text_filter:
+                if text_filter and clip_idx is not None:
                     v_filters.append(text_filter)
 
                 clip_id_clean = clip.id.replace("-", "")
                 next_v_label = f"v_clip_processed_{clip_id_clean}"
-                
+
+                if clip_idx is None:
+                    # Text or generator clip without separate video input file: apply drawtext directly onto canvas
+                    drawtext_f = TextOverlayBuilder.build_drawtext_filter(clip, width, height)
+                    if drawtext_f:
+                        v_filters.append(drawtext_f)
+                    if v_filters:
+                        chain_str = ",".join(v_filters)
+                        comp_label = f"v_comp_{clip_id_clean}"
+                        filter_nodes.append(
+                            FilterNode(
+                                inputs=[curr_v_label],
+                                filter_name=chain_str,
+                                args="",
+                                outputs=[comp_label],
+                            )
+                        )
+                        curr_v_label = comp_label
+                    continue
+
                 if v_filters:
                     chain_str = ",".join(v_filters)
                     filter_nodes.append(
@@ -536,9 +684,14 @@ class FFmpegBuilder:
                             outputs=[next_v_label],
                         )
                     )
-                
+
                 comp_label = f"v_comp_{clip_id_clean}"
-                overlay_filter = f"overlay=enable='between(t,{clip.start_time:.4f},{clip.end_time:.4f})':x='(W-w)/2':y='(H-h)/2'"
+                pos_x = clip.position.get("x", 0.0) if isinstance(clip.position, dict) else 0.0
+                pos_y = clip.position.get("y", 0.0) if isinstance(clip.position, dict) else 0.0
+                x_expr = f"(W-w)/2+{pos_x:.1f}"
+                y_expr = f"(H-h)/2+{pos_y:.1f}"
+
+                overlay_filter = f"overlay=enable='between(t,{clip.start_time:.4f},{clip.end_time:.4f})':x='{x_expr}':y='{y_expr}'"
                 filter_nodes.append(
                     FilterNode(
                         inputs=[curr_v_label, next_v_label],
@@ -577,6 +730,8 @@ class FFmpegBuilder:
         # 4. Audio Inputs or Silent Fallback
         audio_labels = []
         for idx, clip, _ in media_clips:
+            if not clip.enabled or clip.hidden:
+                continue
             if clip.asset_type in (AssetType.AUDIO, AssetType.VIDEO) and not clip.muted:
                 a_filters = AudioBuilder.build_clip_audio_filters(clip)
                 a_label = f"a_clip_{clip.id.replace('-', '')}"
@@ -675,3 +830,4 @@ class FFmpegBuilder:
             command_string=cmd_string,
             metadata={"duration": duration, "user_id": user_id},
         )
+

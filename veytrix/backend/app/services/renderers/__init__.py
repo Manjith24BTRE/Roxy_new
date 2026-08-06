@@ -1,3 +1,5 @@
+from app.services.renderers.base_renderer import BaseRenderer, ParameterValidationError
+from app.services.renderers.renderer_registry import RendererRegistry, renderer_registry
 from app.services.renderers.category_renderers import (
     AIRenderer,
     AudioRenderer,
@@ -5,6 +7,7 @@ from app.services.renderers.category_renderers import (
     BlurRenderer,
     CameraRenderer,
     CinematicRenderer,
+    EffectRenderer,
     FilterRenderer,
     GlitchRenderer,
     LightRenderer,
@@ -16,6 +19,10 @@ from app.services.renderers.category_renderers import (
 )
 
 __all__ = [
+    "BaseRenderer",
+    "ParameterValidationError",
+    "RendererRegistry",
+    "renderer_registry",
     "RenderPlugin",
     "BasicRenderer",
     "BlurRenderer",
@@ -25,6 +32,7 @@ __all__ = [
     "LightRenderer",
     "RetroRenderer",
     "ThreeDRenderer",
+    "EffectRenderer",
     "FilterRenderer",
     "TransitionRenderer",
     "TextRenderer",

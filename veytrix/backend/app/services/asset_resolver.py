@@ -15,14 +15,17 @@ from app.services.entitlement_service import EntitlementService
 from app.services.renderers import (
     AIRenderer,
     AudioRenderer,
+    BaseRenderer,
     BasicRenderer,
     BlurRenderer,
     CameraRenderer,
     CinematicRenderer,
+    EffectRenderer,
     FilterRenderer,
     GlitchRenderer,
     LightRenderer,
     RenderPlugin,
+    RendererRegistry,
     RetroRenderer,
     TextRenderer,
     ThreeDRenderer,
@@ -31,42 +34,20 @@ from app.services.renderers import (
 
 
 class PluginRegistry:
-    """Plugin registry for extending rendering definitions without modifying backend code."""
+    """Plugin registry wrapping RendererRegistry for backward compatibility while providing modular plugin resolution."""
 
-    def __init__(self):
-        self._plugins: List[RenderPlugin] = [
-            BlurRenderer(),
-            CameraRenderer(),
-            GlitchRenderer(),
-            CinematicRenderer(),
-            LightRenderer(),
-            RetroRenderer(),
-            ThreeDRenderer(),
-            FilterRenderer(),
-            TransitionRenderer(),
-            TextRenderer(),
-            AudioRenderer(),
-            AIRenderer(),
-            BasicRenderer(),
-            RenderPlugin(),
-        ]
+    def __init__(self, registry: Optional[RendererRegistry] = None):
+        self._registry = registry or RendererRegistry()
 
-    def register_plugin(self, plugin: RenderPlugin):
-        self._plugins.insert(0, plugin)
+    def register_plugin(self, plugin: Any):
+        if isinstance(plugin, BaseRenderer):
+            self._registry.register_renderer(plugin)
+        else:
+            self._registry.register_renderer(plugin)
 
-    def get_plugin(self, engine_key: str, category: str, asset_type: Optional[AssetType] = None, item_id: str = "") -> RenderPlugin:
-        for plugin in self._plugins:
-            try:
-                if plugin.can_handle(engine_key, category, asset_type, item_id):
-                    return plugin
-            except TypeError:
-                try:
-                    if plugin.can_handle(engine_key, category, asset_type):
-                        return plugin
-                except TypeError:
-                    if plugin.can_handle(engine_key, category):
-                        return plugin
-        return self._plugins[-1]
+    def get_plugin(self, engine_key: str, category: str, asset_type: Optional[AssetType] = None, item_id: str = "") -> Any:
+        return self._registry.get_renderer(engine_key=engine_key, category=category, asset_type=asset_type, item_id=item_id)
+
 
 
 class AssetResolver:
