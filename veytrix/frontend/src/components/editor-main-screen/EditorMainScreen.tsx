@@ -6,7 +6,7 @@ import {
   Wand2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   ZoomIn, ZoomOut, Scissors, Split, Plus, Search,
   FolderPlus, Maximize2, RotateCcw, Image as ImageIcon,
-  Languages, Crop, Lock, Unlock, Gauge, Replace, ArrowRightLeft, Sliders, Activity, Edit3
+  Languages, Crop, Lock, Unlock, Gauge, Replace, ArrowRightLeft, Sliders, Activity, Edit3, Layers
 } from 'lucide-react';
 import { VeytrixLogo } from '../VeytrixLogo';
 import { useProjectMedia } from '../../contexts/ProjectMediaContext';
@@ -28,6 +28,9 @@ import { applyEffectPipeline, renderStateToCSS, createDefaultRenderState } from 
 import { useDuplicate } from './tools/duplicate';
 import { useRename, RenameDialog } from './tools/rename';
 import { useReverse, reversedAudioEngine } from './tools/reverse';
+import { SplitService } from './tools/split';
+import { DeleteService } from './tools/delete';
+import { ProjectDB, useProjectSave, SaveModal } from './tools/project-save';
 import { useDetach } from './tools/Extract';
 import { useLock } from './tools/lock';
 import { useFreeze } from './tools/freeze';
@@ -108,6 +111,8 @@ function EditorMainScreenContent() {
   const [mutedClips, setMutedClipsState] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<string | null>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [lastSavedTime, setLastSavedTime] = useState<number | null>(null);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -424,57 +429,16 @@ function EditorMainScreenContent() {
     const targetClipId = clipId || activeSelectedClip?.id;
     if (!targetClipId) return;
 
-    const clipIndex = timelineClips.findIndex(c => c.id === targetClipId);
-    if (clipIndex === -1) return;
-    const clip = timelineClips[clipIndex];
-
-    const relativePlayhead = currentTime - clip.timelineStart;
-
-    if (relativePlayhead > 0.2 && relativePlayhead < clip.duration - 0.2) {
-      const originalSourceDur = getSourceDuration(clip);
-      const leftSourceDur = relativePlayhead * (clip.playbackRate || 1);
-      const rightSourceDur = originalSourceDur - leftSourceDur;
-
-      const deepCloneArr = <T,>(arr?: T[]): T[] => arr ? JSON.parse(JSON.stringify(arr)) : [];
-
-      const leftPart = {
-        ...clip,
-        id: clip.id,
-        appliedEffects: deepCloneArr(clip.appliedEffects),
-        filters: deepCloneArr(clip.filters),
-        keyframes: deepCloneArr(clip.keyframes),
-        transitions: deepCloneArr(clip.transitions),
-        transforms: clip.transforms ? JSON.parse(JSON.stringify(clip.transforms)) : undefined,
-        baseDuration: leftSourceDur,
-        duration: relativePlayhead
-      };
-
-      const rightPartId = `${clip.id}-split-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-      const splitTimelineStart = clip.timelineStart + relativePlayhead;
-      const rightPart = {
-        ...clip,
-        id: rightPartId,
-        isLocked: false,
-        timelineStart: splitTimelineStart,
-        start: splitTimelineStart,
-        appliedEffects: deepCloneArr(clip.appliedEffects),
-        filters: deepCloneArr(clip.filters),
-        keyframes: deepCloneArr(clip.keyframes),
-        transitions: deepCloneArr(clip.transitions),
-        transforms: clip.transforms ? JSON.parse(JSON.stringify(clip.transforms)) : undefined,
-        startOffset: (clip.startOffset || 0) + leftSourceDur,
-        baseDuration: rightSourceDur,
-        duration: clip.duration - relativePlayhead
-      };
-
-      const updated = [...timelineClips];
-      updated.splice(clipIndex, 1, leftPart, rightPart);
-      setTimelineClips(recalculateSequence(updated));
-      setActiveSelectedClipId(rightPart.id);
-      setActiveMediaId(rightPart.mediaId);
-      showToast('Split clip successfully');
+    const res = SplitService.splitClip(timelineClips, targetClipId, currentTime);
+    if (res.success && res.updatedTimelineClips) {
+      setTimelineClips(recalculateSequence(res.updatedTimelineClips));
+      if (res.rightClip) {
+        setActiveSelectedClipId(res.rightClip.id);
+        setActiveMediaId(res.rightClip.mediaId);
+      }
+      showToast(res.message || 'Split clip successfully');
     } else {
-      showToast('Seek playhead inside clip to split');
+      showToast(res.message || 'Seek playhead inside clip to split');
     }
   };
 
@@ -722,24 +686,28 @@ function EditorMainScreenContent() {
 
   const handleDeleteClip = (clipId: string) => {
     if (!validateCanEdit(clipId, 'delete')) return;
-    const updated = timelineClips.filter(c => c.id !== clipId);
-    const recalculated = recalculateSequence(updated);
-    setTimelineClips(recalculated);
+    const res = DeleteService.deleteClip(timelineClips, clipId, currentTime, {
+      lockedClips,
+    });
+    if (res.success && res.updatedTimelineClips) {
+      const recalculated = recalculateSequence(res.updatedTimelineClips);
+      setTimelineClips(recalculated);
 
-    const newTotalDur = getProjectTotalDuration(recalculated);
-    setDuration(newTotalDur);
-    if (currentTime > newTotalDur) {
-      handleSeek(Math.max(0, newTotalDur));
-    }
+      const newTotalDur = getProjectTotalDuration(recalculated);
+      setDuration(newTotalDur);
+      if (currentTime > newTotalDur) {
+        handleSeek(Math.max(0, newTotalDur));
+      }
 
-    const nextClip = recalculated.find(c => currentTime >= c.timelineStart && currentTime <= c.timelineStart + c.duration) || recalculated[0];
-    if (activeSelectedClipId === clipId) {
-      setActiveSelectedClipId(nextClip?.id || null);
+      const nextClip = res.nextSelectedClip;
+      if (activeSelectedClipId === clipId) {
+        setActiveSelectedClipId(nextClip?.id || null);
+      }
+      if (activeMediaId === clipId) {
+        setActiveMediaId(nextClip?.mediaId || nextClip?.id || null);
+      }
+      showToast(res.message || 'Deleted clip');
     }
-    if (activeMediaId === clipId) {
-      setActiveMediaId(nextClip?.mediaId || nextClip?.id || null);
-    }
-    showToast('Deleted clip');
   };
 
   const handleSplitActiveClip = () => {
@@ -2432,6 +2400,70 @@ function EditorMainScreenContent() {
     ? activeClipAtPlayhead.name
     : (mediaFiles.find((m) => m.id === activeMediaId)?.name || 'untitled-project.vxp');
 
+  // Project Save & Restore initialization
+  const getProjectPayload = useCallback(() => {
+    return {
+      id: displayVideoName || 'default_project',
+      name: displayVideoName || 'Untitled Project',
+      updatedAt: Date.now(),
+      timelineClips,
+      textOverlays,
+      captions,
+      aspectRatio,
+      currentTime,
+      activeSelectedClipId,
+      activeMediaId,
+      volume,
+      isMuted,
+      mutedClips,
+      lockedClips,
+      zoomLevel,
+      mediaFiles,
+    };
+  }, [
+    displayVideoName,
+    timelineClips,
+    textOverlays,
+    captions,
+    aspectRatio,
+    currentTime,
+    activeSelectedClipId,
+    activeMediaId,
+    volume,
+    isMuted,
+    mutedClips,
+    lockedClips,
+    zoomLevel,
+    mediaFiles,
+  ]);
+
+  const { performSave, isSaving } = useProjectSave(getProjectPayload, showToast);
+
+  // Restore saved project state on mount
+  useEffect(() => {
+    const projectId = displayVideoName || 'default_project';
+    ProjectDB.loadProject(projectId).then((saved) => {
+      if (saved) {
+        if (saved.timelineClips && saved.timelineClips.length > 0) {
+          setTimelineClipsState(saved.timelineClips);
+        }
+        if (saved.textOverlays) setTextOverlays(saved.textOverlays);
+        if (saved.captions) setCaptions(saved.captions);
+        if (saved.aspectRatio) setAspectRatio(saved.aspectRatio);
+        if (saved.currentTime !== undefined) setCurrentTime(saved.currentTime);
+        if (saved.activeSelectedClipId !== undefined) setActiveSelectedClipId(saved.activeSelectedClipId);
+        if (saved.activeMediaId !== undefined) setActiveMediaId(saved.activeMediaId);
+        if (saved.volume !== undefined) setVolume(saved.volume);
+        if (saved.isMuted !== undefined) setIsMutedState(saved.isMuted);
+        if (saved.mutedClips) setMutedClipsState(saved.mutedClips);
+        if (saved.lockedClips) setLockedClipsState(saved.lockedClips);
+        if (saved.zoomLevel !== undefined) setZoomLevel(saved.zoomLevel);
+
+        showToast('Project Restored');
+      }
+    });
+  }, [displayVideoName]);
+
   return (
     <div className="veytrix-editor h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden font-sans select-none">
       {/* ---------------- TOP BAR ---------------- */}
@@ -2460,10 +2492,17 @@ function EditorMainScreenContent() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-surface-hover hover:bg-surface-hover text-foreground transition"
+            onClick={async () => {
+              const ok = await performSave(false);
+              if (ok) setLastSavedTime(Date.now());
+              setIsSaveModalOpen(true);
+            }}
+            disabled={isSaving}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-surface-hover hover:bg-surface-hover text-foreground transition cursor-pointer disabled:opacity-50"
+            title="Save Project Options"
           >
-            <Save className="h-3.5 w-3.5" />
-            <span>Save</span>
+            <Save className={`h-3.5 w-3.5 ${isSaving ? 'animate-spin' : ''}`} />
+            <span>{isSaving ? 'Saving...' : 'Save'}</span>
           </button>
           <button
             type="button"
@@ -3762,116 +3801,161 @@ function EditorMainScreenContent() {
                   {/* Tracks Row Grid Container */}
                   <div className="flex flex-col divide-y divide-white/5">
                     {/* Row 1: Audio Track */}
-                    <div className="flex flex-row h-8 items-center bg-surface">
-                      <div
-                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
-                        onClick={(e) => { e.stopPropagation(); setActiveTab('audio'); }}
-                      >
-                        <span className="text-sm">🎵</span>
-                        <span className="text-[10px] font-medium tracking-wide">Audio</span>
-                      </div>
-                      <div className="relative flex-1 h-full border-b border-border px-0 flex items-center">
-                        {timelineClips
-                          .filter((c) => c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio)
-                          .map((clip) => {
-                            const startSec = clip.timelineStart ?? clip.start ?? 0;
-                            const clipLeftPx = startSec * pxPerSec;
-                            const clipWidthPx = Math.max(24, clip.duration * pxPerSec);
-                            const isSelected = activeSelectedClipId ? clip.id === activeSelectedClipId : (activeMediaId === clip.id || activeMediaId === clip.mediaId);
-                            const isMuted = !!mutedClips[clip.id] || !!clip.isMuted;
-                            const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
+                    {(() => {
+                      const allAudioClips = timelineClips.filter(
+                        (c) => c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio
+                      );
 
-                            return (
-                              <div
-                                key={clip.id}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveSelectedClipId(clip.id);
-                                  setActiveMediaId(clip.mediaId || clip.id);
-                                  setIsSelectedOnCanvas(true);
-                                  handleSeek(startSec);
-                                }}
-                                className={`h-6 rounded border flex items-center overflow-hidden cursor-pointer absolute transition px-2 font-mono text-[9px] font-semibold gap-1.5 select-none top-1 ${isSelected
-                                    ? 'border-emerald-400 ring-2 ring-emerald-400/50 bg-emerald-500/40 text-emerald-100 z-20 shadow-glow'
-                                    : 'border-emerald-500/40 bg-emerald-500/25 text-emerald-300 hover:border-emerald-400/70 z-10'
-                                  } ${isMuted ? 'opacity-50 line-through border-dashed' : ''} ${isLocked ? 'opacity-70 border-dashed border-amber-500/40' : ''
-                                  }`}
-                                style={{ left: `${clipLeftPx}px`, width: `${clipWidthPx}px` }}
-                                title={`${clip.name} (${formatTimecode(clip.duration)})`}
-                              >
-                                {isSelected && !isLocked && (
-                                  <ClipTrimHandles
-                                    clipId={clip.id}
-                                    timelineStart={startSec}
-                                    sourceStart={clip.startOffset || 0}
-                                    duration={clip.duration}
-                                    maxSourceDuration={clip.isDetachedAudio ? clip.duration : (mediaFiles.find(m => m.id === clip.mediaId)?.duration || clip.duration || Infinity)}
-                                    pixelsPerSecond={pxPerSec}
-                                    playbackRate={clip.playbackRate || 1}
-                                    isLocked={isLocked}
-                                    onTrimStart={(edge) => beginTransaction(`Trim audio clip ${edge}`, getProjectState())}
-                                    onTrimUpdate={(newTimelineStart, newSourceStart, newDuration) => {
-                                      handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration);
-                                    }}
-                                    onTrimEnd={handleTrimCommit}
-                                  />
-                                )}
-                                {clip.keyframes && clip.keyframes.length > 0 && (
-                                  <KeyframeTimelineOverlay
-                                    clipId={clip.id}
-                                    clipTimelineStart={startSec}
-                                    clipDuration={clip.duration}
-                                    keyframes={clip.keyframes}
-                                    pixelsPerSecond={pxPerSec}
-                                    playheadTimelineTime={currentTime}
-                                    isSelectedClip={isSelected}
-                                    onMoveKeyframe={(kfId, newTime) => {
-                                      beginTransaction('Move keyframe', getProjectState());
-                                      setTimelineClips(prev => prev.map(c => {
-                                        if (c.id === clip.id) {
-                                          const updatedKeyframes = KeyframeManager.moveKeyframe(c.keyframes, kfId, newTime);
-                                          return { ...c, keyframes: updatedKeyframes };
-                                        }
-                                        return c;
-                                      }));
-                                      commitTransaction(getProjectState());
-                                    }}
-                                    onMoveMultipleKeyframes={(moves) => {
-                                      beginTransaction('Move keyframes', getProjectState());
-                                      setTimelineClips(prev => prev.map(c => {
-                                        if (c.id === clip.id) {
-                                          const updatedKeyframes = KeyframeManager.moveMultipleKeyframes(c.keyframes, moves);
-                                          return { ...c, keyframes: updatedKeyframes };
-                                        }
-                                        return c;
-                                      }));
-                                      commitTransaction(getProjectState());
-                                    }}
-                                    onDeleteKeyframe={(kfId) => {
-                                      beginTransaction('Delete keyframe', getProjectState());
-                                      setTimelineClips(prev => prev.map(c => {
-                                        if (c.id === clip.id) {
-                                          const updatedKeyframes = KeyframeManager.deleteKeyframe(c.keyframes, kfId);
-                                          return { ...c, keyframes: updatedKeyframes };
-                                        }
-                                        return c;
-                                      }));
-                                      commitTransaction(getProjectState());
-                                    }}
-                                  />
-                                )}
-                                <span className="text-[10px] flex-shrink-0">🎵</span>
-                                <span className="truncate flex-1">{clip.name}</span>
-                                <span className="text-[8px] opacity-80 flex-shrink-0">({formatTimecode(clip.duration)})</span>
-                                {isMuted && <VolumeX className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />}
-                              </div>
-                            );
-                          })}
-                        {timelineClips.filter((c) => c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio).length === 0 && (
-                          <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
-                        )}
-                      </div>
-                    </div>
+                      const audioLanes: (typeof allAudioClips)[] = [];
+                      const audioClipLaneMap = new Map<string, number>();
+
+                      allAudioClips.forEach((clip) => {
+                        const start = clip.timelineStart ?? clip.start ?? 0;
+                        const end = start + clip.duration;
+                        let assignedLane = -1;
+
+                        for (let l = 0; l < audioLanes.length; l++) {
+                          const laneClips = audioLanes[l];
+                          const hasOverlap = laneClips.some((existing) => {
+                            const eStart = existing.timelineStart ?? existing.start ?? 0;
+                            const eEnd = eStart + existing.duration;
+                            return Math.max(start, eStart) < Math.min(end, eEnd);
+                          });
+
+                          if (!hasOverlap) {
+                            laneClips.push(clip);
+                            assignedLane = l;
+                            break;
+                          }
+                        }
+
+                        if (assignedLane === -1) {
+                          audioLanes.push([clip]);
+                          assignedLane = audioLanes.length - 1;
+                        }
+
+                        audioClipLaneMap.set(clip.id, assignedLane);
+                      });
+
+                      const totalLanes = Math.max(1, audioLanes.length);
+                      const audioRowHeightPx = totalLanes === 1 ? 32 : totalLanes * 22 + 6;
+
+                      return (
+                        <div className="flex flex-row items-center bg-surface transition-all duration-200" style={{ height: `${audioRowHeightPx}px` }}>
+                          <div
+                            className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
+                            onClick={(e) => { e.stopPropagation(); setActiveTab('audio'); }}
+                          >
+                            <span className="text-sm">🎵</span>
+                            <span className="text-[10px] font-medium tracking-wide">Audio Track</span>
+                          </div>
+                          <div className="relative flex-1 h-full border-b border-border px-0 flex items-center">
+                            {allAudioClips.map((clip) => {
+                              const startSec = clip.timelineStart ?? clip.start ?? 0;
+                              const clipLeftPx = startSec * pxPerSec;
+                              const clipWidthPx = Math.max(24, clip.duration * pxPerSec);
+                              const isSelected = activeSelectedClipId ? clip.id === activeSelectedClipId : (activeMediaId === clip.id || activeMediaId === clip.mediaId);
+                              const isMuted = !!mutedClips[clip.id] || !!clip.isMuted;
+                              const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
+                              const laneIndex = audioClipLaneMap.get(clip.id) ?? 0;
+                              const topPx = totalLanes === 1 ? 4 : laneIndex * 22 + 3;
+                              const isExtracted = !!clip.isDetachedAudio;
+
+                              return (
+                                <div
+                                  key={clip.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveSelectedClipId(clip.id);
+                                    setActiveMediaId(clip.mediaId || clip.id);
+                                    setIsSelectedOnCanvas(true);
+                                    handleSeek(startSec);
+                                  }}
+                                  className={`h-5 rounded border flex items-center overflow-hidden cursor-pointer absolute transition px-1.5 font-mono text-[8.5px] font-semibold gap-1 select-none ${isSelected
+                                      ? 'border-emerald-400 ring-2 ring-emerald-400/50 bg-emerald-500/40 text-emerald-100 z-20 shadow-glow'
+                                      : isExtracted
+                                        ? 'border-purple-500/50 bg-purple-500/30 text-purple-200 hover:border-purple-400/70 z-10'
+                                        : 'border-indigo-500/50 bg-indigo-500/30 text-indigo-200 hover:border-indigo-400/70 z-10'
+                                    } ${isMuted ? 'opacity-50 line-through border-dashed' : ''} ${isLocked ? 'opacity-70 border-dashed border-amber-500/40' : ''
+                                    }`}
+                                  style={{ left: `${clipLeftPx}px`, width: `${clipWidthPx}px`, top: `${topPx}px` }}
+                                  title={`${clip.name} (${formatTimecode(clip.duration)})`}
+                                >
+                                  {isSelected && !isLocked && (
+                                    <ClipTrimHandles
+                                      clipId={clip.id}
+                                      timelineStart={startSec}
+                                      sourceStart={clip.startOffset || 0}
+                                      duration={clip.duration}
+                                      maxSourceDuration={clip.isDetachedAudio ? clip.duration : (mediaFiles.find(m => m.id === clip.mediaId)?.duration || clip.duration || Infinity)}
+                                      pixelsPerSecond={pxPerSec}
+                                      playbackRate={clip.playbackRate || 1}
+                                      isLocked={isLocked}
+                                      onTrimStart={(edge) => beginTransaction(`Trim audio clip ${edge}`, getProjectState())}
+                                      onTrimUpdate={(newTimelineStart, newSourceStart, newDuration) => {
+                                        handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration);
+                                      }}
+                                      onTrimEnd={handleTrimCommit}
+                                    />
+                                  )}
+                                  {clip.keyframes && clip.keyframes.length > 0 && (
+                                    <KeyframeTimelineOverlay
+                                      clipId={clip.id}
+                                      clipTimelineStart={startSec}
+                                      clipDuration={clip.duration}
+                                      keyframes={clip.keyframes}
+                                      pixelsPerSecond={pxPerSec}
+                                      playheadTimelineTime={currentTime}
+                                      isSelectedClip={isSelected}
+                                      onMoveKeyframe={(kfId, newTime) => {
+                                        beginTransaction('Move keyframe', getProjectState());
+                                        setTimelineClips(prev => prev.map(c => {
+                                          if (c.id === clip.id) {
+                                            const updatedKeyframes = KeyframeManager.moveKeyframe(c.keyframes, kfId, newTime);
+                                            return { ...c, keyframes: updatedKeyframes };
+                                          }
+                                          return c;
+                                        }));
+                                        commitTransaction(getProjectState());
+                                      }}
+                                      onMoveMultipleKeyframes={(moves) => {
+                                        beginTransaction('Move keyframes', getProjectState());
+                                        setTimelineClips(prev => prev.map(c => {
+                                          if (c.id === clip.id) {
+                                            const updatedKeyframes = KeyframeManager.moveMultipleKeyframes(c.keyframes, moves);
+                                            return { ...c, keyframes: updatedKeyframes };
+                                          }
+                                          return c;
+                                        }));
+                                        commitTransaction(getProjectState());
+                                      }}
+                                      onDeleteKeyframe={(kfId) => {
+                                        beginTransaction('Delete keyframe', getProjectState());
+                                        setTimelineClips(prev => prev.map(c => {
+                                          if (c.id === clip.id) {
+                                            const updatedKeyframes = KeyframeManager.deleteKeyframe(c.keyframes, kfId);
+                                            return { ...c, keyframes: updatedKeyframes };
+                                          }
+                                          return c;
+                                        }));
+                                        commitTransaction(getProjectState());
+                                      }}
+                                    />
+                                  )}
+                                  <span className="text-[9px] flex-shrink-0">{isExtracted ? '🎧' : '🎵'}</span>
+                                  <span className="truncate flex-1">{clip.name}</span>
+                                  <span className="text-[7.5px] opacity-80 flex-shrink-0">({formatTimecode(clip.duration)})</span>
+                                  {isMuted && <VolumeX className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />}
+                                </div>
+                              );
+                            })}
+                            {allAudioClips.length === 0 && (
+                              <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Row 2: Text Track */}
                     <div className="flex flex-row h-8 items-center bg-surface">
@@ -3927,14 +4011,14 @@ function EditorMainScreenContent() {
                       </div>
                     </div>
 
-                    {/* Row 3: Sticker Track */}
+                    {/* Row 3: Overlay Track */}
                     <div className="flex flex-row h-8 items-center bg-surface">
                       <div
                         className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
                         onClick={(e) => { e.stopPropagation(); setActiveTab('effects'); }}
                       >
-                        <span className="text-sm">🖼️</span>
-                        <span className="text-[10px] font-medium tracking-wide">Sticker</span>
+                        <Layers className="h-3.5 w-3.5" />
+                        <span className="text-[10px] font-medium tracking-wide">Overlay</span>
                       </div>
                       <div className="relative flex-1 h-full border-b border-border">
                         <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
@@ -4235,10 +4319,199 @@ function EditorMainScreenContent() {
         onClose={() => setIsExportOpen(false)}
         projectId={projectId}
         projectTitle={projectTitle || 'My Project'}
-        timelineJson={{
-          clips: timelineClips,
-          duration: getProjectTotalDuration(timelineClips),
+        timelineJson={(() => {
+          const formattedClips = timelineClips.map((c) => {
+            const rawOpacity = typeof c.opacity === 'number' ? c.opacity : 1;
+            const opacityNorm = rawOpacity > 1 ? rawOpacity / 100 : rawOpacity;
+            const clipIsMuted = isMuted || !!mutedClips[c.id] || c.isMuted || c.muted || false;
+            const posXVal = c.posX ?? (c.position && typeof c.position === 'object' ? c.position.x : 0);
+            const posYVal = c.posY ?? (c.position && typeof c.position === 'object' ? c.position.y : 0);
+
+            let primaryEffect = c.effect || null;
+            if (!primaryEffect && Array.isArray(c.appliedEffects) && c.appliedEffects.length > 0) {
+              const eff = c.appliedEffects[0];
+              if (eff) {
+                primaryEffect = {
+                  effect_id: eff.presetId || eff.id || eff.name || 'blur',
+                  id: eff.presetId || eff.id || eff.name || 'blur',
+                  engine_key: eff.category || eff.engineKey || eff.presetId || 'blur',
+                  parameters: {
+                    intensity: eff.intensity ?? 50,
+                    opacity: eff.opacity ?? 1,
+                    speed: eff.speed ?? 1,
+                    angle: eff.angle ?? 0,
+                    blendMode: eff.blendMode ?? 'normal',
+                  },
+                };
+              }
+            }
+
+            let primaryFilter = c.filter || null;
+            if (!primaryFilter && Array.isArray(c.filters) && c.filters.length > 0) {
+              const filt = c.filters[0];
+              if (filt) {
+                const rawFiltInt = typeof filt.intensity === 'number' ? filt.intensity : 0.8;
+                primaryFilter = {
+                  filter_id: filt.id || filt.filterId || 'warm',
+                  id: filt.id || filt.filterId || 'warm',
+                  intensity: rawFiltInt > 1 ? rawFiltInt / 100 : rawFiltInt,
+                  parameters: {},
+                };
+              }
+            } else if (!primaryFilter && c.appliedFilter) {
+              const filt = c.appliedFilter;
+              const rawFiltInt = typeof filt.intensity === 'number' ? filt.intensity : 0.8;
+              primaryFilter = {
+                filter_id: filt.id || filt.filterId || 'warm',
+                id: filt.id || filt.filterId || 'warm',
+                intensity: rawFiltInt > 1 ? rawFiltInt / 100 : rawFiltInt,
+                parameters: {},
+              };
+            }
+
+            let primaryTransition = c.transition || null;
+            if (!primaryTransition && c.appliedTransition) {
+              const trans = c.appliedTransition;
+              primaryTransition = {
+                transition_type: trans.type || trans.transition_type || trans.name || 'fade',
+                type: trans.type || trans.transition_type || trans.name || 'fade',
+                duration: typeof trans.duration === 'number' ? trans.duration : 0.5,
+                direction: trans.direction || 'in',
+                parameters: {},
+              };
+            }
+
+            const rawAssetType = (c.type || c.assetType || (c.isDetachedAudio ? 'AUDIO' : 'VIDEO')).toString().toUpperCase();
+
+            return {
+              ...c,
+              id: c.id,
+              media_url: c.url || c.media_url || c.src || '',
+              url: c.url || c.media_url || c.src || '',
+              asset_type: rawAssetType,
+              type: rawAssetType,
+              start_time: c.timelineStart ?? c.start_time ?? c.start ?? 0,
+              startTime: c.timelineStart ?? c.start_time ?? c.start ?? 0,
+              duration: c.duration,
+              trim_start: c.startOffset ?? c.trimStart ?? c.trim_start ?? 0,
+              trimStart: c.startOffset ?? c.trimStart ?? c.trim_start ?? 0,
+              trim_end: c.trimEnd ?? c.trim_end ?? 0,
+              trimEnd: c.trimEnd ?? c.trim_end ?? 0,
+              playback_speed: c.playbackRate ?? c.speed ?? c.playback_speed ?? 1,
+              speed: c.playbackRate ?? c.speed ?? c.playback_speed ?? 1,
+              playbackRate: c.playbackRate ?? c.speed ?? c.playback_speed ?? 1,
+              isReversed: c.isReversed ?? c.reverse ?? false,
+              reverse: c.isReversed ?? c.reverse ?? false,
+              isMuted: clipIsMuted,
+              muted: clipIsMuted,
+              volume: typeof c.volume === 'number' ? c.volume : 1,
+              posX: posXVal,
+              posY: posYVal,
+              position: { x: posXVal, y: posYVal },
+              scale: typeof c.scale === 'number' ? c.scale : 1,
+              rotation: typeof c.rotation === 'number' ? c.rotation : 0,
+              opacity: opacityNorm,
+              crop: c.crop ?? { top: 0, bottom: 0, left: 0, right: 0 },
+              effect: primaryEffect,
+              filter: primaryFilter,
+              transition: primaryTransition,
+              appliedEffects: c.appliedEffects ?? (primaryEffect ? [primaryEffect] : []),
+              filters: c.filters ?? (primaryFilter ? [primaryFilter] : []),
+              appliedTransition: primaryTransition,
+            };
+          });
+
+          const textClips = [
+            ...(Array.isArray(textOverlays)
+              ? textOverlays.map((t: any) => ({
+                  id: `text-${t.id}`,
+                  type: 'TEXT',
+                  asset_type: 'TEXT',
+                  start_time: t.startTime ?? 0,
+                  duration: 5.0,
+                  text: {
+                    content: t.text || '',
+                    font: t.font || 'Inter',
+                    size: t.size || 24,
+                    weight: t.weight || 'normal',
+                    color: t.color || '#FFFFFF',
+                    alignment: t.alignment || 'center',
+                  },
+                }))
+              : []),
+            ...(Array.isArray(captions)
+              ? captions.map((cap: any) => ({
+                  id: `cap-${cap.id}`,
+                  type: 'TEXT',
+                  asset_type: 'TEXT',
+                  start_time: cap.start ?? 0,
+                  duration: Math.max(0.5, (cap.end ?? 0) - (cap.start ?? 0)),
+                  text: {
+                    content: cap.text || '',
+                    font: 'Inter',
+                    size: 20,
+                    color: '#FFFFFF',
+                    alignment: 'center',
+                  },
+                }))
+              : []),
+          ];
+
+          const videoClips = formattedClips.filter((c) => c.asset_type === 'VIDEO' || c.asset_type === 'IMAGE');
+          const audioClips = formattedClips.filter((c) => c.asset_type === 'AUDIO');
+
+          const tracksList = [
+            {
+              id: 'track-video-main',
+              name: 'Main Video Track',
+              type: 'VIDEO',
+              order: 0,
+              muted: false,
+              clips: videoClips.length > 0 ? videoClips : formattedClips,
+            },
+            {
+              id: 'track-audio-main',
+              name: 'Audio Track',
+              type: 'AUDIO',
+              order: 1,
+              muted: isMuted,
+              clips: audioClips,
+            },
+          ];
+
+          if (textClips.length > 0) {
+            tracksList.push({
+              id: 'track-text-main',
+              name: 'Text Track',
+              type: 'TEXT',
+              order: 2,
+              muted: false,
+              clips: textClips,
+            });
+          }
+
+          return {
+            clips: [...formattedClips, ...textClips],
+            tracks: tracksList,
+            duration: getProjectTotalDuration(timelineClips),
+            isMuted: isMuted,
+            mutedClips: mutedClips,
+          };
+        })()}
+      />
+
+      {/* Save Project Options Modal */}
+      <SaveModal
+        isOpen={isSaveModalOpen}
+        onClose={() => setIsSaveModalOpen(false)}
+        getPayload={getProjectPayload}
+        onSave={async () => {
+          const ok = await performSave(false);
+          if (ok) setLastSavedTime(Date.now());
+          return ok;
         }}
+        isSaving={isSaving}
+        lastSavedTime={lastSavedTime}
       />
     </div>
   );

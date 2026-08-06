@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Timeline, TimelineClip, Marker } from '../Timeline/Timeline';
 import { TextPanel, TextOverlay as StandaloneTextLayer } from '../../tools/text/TextPanel';
 import { Captions, CaptionItem as StandaloneCaptionCue } from '../../tools/captions/Captions';
-import { Color } from '../../tools/color/Color';
 import { AspectRatio } from '../../tools/aspect-ratio/AspectRatio';
 import { PropertiesPanel, Keyframe } from '../PropertiesPanel/PropertiesPanel';
 import { PreviewPlayer } from '../PreviewPlayer/PreviewPlayer';
@@ -269,7 +268,6 @@ export function QuickEditPlayground() {
             {[
               { id: 'text', label: 'Text', icon: Film },
               { id: 'captions', label: 'Captions', icon: Wand2 },
-              { id: 'colors', label: 'Color Grading', icon: Layout },
               { id: 'ratio', label: 'Ratio', icon: Layout }
             ].map((tab) => (
               <button
@@ -309,14 +307,6 @@ export function QuickEditPlayground() {
                 onBatchCaptions={setCaptionCues}
                 captionStyle={captionStyle}
                 setCaptionStyle={setCaptionStyle}
-              />
-            )}
-
-            {activeLeftTab === 'colors' && (
-              <Color
-                colorSettings={colorSettings}
-                onColorSettingChange={handleColorChange}
-                onResetColors={handleResetColors}
               />
             )}
 

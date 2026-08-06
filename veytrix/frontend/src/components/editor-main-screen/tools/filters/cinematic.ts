@@ -86,8 +86,8 @@ export const CINEMATIC_FILTERS: FilterSample[] = [
     id: 'cold-cinema',
     name: 'Cold Cinema',
     description: 'Chilly blue and cyan grading for sci-fi and winter movies.',
-    cssFilter: 'contrast(1.15) brightness(0.98) hue-rotate(180deg) saturate(0.7)',
-    defaultIntensity: 75,
+    cssFilter: 'contrast(1.1) brightness(0.96) hue-rotate(15deg) sepia(0.12) saturate(0.85)',
+    defaultIntensity: 85,
     thumbnailColor: 'from-[#0369a1] to-[#075985]',
     category: 'Cinematic'
   },

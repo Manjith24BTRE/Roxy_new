@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sliders, Search, Star, RotateCcw, Eye, EyeOff, Clock, Copy, Trash2, Check, Sparkles } from 'lucide-react';
 import { SAMPLE_FILTERS, FilterSample, getInterpolatedFilter } from './samples';
+import { CATEGORY_PREVIEW_IMAGES, FILTER_ACCENT_OVERLAYS } from './Filters.constants';
 
 interface FiltersProps {
   activeFilterId: string | null;
@@ -50,6 +51,63 @@ const BLEND_MODES = [
   { value: 'color', label: 'Color Blend' },
   { value: 'luminosity', label: 'Luminosity' }
 ];
+
+const FilterThumbnail = React.memo(({
+  filter,
+  isSelected,
+  isFav,
+  toggleFavorite,
+}: {
+  filter: FilterSample;
+  isSelected: boolean;
+  isFav: boolean;
+  toggleFavorite: (id: string, e: React.MouseEvent) => void;
+}) => {
+  const baseImg = CATEGORY_PREVIEW_IMAGES[filter.category] || CATEGORY_PREVIEW_IMAGES.DEFAULT;
+  const computedCssFilter = getInterpolatedFilter(filter.cssFilter, filter.defaultIntensity);
+  const accentOverlay = FILTER_ACCENT_OVERLAYS[filter.id] || null;
+
+  return (
+    <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-950 border border-white/10 mb-1 flex-shrink-0">
+      <img
+        src={baseImg}
+        alt={filter.name}
+        className="w-full h-full object-cover select-none pointer-events-none group-hover:scale-105 transition-transform duration-300"
+        style={{ filter: computedCssFilter }}
+        loading="lazy"
+      />
+      {accentOverlay && (
+        <div
+          className="absolute inset-0 pointer-events-none mix-blend-overlay opacity-75"
+          style={{ background: accentOverlay }}
+        />
+      )}
+      
+      {/* Category overlay badge */}
+      <span className="absolute bottom-0.5 left-1 z-10 bg-black/60 px-1 py-0.5 rounded text-[6px] text-slate-400 font-bold uppercase tracking-wide select-none">
+        {filter.category}
+      </span>
+
+      {/* Star Favorite toggle */}
+      <button
+        type="button"
+        onClick={(e) => toggleFavorite(filter.id, e)}
+        className="absolute top-0.5 right-0.5 p-0.5 rounded bg-slate-950/60 hover:bg-slate-950 border border-white/5 text-slate-400 hover:text-yellow-400 cursor-pointer transition z-20"
+      >
+        <Star className={`h-2.5 w-2.5 ${isFav ? 'fill-yellow-400 text-yellow-400' : 'text-slate-500'}`} />
+      </button>
+
+      {/* Selected check badge */}
+      {isSelected && (
+        <div className="absolute inset-0 bg-sky-500/10 flex items-center justify-center pointer-events-none">
+          <span className="p-1 rounded-full bg-sky-500 text-slate-950 shadow-md">
+            <Check className="h-2.5 w-2.5 stroke-[3px]" />
+          </span>
+        </div>
+      )}
+    </div>
+  );
+});
 
 export function Filters({
   activeFilterId,
@@ -279,39 +337,13 @@ export function Filters({
                     : 'border-white/5 hover:border-white/15'
                 }`}
               >
-                {/* Live CSS Thumbnail preview */}
-                <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-950 border border-white/10 mb-1 flex-shrink-0">
-                  <img
-                    src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=150&q=50"
-                    alt=""
-                    className="w-full h-full object-cover select-none pointer-events-none group-hover:scale-105 transition-transform duration-300"
-                    style={{ filter: filter.cssFilter }}
-                    loading="lazy"
-                  />
-                  
-                  {/* Category overlay badge */}
-                  <span className="absolute bottom-0.5 left-1 z-10 bg-black/60 px-1 py-0.5 rounded text-[6px] text-slate-400 font-bold uppercase tracking-wide select-none">
-                    {filter.category}
-                  </span>
-
-                  {/* Star Favorite toggle */}
-                  <button
-                    type="button"
-                    onClick={(e) => toggleFavorite(filter.id, e)}
-                    className="absolute top-0.5 right-0.5 p-0.5 rounded bg-slate-950/60 hover:bg-slate-950 border border-white/5 text-slate-400 hover:text-yellow-400 cursor-pointer transition z-20"
-                  >
-                    <Star className={`h-2.5 w-2.5 ${isFav ? 'fill-yellow-400 text-yellow-400' : 'text-slate-500'}`} />
-                  </button>
-
-                  {/* Selected check badge */}
-                  {isSelected && (
-                    <div className="absolute inset-0 bg-sky-500/10 flex items-center justify-center pointer-events-none">
-                      <span className="p-1 rounded-full bg-sky-500 text-slate-950 shadow-md">
-                        <Check className="h-2.5 w-2.5 stroke-[3px]" />
-                      </span>
-                    </div>
-                  )}
-                </div>
+                {/* Dynamic Filter Thumbnail preview */}
+                <FilterThumbnail
+                  filter={filter}
+                  isSelected={isSelected}
+                  isFav={isFav}
+                  toggleFavorite={toggleFavorite}
+                />
 
                 <div className="min-w-0 flex-1 flex flex-col justify-center">
                   <span className="text-[9px] font-bold text-slate-200 block truncate leading-tight">
