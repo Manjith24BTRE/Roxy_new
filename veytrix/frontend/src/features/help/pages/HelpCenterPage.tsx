@@ -1,43 +1,78 @@
-import React from 'react';
-import { Search, Book, PlayCircle, MessageSquare } from 'lucide-react';
-import { helpTopics } from '../../../data/helpTopics';
+import React, { useState } from 'react';
+import { helpArticles } from '../../../data/helpArticles';
+import { HelpSearch } from '../../../components/help/HelpSearch';
+import { HelpCategoryCard } from '../../../components/help/HelpCategoryCard';
 
 export function HelpCenterPage() {
-  const getIcon = (id: string) => {
-    switch(id) {
-      case 'getting-started': return <Book size={24} />;
-      case 'troubleshooting': return <MessageSquare size={24} />;
-      default: return <PlayCircle size={24} />;
-    }
-  };
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const popularTopics = helpTopics.filter(t => ['getting-started', 'troubleshooting', 'importing-media'].includes(t.id));
+  const filteredArticles = helpArticles.filter((art) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    
+    // Check title/subtitle
+    if (art.title.toLowerCase().includes(query) || art.subtitle.toLowerCase().includes(query)) {
+      return true;
+    }
+    
+    // Check keywords mapping
+    const extraKeywords: Record<string, string[]> = {
+      'getting-started': ['create project', 'editor', 'timeline', 'AI command', 'export', 'basics', 'getting started'],
+      'importing-media': ['upload', 'import', 'video', 'image', 'audio', 'timeline', 'upload failed'],
+      'troubleshooting': ['login', 'export failed', 'editor not loading', 'video is not uploading', 'AI command', 'preview', 'troubleshoot']
+    };
+    
+    const artKeywords = extraKeywords[art.id] || [];
+    if (artKeywords.some(kw => kw.toLowerCase().includes(query) || query.includes(kw.toLowerCase()))) {
+      return true;
+    }
+
+    // Check sections content
+    if (art.sections?.some(sec => 
+      sec.title.toLowerCase().includes(query) || 
+      (typeof sec.content === 'string' && sec.content.toLowerCase().includes(query)) ||
+      (Array.isArray(sec.content) && sec.content.some(item => item.toLowerCase().includes(query)))
+    )) {
+      return true;
+    }
+
+    // Check FAQs
+    if (art.faqs?.some(faq => 
+      faq.question.toLowerCase().includes(query) || 
+      (typeof faq.answer === 'string' && faq.answer.toLowerCase().includes(query)) ||
+      (Array.isArray(faq.answer) && faq.answer.some(ans => ans.toLowerCase().includes(query)))
+    )) {
+      return true;
+    }
+
+    return false;
+  });
 
   return (
     <div className="px-4 md:px-6 xl:px-8 py-8 w-full max-w-4xl mx-auto flex flex-col h-full">
       <div className="text-center max-w-2xl mx-auto mb-12 mt-4">
         <h1 className="text-3xl md:text-[40px] font-display font-bold text-[#1D2B64] mb-4">How can we help?</h1>
-        <div className="relative max-w-lg mx-auto">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#1D2B64]/40" />
-          <input 
-            type="text" 
-            placeholder="Search for articles, guides, or troubleshooting..." 
-            className="pl-12 pr-4 py-4 bg-white border border-[#1D2B64]/10 rounded-2xl text-base w-full focus:outline-none focus:border-[#3B6CE7]/40 focus:ring-4 focus:ring-[#3B6CE7]/10 transition-all shadow-sm"
-          />
-        </div>
+        <HelpSearch value={searchQuery} onChange={setSearchQuery} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {popularTopics.map(topic => (
-          <div key={topic.id} className="bg-white border border-[#1D2B64]/10 p-6 rounded-2xl shadow-sm hover:-translate-y-1 transition-transform cursor-pointer">
-            <div className="w-12 h-12 bg-[#E6F2F8] text-[#3B6CE7] rounded-xl flex items-center justify-center mb-4">
-              {getIcon(topic.id)}
-            </div>
-            <h3 className="text-lg font-semibold text-[#1D2B64] mb-2">{topic.title}</h3>
-            <p className="text-sm text-[#1D2B64]/60">{topic.description}</p>
-          </div>
-        ))}
-      </div>
+      {filteredArticles.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {filteredArticles.map(article => (
+            <HelpCategoryCard 
+              key={article.id}
+              id={article.id}
+              title={article.title}
+              description={article.subtitle}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <p className="text-base text-[#1D2B64]/50">No matching help articles found.</p>
+        </div>
+      )}
     </div>
   );
 }
+
+export default HelpCenterPage;

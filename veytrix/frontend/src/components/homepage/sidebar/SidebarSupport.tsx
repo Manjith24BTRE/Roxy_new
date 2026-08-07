@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { HelpCircle, Flag } from 'lucide-react';
+import { Flag } from 'lucide-react';
 
 interface SidebarSupportProps {
   collapsed: boolean;
@@ -11,7 +11,6 @@ export function SidebarSupport({ collapsed, onMobileItemClick }: SidebarSupportP
   const location = useLocation();
 
   const items = [
-    { to: '/help', icon: HelpCircle, label: 'Help Center' },
     { to: '/report-problem', icon: Flag, label: 'Report a Problem' },
   ];
 

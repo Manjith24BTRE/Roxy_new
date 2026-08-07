@@ -54,9 +54,6 @@ export function SiteHeader() {
             <span className="font-display text-lg font-bold tracking-tight text-[#1D2B64]">
               VEYTRIX
             </span>
-            <span className="ml-1 rounded-full bg-[#E6F2F8] px-2 py-0.5 text-[9px] font-mono uppercase tracking-widest text-[#1D2B64] font-bold border border-[#3B6CE7]/10">
-              beta
-            </span>
           </Link>
 
           {/* CENTER: Navigation */}

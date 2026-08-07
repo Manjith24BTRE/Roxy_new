@@ -1,9 +1,10 @@
-import React, { useState, Suspense } from 'react';
+import React, { Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import { VeytrixLogo } from '../components/VeytrixLogo';
 import { Facebook, Instagram, Linkedin, Twitter, Github, Mail } from 'lucide-react';
 import { socialLinks } from '../config/socialLinks';
 import { LandingModal } from '../components/landing/modals/LandingModal';
+import { useFooterModal, FooterModalType } from '../context/FooterModalContext';
 
 // Static/Lightweight Modals
 import AboutContent from '../components/landing/modals/company/AboutContent';
@@ -16,8 +17,6 @@ const HelpCenterContent = React.lazy(() => import('../components/landing/modals/
 const TutorialsContent = React.lazy(() => import('../components/landing/modals/resources/TutorialsContent'));
 const DocumentationContent = React.lazy(() => import('../components/landing/modals/resources/DocumentationContent'));
 const ReportProblemContent = React.lazy(() => import('../components/landing/modals/resources/ReportProblemContent'));
-
-export type FooterModalType = 'about' | 'contact' | 'careers' | 'press' | 'help' | 'tutorials' | 'documentation' | 'report' | null;
 
 type FooterItem = { label: string; modalKey?: FooterModalType; to?: string; disabled?: boolean };
 type FooterColumn = { title: string; items: FooterItem[] };
@@ -51,15 +50,13 @@ const COLS: FooterColumn[] = [
 ];
 
 export function SiteFooter() {
-  const [activeModal, setActiveModal] = useState<FooterModalType>(null);
-
-  const closeModal = () => setActiveModal(null);
+  const { activeModal, openModal, closeModal } = useFooterModal();
 
   const renderModalContent = () => {
     switch (activeModal) {
       case 'about': return <AboutContent onClose={closeModal} />;
       case 'contact': return <ContactContent onClose={closeModal} />;
-      case 'careers': return <CareersContent onClose={closeModal} onSwitchToContact={() => setActiveModal('contact')} />;
+      case 'careers': return <CareersContent onClose={closeModal} onSwitchToContact={() => openModal('contact')} />;
       case 'press': return <PressContent onClose={closeModal} />;
       case 'help': 
       case 'tutorials': 
@@ -170,7 +167,7 @@ export function SiteFooter() {
                         ) : i.modalKey ? (
                           <button
                             type="button"
-                            onClick={() => setActiveModal(i.modalKey!)}
+                            onClick={() => openModal(i.modalKey!)}
                             className="text-sm text-[#1D2B64]/70 hover:text-[#3B6CE7] transition-colors duration-150 text-left font-medium"
                           >
                             {i.label}

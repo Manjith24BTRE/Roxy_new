@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { apiRequest } from '../lib/api';
@@ -99,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authModalMode, setAuthModalMode] = useState<AuthModalMode>(null);
   const [redirectAfterLogin, setRedirectAfterLogin] = useState<string | null>(null);
+  const lastSyncTokenRef = useRef<string | null>(null);
 
   const openAuthModal = useCallback((mode: AuthModalMode) => {
     setAuthModalMode(mode);
@@ -110,6 +111,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const syncProfile = useCallback(async (): Promise<UserProfileData | null> => {
     try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const token = currentSession?.access_token || null;
+      if (token && token === lastSyncTokenRef.current) {
+        return userProfile;
+      }
+      lastSyncTokenRef.current = token;
+
       const res = await apiRequest<{ success: boolean; profile?: UserProfileData; user?: UserProfileData }>('/auth/me');
       const profileData = res?.profile || res?.user || null;
       if (profileData) {
@@ -120,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.warn('Backend profile sync notice:', err);
     }
     return null;
-  }, []);
+  }, [userProfile]);
 
   useEffect(() => {
     let isMounted = true;

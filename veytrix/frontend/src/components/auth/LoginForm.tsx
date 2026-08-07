@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, Loader2, Sparkles, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 export function LoginForm() {
   const { signInWithEmail, signInWithGoogle, signInAsDemo, openAuthModal, closeAuthModal, redirectAfterLogin, setRedirectAfterLogin } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -20,6 +22,7 @@ export function LoginForm() {
       await signInWithEmail(email, password, rememberMe);
       closeAuthModal();
       setRedirectAfterLogin(null);
+      navigate('/home');
     } catch (err: any) {
       setError(err?.message || 'Invalid email or password.');
     } finally {
@@ -33,6 +36,7 @@ export function LoginForm() {
       await signInAsDemo();
       closeAuthModal();
       setRedirectAfterLogin(null);
+      navigate('/home');
     } catch (err: any) {
       setError(err?.message || 'Failed to enter workspace.');
     }
@@ -44,6 +48,7 @@ export function LoginForm() {
       await signInWithGoogle();
       closeAuthModal();
       setRedirectAfterLogin(null);
+      navigate('/home');
     } catch (err: any) {
       setError(err?.message || 'Failed to sign in with Google.');
     }

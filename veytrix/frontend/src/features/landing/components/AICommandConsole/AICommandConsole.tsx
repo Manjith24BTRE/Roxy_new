@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, CornerDownLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../../context/AuthContext';
 import { GlassCard } from '../../../../components/landing/GlassCard';
 import { CommandInput } from './CommandInput';
 import { ExecuteButton } from './ExecuteButton';
@@ -8,6 +10,9 @@ import { SuggestionChips } from './SuggestionChips';
 export function AICommandConsole() {
   const [command, setCommand] = useState("Create a smooth cinematic intro using the b-roll from folder A...");
   const [isTyping, setIsTyping] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const { isSignedIn, isLoading } = useAuth();
+  const navigate = useNavigate();
   const typingIntervalRef = useRef<number | null>(null);
 
   // Clear interval on unmount
@@ -49,7 +54,19 @@ export function AICommandConsole() {
   };
 
   const handleExecute = () => {
-    console.log("Executing command:", command);
+    if (isLoading || isRedirecting) return;
+
+    setIsRedirecting(true);
+
+    if (isSignedIn) {
+      navigate('/home');
+    } else {
+      navigate('/login');
+    }
+
+    setTimeout(() => {
+      setIsRedirecting(false);
+    }, 800);
   };
 
   return (
@@ -66,6 +83,7 @@ export function AICommandConsole() {
           command={command} 
           onChange={setCommand} 
           disabled={isTyping} 
+          onExecute={handleExecute}
         />
 
         {/* Action Bar */}

@@ -5,9 +5,10 @@ interface CommandInputProps {
   command: string;
   onChange: (val: string) => void;
   disabled?: boolean;
+  onExecute?: () => void;
 }
 
-export function CommandInput({ command, onChange, disabled }: CommandInputProps) {
+export function CommandInput({ command, onChange, disabled, onExecute }: CommandInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleContainerClick = () => {
@@ -27,6 +28,14 @@ export function CommandInput({ command, onChange, disabled }: CommandInputProps)
         ref={textareaRef}
         value={command}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (onExecute && !disabled) {
+              onExecute();
+            }
+          }
+        }}
         disabled={disabled}
         className="absolute inset-0 w-full h-full opacity-0 cursor-text resize-none focus:outline-none bg-transparent border-none p-0 text-lg md:text-xl font-display font-medium leading-relaxed caret-transparent select-text z-10"
         aria-label="AI Command Input"

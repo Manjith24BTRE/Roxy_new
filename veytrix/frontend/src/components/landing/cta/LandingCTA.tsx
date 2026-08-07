@@ -1,8 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Play } from 'lucide-react';
+import { useFooterModal } from '../../../context/FooterModalContext';
 
 export function LandingCTA() {
+  const { openModal } = useFooterModal();
+
   return (
     <section className="py-24 px-6 bg-background">
       <div className="mx-auto max-w-5xl">
@@ -20,7 +23,7 @@ export function LandingCTA() {
              <div className="w-40 h-2 bg-[#1D2B64] rounded-full mb-2 ml-8" />
              <div className="w-24 h-2 bg-[#8CC8E8] rounded-full" />
           </div>
-
+ 
           <div className="relative z-10 max-w-2xl mx-auto flex flex-col items-center">
             <h2 className="text-4xl md:text-5xl font-display font-bold text-[#1D2B64] mb-6 tracking-tight">
               Your next cut<br />starts here.
@@ -28,7 +31,7 @@ export function LandingCTA() {
             <p className="text-[#1D2B64]/70 text-lg mb-10">
               Open VEYTRIX and turn the first clip into something worth replaying.
             </p>
-
+ 
             <div className="flex flex-wrap items-center justify-center gap-4 w-full sm:w-auto">
               <Link
                 to="/home"
@@ -36,12 +39,13 @@ export function LandingCTA() {
               >
                 <Play className="h-5 w-5 fill-current" /> Homepage
               </Link>
-              <Link
-                to="/company"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-medium text-[#1D2B64] border border-[#1D2B64]/10 shadow-sm hover:bg-slate-50 transition-all duration-200"
+              <button
+                type="button"
+                onClick={() => openModal('about')}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-medium text-[#1D2B64] border border-[#1D2B64]/10 shadow-sm hover:bg-slate-50 transition-all duration-200 cursor-pointer"
               >
                 About Veytrix <span aria-hidden>→</span>
-              </Link>
+              </button>
             </div>
           </div>
           

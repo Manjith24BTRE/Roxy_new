@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Mail, Lock, User as UserIcon, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 export function SignupForm() {
   const { signUpWithEmail, openAuthModal, closeAuthModal, setRedirectAfterLogin } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -23,6 +25,7 @@ export function SignupForm() {
       if (res.session) {
         closeAuthModal();
         setRedirectAfterLogin(null);
+        navigate('/home');
       } else {
         setSuccessMsg("Registration initiated. Please check your inbox for verification code.");
       }

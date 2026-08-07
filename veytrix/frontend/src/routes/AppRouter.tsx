@@ -13,9 +13,13 @@ import { SettingsPage } from '../features/settings/pages/SettingsPage';
 import { ProjectsPage } from '../features/projects/pages/ProjectsPage';
 import { ProfilePage } from '../features/profile/pages/ProfilePage';
 import { HelpCenterPage } from '../features/help/pages/HelpCenterPage';
+import { HelpArticlePage } from '../features/help/pages/HelpArticlePage';
 import { ReportProblemPage } from '../features/report/pages/ReportProblemPage';
 import { WorkspaceLayout } from '../layouts/WorkspaceLayout';
 import { ProtectedRoute } from './ProtectedRoute';
+import { GuestRoute } from './GuestRoute';
+import { LoginPage } from '../features/auth/pages/LoginPage';
+import { FooterModalProvider } from '../context/FooterModalContext';
 
 const router = createBrowserRouter([
   {
@@ -24,6 +28,12 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <LandingPage /> },
       { path: 'company', element: <CompanyPage /> },
+      {
+        element: <GuestRoute />,
+        children: [
+          { path: 'login', element: <LoginPage /> },
+        ],
+      },
       {
         element: <ProtectedRoute />,
         children: [
@@ -38,6 +48,7 @@ const router = createBrowserRouter([
               { path: 'profile', element: <ProfilePage /> },
               { path: 'settings', element: <SettingsPage /> },
               { path: 'help', element: <HelpCenterPage /> },
+              { path: 'help/:articleId', element: <HelpArticlePage /> },
               { path: 'report-problem', element: <ReportProblemPage /> },
             ],
           },
@@ -52,7 +63,9 @@ export function AppRouter() {
     <AuthProvider>
       <ProjectMediaProvider>
         <LegalModalProvider>
-          <RouterProvider router={router} />
+          <FooterModalProvider>
+            <RouterProvider router={router} />
+          </FooterModalProvider>
         </LegalModalProvider>
       </ProjectMediaProvider>
     </AuthProvider>
