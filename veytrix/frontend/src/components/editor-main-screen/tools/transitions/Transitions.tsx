@@ -1,12 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Star, Sliders, LayoutGrid, List, RotateCcw, Clock, Move } from 'lucide-react';
+import { Search, Star, Sliders, LayoutGrid, List, RotateCcw, Clock, Move, Eye } from 'lucide-react';
 import { TransitionItem } from './Transitions.types';
 import { SAMPLE_TRANSITIONS_NEW } from './Transitions.data';
+import { TransitionThumbnail } from './TransitionThumbnail';
 
 interface TransitionsProps {
   activeTransitionId: string | null;
   onSelectTransition: (id: string | null) => void;
   searchQuery?: string;
+  showBeforeOnly?: boolean;
+  onShowBeforeOnlyChange?: (showBefore: boolean) => void;
 }
 
 const CATEGORIES = [
@@ -22,8 +25,15 @@ const CATEGORIES = [
   { id: 'light', name: '✨ Cinematic', icon: '✨' }
 ];
 
-export function Transitions({ activeTransitionId, onSelectTransition, searchQuery = '' }: TransitionsProps) {
+export function Transitions({
+  activeTransitionId,
+  onSelectTransition,
+  searchQuery = '',
+  showBeforeOnly = false,
+  onShowBeforeOnlyChange
+}: TransitionsProps) {
   // UI states
+  const [internalQuery, setInternalQuery] = useState(searchQuery);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isGridView, setIsGridView] = useState<boolean>(true);
   
@@ -107,8 +117,9 @@ export function Transitions({ activeTransitionId, onSelectTransition, searchQuer
     }
 
     // Search query match
-    if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase();
+    const activeSearch = internalQuery || searchQuery;
+    if (activeSearch.trim() !== '') {
+      const q = activeSearch.toLowerCase();
       return (
         t.name.toLowerCase().includes(q) ||
         t.description.toLowerCase().includes(q) ||
@@ -254,10 +265,59 @@ export function Transitions({ activeTransitionId, onSelectTransition, searchQuer
   };
 
   return (
-    <div className="space-y-4 text-slate-200 w-full">
+    <div className="space-y-3 text-slate-200 w-full flex flex-col min-h-0">
       
+      {/* Top Search & Compare Header Bar */}
+      <div className="p-3 bg-[#0c101d] border-b border-white/10 flex items-center justify-between gap-2 rounded-xl flex-shrink-0">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+          <input
+            type="text"
+            placeholder={`Search ${SAMPLE_TRANSITIONS_NEW.length} premium transitions...`}
+            value={internalQuery}
+            onChange={(e) => setInternalQuery(e.target.value)}
+            className="w-full bg-[#060910] border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50 transition-colors"
+          />
+        </div>
+
+        {/* Compare Bypass Toggle */}
+        <button
+          type="button"
+          onClick={() => onShowBeforeOnlyChange?.(!showBeforeOnly)}
+          onMouseDown={() => onShowBeforeOnlyChange?.(true)}
+          onMouseUp={() => onShowBeforeOnlyChange?.(false)}
+          onMouseLeave={() => onShowBeforeOnlyChange?.(false)}
+          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition cursor-pointer flex items-center gap-1.5 flex-shrink-0 select-none ${
+            showBeforeOnly
+              ? 'bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_12px_rgba(245,158,11,0.6)] animate-pulse'
+              : 'bg-slate-900 border-white/10 text-slate-300 hover:bg-slate-800'
+          }`}
+          title={showBeforeOnly ? 'Showing original video without transition' : 'Click or hold to compare video before transition'}
+        >
+          <Eye className="h-3 w-3" />
+          <span>{showBeforeOnly ? 'Original (Before)' : 'Compare'}</span>
+        </button>
+      </div>
+
+      {/* Compare Mode Banner Notification */}
+      {showBeforeOnly && (
+        <div className="bg-amber-500/15 border-b border-amber-500/30 px-3.5 py-1.5 text-[9.5px] font-semibold text-amber-300 flex items-center justify-between rounded-lg flex-shrink-0 animate-fade-in">
+          <div className="flex items-center gap-1.5">
+            <Eye className="h-3.5 w-3.5 text-amber-400" />
+            <span>Comparing: Showing original video without transition</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onShowBeforeOnlyChange?.(false)}
+            className="text-amber-400 hover:text-amber-200 underline font-bold cursor-pointer"
+          >
+            Restore
+          </button>
+        </div>
+      )}
+
       {/* Category Row and Controls */}
-      <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-2">
+      <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-2 flex-shrink-0">
         <div className="flex-1 flex gap-1 overflow-x-auto scrollbar-none py-1">
           {CATEGORIES.map(c => {
             const isSelected = selectedCategory === c.id;
@@ -355,23 +415,7 @@ export function Transitions({ activeTransitionId, onSelectTransition, searchQuer
                           <div className={`relative aspect-video rounded-lg overflow-hidden bg-slate-950 border border-white/10 flex items-center justify-center flex-shrink-0 ${
                             isGridView ? 'w-full mb-1.5' : 'w-20 h-full'
                           }`}>
-                            
-                            {/* Slide A (Orange-red) */}
-                            <div className={`absolute inset-0 bg-gradient-to-tr from-rose-600 to-amber-500 flex flex-col items-center justify-center text-[7px] font-black text-white select-none ${animation.clipA}`}>
-                              <span className="text-[10px]">{t.icon}</span>
-                              <span>CLIP A</span>
-                            </div>
-
-                            {/* Slide B (Indigo-cyan) */}
-                            <div className={`absolute inset-0 bg-gradient-to-bl from-sky-600 to-indigo-700 flex flex-col items-center justify-center text-[7px] font-black text-white select-none ${animation.clipB}`}>
-                              <span className="text-[10px]">{t.icon}</span>
-                              <span>CLIP B</span>
-                            </div>
-
-                            {/* Static Icon overlay when not hovered */}
-                            <div className="absolute z-10 text-xl group-hover:scale-0 transition-transform duration-300 select-none">
-                              {t.icon}
-                            </div>
+                            <TransitionThumbnail transition={t} />
 
                             {/* Favorite star */}
                             <button

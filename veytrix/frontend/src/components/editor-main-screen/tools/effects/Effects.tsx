@@ -4,6 +4,7 @@ import { Filters } from '../filters/Filters';
 import { Transitions } from '../transitions/Transitions';
 import { SAMPLE_TRANSITIONS_NEW } from '../transitions/Transitions.data';
 import { EFFECT_PRESETS, EffectPreset, AppliedEffect, EffectKeyframe } from './effectsPreset';
+import { EffectThumbnail } from './EffectThumbnail';
 
 interface EffectsProps {
   timelineClips: any[];
@@ -196,126 +197,54 @@ export function Effects({
         </div>
       )}
 
-      {/* Sub Header Navigation */}
-      <div className="p-3 border-b border-white/10 bg-[#0c101d] flex-shrink-0">
-        <div className="flex border border-white/10 rounded-lg bg-slate-950/60 p-0.5">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveSubTab('transitions');
-              setSearchQuery('');
-            }}
-            className={`flex-1 py-1.5 text-[10px] font-semibold rounded-md transition cursor-pointer ${
-              activeSubTab === 'transitions' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Transitions
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveSubTab('filters');
-              setSearchQuery('');
-            }}
-            className={`flex-1 py-1.5 text-[10px] font-semibold rounded-md transition cursor-pointer ${
-              activeSubTab === 'filters' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Filters
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveSubTab('effects');
-              setSearchQuery('');
-            }}
-            className={`flex-1 py-1.5 text-[10px] font-semibold rounded-md transition cursor-pointer ${
-              activeSubTab === 'effects' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Effects
-          </button>
-        </div>
-      </div>
-
-      {/* Render Sub Tabs */}
-      {activeSubTab === 'filters' && (
-        <div className="flex-1 min-h-0">
-          <Filters
-            activeFilterId={activeFilterId}
-            onSelectFilter={onSelectFilter}
-            filterIntensity={filterIntensity}
-            onFilterIntensityChange={onFilterIntensityChange}
-            filterOpacity={filterOpacity}
-            onFilterOpacityChange={onFilterOpacityChange}
-            filterBlendMode={filterBlendMode}
-            onFilterBlendModeChange={onFilterBlendModeChange}
-            filterEnabled={filterEnabled}
-            onFilterEnabledChange={onFilterEnabledChange}
-            showBeforeOnly={showBeforeOnly}
-            onShowBeforeOnlyChange={onShowBeforeOnlyChange}
-            onHoverFilter={onHoverFilter}
+      {/* Header search & Compare bar */}
+      <div className="p-3 bg-[#0c101d] border-b border-white/10 flex items-center justify-between flex-shrink-0 gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+          <input
+            type="text"
+            placeholder={`Search ${EFFECT_PRESETS.length} effects...`}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-[#060910] border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50 transition-colors"
           />
         </div>
-      )}
 
-      {activeSubTab === 'transitions' && (
-        <div className="flex-1 min-h-0 flex flex-col">
-          <div className="px-4 py-2 bg-[#090d16] flex-shrink-0 border-b border-white/5">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
-              <input
-                type="text"
-                placeholder="Search transitions..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-md bg-slate-900 border border-white/10 pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none"
-              />
-            </div>
+        {/* Compare Bypass Toggle */}
+        <button
+          type="button"
+          onClick={() => onShowBeforeOnlyChange?.(!showBeforeOnly)}
+          onMouseDown={() => onShowBeforeOnlyChange?.(true)}
+          onMouseUp={() => onShowBeforeOnlyChange?.(false)}
+          onMouseLeave={() => onShowBeforeOnlyChange?.(false)}
+          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition cursor-pointer flex items-center gap-1.5 flex-shrink-0 select-none ${
+            showBeforeOnly
+              ? 'bg-amber-500 border-amber-400 text-slate-950 shadow-[0_0_12px_rgba(245,158,11,0.6)] animate-pulse'
+              : 'bg-slate-900 border-white/10 text-slate-300 hover:bg-slate-800'
+          }`}
+          title={showBeforeOnly ? 'Showing original video without effects (Click/Release to restore)' : 'Click or hold to compare original video before effects'}
+        >
+          <Eye className="h-3 w-3" />
+          <span>{showBeforeOnly ? 'Original (Before)' : 'Compare'}</span>
+        </button>
+      </div>
+
+      {/* Compare Mode Banner Notification */}
+      {showBeforeOnly && (
+        <div className="bg-amber-500/15 border-b border-amber-500/30 px-3.5 py-1.5 text-[9.5px] font-semibold text-amber-300 flex items-center justify-between flex-shrink-0 animate-fade-in">
+          <div className="flex items-center gap-1.5">
+            <Eye className="h-3.5 w-3.5 text-amber-400" />
+            <span>Comparing: Showing original video without effects</span>
           </div>
-          <div className="flex-1 overflow-y-auto">
-            <Transitions
-              activeTransitionId={activeTransitionId}
-              onSelectTransition={onSelectTransition}
-              searchQuery={searchQuery}
-            />
-          </div>
+          <button
+            type="button"
+            onClick={() => onShowBeforeOnlyChange?.(false)}
+            className="text-amber-400 hover:text-amber-200 underline font-bold cursor-pointer"
+          >
+            Restore Effects
+          </button>
         </div>
       )}
-
-      {activeSubTab === 'effects' && (
-        <div className="flex-1 flex flex-col min-h-0">
-          
-          {/* Header search bar */}
-          <div className="p-3 bg-[#0c101d] border-b border-white/10 flex items-center justify-between flex-shrink-0 gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
-              <input
-                type="text"
-                placeholder={`Search ${EFFECT_PRESETS.length} effects...`}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[#060910] border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50 transition-colors"
-              />
-            </div>
-            
-            {/* Compare Bypass Toggle */}
-            <button
-              type="button"
-              onMouseDown={() => onShowBeforeOnlyChange?.(true)}
-              onMouseUp={() => onShowBeforeOnlyChange?.(false)}
-              onMouseLeave={() => onShowBeforeOnlyChange?.(false)}
-              onTouchStart={() => onShowBeforeOnlyChange?.(true)}
-              onTouchEnd={() => onShowBeforeOnlyChange?.(false)}
-              className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition cursor-pointer flex items-center gap-1.5 flex-shrink-0 ${
-                showBeforeOnly 
-                  ? 'bg-amber-500 border-amber-600 text-slate-950'
-                  : 'bg-slate-900 border-white/10 text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              <span>Compare</span>
-            </button>
-          </div>
 
           {/* Horizontal Categories switcher */}
           <div className="flex gap-1 overflow-x-auto px-3 py-2 bg-[#0a0f1b] border-b border-white/5 scrollbar-none flex-shrink-0">
@@ -7691,24 +7620,10 @@ export function Effects({
                           : 'border-white/5 hover:border-white/10 bg-[#0b101c]/60'
                       }`}
                     >
-                      {/* CSS Preview Visualizer card */}
+                      {/* Effect Thumbnail Preview */}
                       <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-950 border border-white/10 mb-1 flex-shrink-0">
-                        <img
-                          src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=150&q=50"
-                          alt=""
-                          className="w-full h-full object-cover select-none pointer-events-none group-hover:scale-105 transition-all duration-300"
-                          style={{ filter: preset.cssFilter }}
-                          loading="lazy"
-                        />
+                        <EffectThumbnail preset={preset} />
                         
-                        {/* Overlay representation (Light gradient fallback overlay) */}
-                        {preset.overlayStyle && (
-                          <div
-                            className="absolute inset-0 pointer-events-none opacity-40"
-                            style={preset.overlayStyle}
-                          />
-                        )}
-
                         {/* Applied badge */}
                         {isApplied && (
                           <span className="absolute top-0.5 left-0.5 z-20 bg-sky-500 text-slate-950 text-[7px] font-black uppercase px-1 py-0.5 rounded flex items-center gap-0.5 shadow-sm">
@@ -7720,7 +7635,7 @@ export function Effects({
                         <button
                           type="button"
                           onClick={(e) => toggleFavorite(preset.id, e)}
-                          className="absolute top-0.5 right-0.5 p-0.5 rounded bg-slate-950/60 hover:bg-slate-950 border border-white/5 text-slate-400 hover:text-yellow-400 cursor-pointer transition z-20"
+                          className="absolute top-0.5 right-0.5 p-0.5 rounded bg-slate-950/60 hover:bg-slate-950 border border-white/5 text-slate-400 hover:text-yellow-400 cursor-pointer transition z-30"
                         >
                           <Star className={`h-2.5 w-2.5 ${isFav ? 'fill-yellow-400 text-yellow-400' : 'text-slate-500'}`} />
                         </button>
@@ -7744,8 +7659,6 @@ export function Effects({
             </div>
 
           </div>
-        </div>
-      )}
 
     </div>
   );

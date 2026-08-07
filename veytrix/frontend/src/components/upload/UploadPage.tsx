@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectMedia } from '../../contexts/ProjectMediaContext';
 
@@ -12,9 +12,14 @@ import { SupportedFormats } from './SupportedFormats';
 
 export function UploadPage() {
   const navigate = useNavigate();
-  const { mediaFiles, addMediaFiles, removeMediaFile } = useProjectMedia();
+  const { mediaFiles, addMediaFiles, removeMediaFile, clearMedia } = useProjectMedia();
   const [activeTab, setActiveTab] = useState<'video' | 'image'>('video');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Clear previous media session on mount so new upload starts fresh
+  useEffect(() => {
+    clearMedia();
+  }, []);
 
   const handleFilesSelected = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -54,7 +59,12 @@ export function UploadPage() {
         </div>
 
         {/* Media Tabs Selection */}
-        <UploadTabs activeTab={activeTab} onChangeTab={setActiveTab} />
+        <UploadTabs
+          activeTab={activeTab}
+          onChangeTab={setActiveTab}
+          onFilesSelected={handleFilesSelected}
+          isLoading={isProcessing}
+        />
 
         {/* Interactive Drop Zone Area */}
         {isProcessing ? (

@@ -18,6 +18,8 @@ import { Audio } from './tools/audio/Audio';
 import { TextPanel, TextOverlay } from './tools/text/TextPanel';
 import { Captions, CaptionItem } from './tools/captions/Captions';
 import { Effects } from './tools/effects/Effects';
+import { Filters } from './tools/filters/Filters';
+import { Transitions } from './tools/transitions/Transitions';
 import { SpeedTool, clampPlaybackRate, getSourceDuration, getEffectiveDuration, timelineTimeToSourceTime, sourceTimeToTimelineTime } from './tools/speed';
 import { ReplaceTool, ReplaceMediaPayload } from './tools/replace';
 // Force IDE cache refresh for folder casing
@@ -47,11 +49,8 @@ import {
   KeyframeProperty,
   InterpolationType
 } from './tools/keyframes';
-
-
-// Context Menu
+import { ClipTrimHandles, TrimToolbar, useTrimMode } from './tools/trim';
 import { ClipActionsPanel } from './clip-actions/ClipActionsPanel';
-import { ClipTrimHandles } from './trim/ClipTrimHandles';
 import { EditorHistoryProvider, useEditorHistory, ProjectState } from './history';
 
 const getProjectTotalDuration = (clips: any[]): number => {
@@ -77,7 +76,7 @@ export function EditorMainScreen() {
 
 function EditorMainScreenContent() {
   const navigate = useNavigate();
-  const { projectId, projectTitle, mediaFiles, activeMediaId, setActiveMediaId, addMediaFiles, updateMediaName } = useProjectMedia();
+  const { projectId, projectTitle, mediaFiles, activeMediaId, setActiveMediaId, addMediaFiles, updateMediaName, clearMedia } = useProjectMedia();
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
   const importFileInputRef = useRef<HTMLInputElement>(null);
@@ -359,13 +358,34 @@ function EditorMainScreenContent() {
 
   const recalculateSequence = (clips: any[]) => {
     let currentStart = 0;
-    return clips.map((c) => {
-      if (c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio) {
-        return c;
-      }
-      const updated = { ...c, timelineStart: currentStart };
+    const updatedClips = clips.map((c) => {
+      const isAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
+      if (isAudio) return c;
+
+      const updated = { ...c, timelineStart: currentStart, start: currentStart };
       currentStart += c.duration;
       return updated;
+    });
+
+    return updatedClips.map((c) => {
+      const isAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
+      if (!isAudio) return c;
+
+      const parentVideo = updatedClips.find(
+        (v) => (v.trackId !== 'audio' && v.trackId !== 'music' && v.type !== 'audio' && !v.isDetachedAudio) &&
+               (v.id === c.sourceVideoId || c.id === `detached-audio-${v.id}` || v.mediaId === c.mediaId)
+      );
+
+      if (parentVideo) {
+        return {
+          ...c,
+          timelineStart: parentVideo.timelineStart,
+          start: parentVideo.timelineStart,
+          startOffset: parentVideo.startOffset ?? 0,
+          duration: parentVideo.duration
+        };
+      }
+      return c;
     });
   };
 
@@ -451,7 +471,7 @@ function EditorMainScreenContent() {
     if (relativePlayhead > 0.2 && relativePlayhead < clip.duration - 0.2) {
       setTimelineClips((prev) => {
         const updated = prev.map((c) => {
-          if (c.id === clipId || c.detachedAudioId === clipId || c.sourceClipId === clipId) {
+          if (c.id === clipId) {
             const currentPlaybackRate = c.playbackRate || 1;
             if (side === 'start') {
               const trimmedSource = relativePlayhead * currentPlaybackRate;
@@ -728,31 +748,81 @@ function EditorMainScreenContent() {
     }
   };
 
-  const handleTrimUpdate = (clipId: string, newTimelineStart: number, newSourceStart: number, newDuration: number) => {
-    // During drag: update sourceStart and duration, then reflow sequential positions.
+  const handleTrimUpdate = (
+    clipId: string,
+    newTimelineStart: number,
+    newSourceStart: number,
+    newDuration: number,
+    activeEdgeTime?: number
+  ) => {
+    // During drag: update sourceStart and duration for target clip and any linked audio/video clips.
     setTimelineClips((prev) => {
       const targetClip = prev.find(c => c.id === clipId);
-      const updated = prev.map(c => {
-        if (c.id === clipId || (targetClip && (c.detachedAudioId === targetClip.id || c.sourceClipId === clipId || (targetClip.detachedAudioId && c.id === targetClip.detachedAudioId)))) {
-          const isAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
+      if (!targetClip) return prev;
+
+      const isTargetVideo = targetClip.trackId !== 'audio' && targetClip.trackId !== 'music' && targetClip.type !== 'audio' && !targetClip.isDetachedAudio;
+      const validDuration = Math.max(0.5, newDuration);
+
+      const updated = prev.map((c) => {
+        if (c.id === clipId) {
           return {
             ...c,
-            timelineStart: isAudio ? newTimelineStart : (c.id === clipId ? (newTimelineStart !== c.timelineStart ? newTimelineStart : c.timelineStart) : c.timelineStart),
-            start: isAudio ? newTimelineStart : (c.id === clipId ? (newTimelineStart !== c.timelineStart ? newTimelineStart : (c.start ?? c.timelineStart)) : (c.start ?? c.timelineStart)),
+            timelineStart: newTimelineStart,
+            start: newTimelineStart,
             startOffset: newSourceStart,
-            duration: Math.max(0.5, newDuration)
+            duration: validDuration
           };
         }
+
+        // If target is video, synchronize any linked/detached audio clips
+        if (isTargetVideo) {
+          const isAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
+          if (isAudio) {
+            const isLinked = c.sourceVideoId === clipId ||
+                             c.id === `detached-audio-${clipId}` ||
+                             (c.mediaId === targetClip.mediaId && Math.abs((c.timelineStart ?? c.start ?? 0) - (targetClip.timelineStart ?? targetClip.start ?? 0)) < 0.5);
+            if (isLinked) {
+              return {
+                ...c,
+                timelineStart: newTimelineStart,
+                start: newTimelineStart,
+                startOffset: newSourceStart,
+                duration: validDuration
+              };
+            }
+          }
+        }
+
+        // If target is audio, synchronize any linked video clip
+        if (!isTargetVideo) {
+          const isVideo = c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio;
+          if (isVideo) {
+            const isLinked = c.id === targetClip.sourceVideoId ||
+                             (c.mediaId === targetClip.mediaId && Math.abs((c.timelineStart ?? c.start ?? 0) - (targetClip.timelineStart ?? targetClip.start ?? 0)) < 0.5);
+            if (isLinked) {
+              return {
+                ...c,
+                timelineStart: newTimelineStart,
+                start: newTimelineStart,
+                startOffset: newSourceStart,
+                duration: validDuration
+              };
+            }
+          }
+        }
+
         return c;
       });
+
       const recalculated = recalculateSequence(updated);
       const newTotalDur = getProjectTotalDuration(recalculated);
       setDuration(newTotalDur);
-      if (currentTime > newTotalDur) {
-        handleSeek(Math.max(0, newTotalDur));
-      }
       return recalculated;
     });
+
+    if (activeEdgeTime !== undefined) {
+      handleSeek(activeEdgeTime);
+    }
   };
 
   const handleTrimCommit = () => {
@@ -1395,15 +1465,27 @@ function EditorMainScreenContent() {
 
     try {
       setTimelineClipsState((prevClips) => {
+        const newBaseDuration = newMedia.duration || targetClip.baseDuration || targetClip.duration || 5;
         const updatedClips = prevClips.map((clip) => {
           if (clip.id === targetClip.id) {
-            const newBaseDuration = newMedia.duration || clip.baseDuration || clip.duration || 5;
             return {
-              ...clip, // Preserves clip.id, timelineStart, startOffset, playbackRate, appliedEffects, appliedTransition, keyframes, transforms, animations, volume, mute state, color adjustments, etc.
+              ...clip,
               mediaId: newMedia.mediaId,
               url: newMedia.url,
               name: newMedia.name,
               thumbnails: newMedia.thumbnails && newMedia.thumbnails.length > 0 ? newMedia.thumbnails : clip.thumbnails,
+              baseDuration: newBaseDuration,
+              duration: Math.min(clip.duration, newBaseDuration)
+            };
+          }
+          // Synchronize linked audio clip if media is replaced
+          const isLinkedAudio = clip.sourceVideoId === targetClip.id || clip.id === `detached-audio-${targetClip.id}` || (clip.mediaId === targetClip.mediaId && clip.isDetachedAudio);
+          if (isLinkedAudio) {
+            return {
+              ...clip,
+              mediaId: newMedia.mediaId,
+              url: newMedia.url,
+              name: `Audio - ${newMedia.name}`,
               baseDuration: newBaseDuration,
               duration: Math.min(clip.duration, newBaseDuration)
             };
@@ -1461,6 +1543,23 @@ function EditorMainScreenContent() {
       }
     });
   }, [timelineClips]);
+
+  // Pre-seek video elements to their clip startOffset so they are immediately ready for playback
+  useEffect(() => {
+    if (!isPlaying) {
+      timelineClips.forEach((clip) => {
+        const video = videoRefs.current[clip.id];
+        if (video && !video.seeking) {
+          const targetTime = timelineTimeToSourceTime(clip, clip.timelineStart);
+          if (Math.abs(video.currentTime - targetTime) > 0.08) {
+            try {
+              video.currentTime = targetTime;
+            } catch {}
+          }
+        }
+      });
+    }
+  }, [timelineClips, isPlaying]);
 
   // Clean up videoRefs
   useEffect(() => {
@@ -1577,6 +1676,7 @@ function EditorMainScreenContent() {
   };
 
   const currentTimeRef = useRef(currentTime);
+  const preWarmingClipIdRef = useRef<string | null>(null);
   useEffect(() => {
     currentTimeRef.current = currentTime;
   }, [currentTime]);
@@ -1805,31 +1905,63 @@ function EditorMainScreenContent() {
                   return;
                 }
 
-                if (absoluteTime >= activeClip.timelineStart + activeClip.duration) {
-                  const currentClipIndex = videoClipsOnly.findIndex((c) => c.id === activeClip.id);
-                  if (currentClipIndex !== -1 && currentClipIndex < videoClipsOnly.length - 1) {
-                    const nextClip = videoClipsOnly[currentClipIndex + 1];
-                    const nextVideo = videoRefs.current[nextClip.id];
-                    video.pause();
-                    if (nextVideo) {
-                      const nextTarget = timelineTimeToSourceTime(nextClip, nextClip.timelineStart);
+                const currentClipIndex = videoClipsOnly.findIndex((c) => c.id === activeClip.id);
+                if (currentClipIndex !== -1 && currentClipIndex < videoClipsOnly.length - 1) {
+                  const nextClip = videoClipsOnly[currentClipIndex + 1];
+                  const nextVideo = videoRefs.current[nextClip.id];
+                  const timeUntilEnd = (activeClip.timelineStart + activeClip.duration) - absoluteTime;
+
+                  if (nextVideo) {
+                    const nextTarget = timelineTimeToSourceTime(nextClip, nextClip.timelineStart);
+
+                    // Pre-seek next clip if within 1.5s of split boundary
+                    if (timeUntilEnd <= 1.5 && !nextVideo.seeking && Math.abs(nextVideo.currentTime - nextTarget) > 0.05) {
                       nextVideo.currentTime = nextTarget;
-                      if (!nextClip.isReversed && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
-                        nextVideo.play().catch(() => { });
+                    }
+
+                    // Pre-warm next video element 0.4s (400ms) in advance
+                    if (timeUntilEnd <= 0.4 && !nextClip.isReversed && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
+                      preWarmingClipIdRef.current = nextClip.id;
+                      if (nextVideo.paused) {
+                        nextVideo.muted = true; // Mute audio during pre-warm so sound doesn't overlap early
+                        nextVideo.play().catch(() => {});
                       }
                     }
+                  }
+
+                  if (absoluteTime >= activeClip.timelineStart + activeClip.duration) {
+                    if (nextVideo) {
+                      const nextTarget = timelineTimeToSourceTime(nextClip, nextClip.timelineStart);
+                      if (Math.abs(nextVideo.currentTime - nextTarget) > 0.05 && !nextVideo.seeking) {
+                        nextVideo.currentTime = nextTarget;
+                      }
+                      const isNextVideoMuted = isMuted || !!mutedClips[nextClip.id] || !!nextClip.isMuted || !!nextClip.isAudioDetached || !!nextClip.audioDetached || nextClip.embeddedAudioEnabled === false;
+                      nextVideo.muted = isNextVideoMuted;
+                      nextVideo.volume = isNextVideoMuted ? 0 : Math.min(1, Math.max(0, volume * (nextClip.volume ?? 1)));
+                      if (nextVideo.paused && !nextClip.isReversed && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
+                        nextVideo.play().catch(() => {});
+                      }
+                    }
+                    preWarmingClipIdRef.current = null;
+                    const prevVideo = video;
+                    setTimeout(() => {
+                      if (prevVideo && prevVideo !== videoRefs.current[nextClip.id]) {
+                        prevVideo.pause();
+                      }
+                    }, 50);
+
                     setActiveSelectedClipId(nextClip.id);
                     setActiveMediaId(nextClip.mediaId);
                     currentTimeRef.current = nextClip.timelineStart;
                     setCurrentTime(nextClip.timelineStart);
-                  } else {
-                    video.pause();
-                    setIsPlaying(false);
-                    currentTimeRef.current = totalDur;
-                    setCurrentTime(totalDur);
-                    syncAudioClips(totalDur, false);
-                    showToast('Video playback completed');
                   }
+                } else if (absoluteTime >= activeClip.timelineStart + activeClip.duration) {
+                  video.pause();
+                  setIsPlaying(false);
+                  currentTimeRef.current = totalDur;
+                  setCurrentTime(totalDur);
+                  syncAudioClips(totalDur, false);
+                  showToast('Video playback completed');
                 }
               }
             }
@@ -2028,23 +2160,32 @@ function EditorMainScreenContent() {
     const states: Record<string, { display: boolean; opacity: number; filter: string; transform: string; zIndex: number }> = {};
     let overlayColor: string | null = null;
 
-    const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
-    const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
-      (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
+    const videoClipsOnly = timelineClips.filter(
+      (c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio
+    );
+    const totalDur = getProjectTotalDuration(videoClipsOnly);
+    const activeClip = videoClipsOnly.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
+      (currentTime >= totalDur ? videoClipsOnly[videoClipsOnly.length - 1] : videoClipsOnly[0]);
+
+    const currentClipIndex = videoClipsOnly.findIndex(c => c.id === activeClip?.id);
+    const prevClip = currentClipIndex > 0 ? videoClipsOnly[currentClipIndex - 1] : null;
+    const isNearBoundaryStart = activeClip && prevClip && (currentTime - activeClip.timelineStart < 0.1);
 
     timelineClips.forEach(c => {
+      const isMainActive = activeClip?.id === c.id;
+      const isPrevOverlap = isNearBoundaryStart && prevClip?.id === c.id;
       states[c.id] = {
-        display: activeClip?.id === c.id,
+        display: isMainActive || isPrevOverlap,
         opacity: 1,
         filter: '',
         transform: '',
-        zIndex: 1
+        zIndex: isMainActive ? 2 : (isPrevOverlap ? 1 : 0)
       };
     });
 
-    for (let i = 0; i < timelineClips.length - 1; i++) {
-      const clipA = timelineClips[i];
-      const clipB = timelineClips[i + 1];
+    for (let i = 0; i < videoClipsOnly.length - 1; i++) {
+      const clipA = videoClipsOnly[i];
+      const clipB = videoClipsOnly[i + 1];
       const t_boundary = clipA.timelineStart + clipA.duration;
       const halfDur = 0.5;
 
@@ -2439,30 +2580,32 @@ function EditorMainScreenContent() {
 
   const { performSave, isSaving } = useProjectSave(getProjectPayload, showToast);
 
-  // Restore saved project state on mount
-  useEffect(() => {
-    const projectId = displayVideoName || 'default_project';
-    ProjectDB.loadProject(projectId).then((saved) => {
-      if (saved) {
-        if (saved.timelineClips && saved.timelineClips.length > 0) {
-          setTimelineClipsState(saved.timelineClips);
-        }
-        if (saved.textOverlays) setTextOverlays(saved.textOverlays);
-        if (saved.captions) setCaptions(saved.captions);
-        if (saved.aspectRatio) setAspectRatio(saved.aspectRatio);
-        if (saved.currentTime !== undefined) setCurrentTime(saved.currentTime);
-        if (saved.activeSelectedClipId !== undefined) setActiveSelectedClipId(saved.activeSelectedClipId);
-        if (saved.activeMediaId !== undefined) setActiveMediaId(saved.activeMediaId);
-        if (saved.volume !== undefined) setVolume(saved.volume);
-        if (saved.isMuted !== undefined) setIsMutedState(saved.isMuted);
-        if (saved.mutedClips) setMutedClipsState(saved.mutedClips);
-        if (saved.lockedClips) setLockedClipsState(saved.lockedClips);
-        if (saved.zoomLevel !== undefined) setZoomLevel(saved.zoomLevel);
+  // Production Trim Mode hook initialization
+  const {
+    isTrimModeActive,
+    trimmingClipId,
+    enterTrimMode,
+    applyTrim,
+    cancelTrim,
+    resetTrim,
+  } = useTrimMode({
+    timelineClips,
+    mediaFiles,
+    setTimelineClips: setTimelineClipsState,
+    recalculateSequence,
+    getProjectTotalDuration,
+    setDuration,
+    handleSeek: (time, force) => handleSeek(time, force),
+    setZoomLevel,
+    beginTransaction,
+    commitTransaction,
+    getProjectState,
+    showToast,
+  });
 
-        showToast('Project Restored');
-      }
-    });
-  }, [displayVideoName]);
+  const trimmingClip = isTrimModeActive ? timelineClips.find(c => c.id === trimmingClipId) : null;
+
+
 
   return (
     <div className="veytrix-editor h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden font-sans select-none">
@@ -2471,7 +2614,10 @@ function EditorMainScreenContent() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => navigate('/home')}
+            onClick={() => {
+              clearMedia();
+              navigate('/home');
+            }}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-md hover:bg-surface-hover transition"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -2514,6 +2660,19 @@ function EditorMainScreenContent() {
           </button>
         </div>
       </header>
+
+      {/* Production Trim Mode HUD Banner */}
+      {isTrimModeActive && trimmingClip && (
+        <TrimToolbar
+          clipName={trimmingClip.name}
+          timelineStart={trimmingClip.timelineStart ?? 0}
+          duration={trimmingClip.duration}
+          startOffset={trimmingClip.startOffset ?? 0}
+          onApply={applyTrim}
+          onCancel={cancelTrim}
+          onReset={resetTrim}
+        />
+      )}
 
       {/* ---------------- MAIN WORKSPACE GRID ---------------- */}
       <div className="flex-1 grid grid-cols-[280px_1fr_300px] overflow-hidden">
@@ -2688,7 +2847,42 @@ function EditorMainScreenContent() {
               />
             )}
 
-            {(activeTab === 'effects' || activeTab === 'transitions' || activeTab === 'filters') && (
+            {activeTab === 'transitions' && (
+              <Transitions
+                activeTransitionId={activeTransitionId}
+                onSelectTransition={handleSelectTransition}
+                showBeforeOnly={showBeforeOnly}
+                onShowBeforeOnlyChange={setShowBeforeOnly}
+              />
+            )}
+
+            {activeTab === 'filters' && (
+              <Filters
+                activeFilterId={activeFilterId}
+                onSelectFilter={(id) => {
+                  setActiveFilterId(id);
+                  if (id) {
+                    setFilterEnabled(true);
+                    showToast('Filter applied');
+                  } else {
+                    showToast('Filter cleared');
+                  }
+                }}
+                filterIntensity={filterIntensity}
+                onFilterIntensityChange={setFilterIntensity}
+                filterOpacity={filterOpacity}
+                onFilterOpacityChange={setFilterOpacity}
+                filterBlendMode={filterBlendMode}
+                onFilterBlendModeChange={setFilterBlendMode}
+                filterEnabled={filterEnabled}
+                onFilterEnabledChange={setFilterEnabled}
+                showBeforeOnly={showBeforeOnly}
+                onShowBeforeOnlyChange={setShowBeforeOnly}
+                onHoverFilter={setPreviewFilterId}
+              />
+            )}
+
+            {activeTab === 'effects' && (
               <Effects
                 timelineClips={timelineClips}
                 currentTime={currentTime}
@@ -2715,11 +2909,6 @@ function EditorMainScreenContent() {
                 showBeforeOnly={showBeforeOnly}
                 onShowBeforeOnlyChange={setShowBeforeOnly}
                 onHoverFilter={setPreviewFilterId}
-                effectsSubTab={activeTab === 'transitions' ? 'transitions' : activeTab === 'filters' ? 'filters' : effectsSubTab}
-                onSubTabChange={(sub) => {
-                  setEffectsSubTab(sub);
-                  setActiveTab(sub);
-                }}
                 activeAppliedEffectId={activeAppliedEffectId}
                 onSetActiveAppliedEffectId={setActiveAppliedEffectId}
                 onAddAppliedEffect={handleAddAppliedEffect}
@@ -2925,13 +3114,16 @@ function EditorMainScreenContent() {
               >
                 {(() => {
                   const { states: transitionStates, overlayColor: transitionOverlayColor } = getTransitionStatesForClips();
-                  const totalDur = getProjectTotalDuration(timelineClips);
-                  const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
-                    (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
+                  const videoClipsOnly = timelineClips.filter(
+                    (c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio
+                  );
+                  const totalDur = getProjectTotalDuration(videoClipsOnly);
+                  const activeClip = videoClipsOnly.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
+                    (currentTime >= totalDur ? videoClipsOnly[videoClipsOnly.length - 1] : videoClipsOnly[0]);
 
-                  return timelineClips.length > 0 ? (
+                  return videoClipsOnly.length > 0 ? (
                     <>
-                      {timelineClips.map((clip) => {
+                      {videoClipsOnly.map((clip) => {
                         const isClipActive = activeClip?.id === clip.id;
                         const tState = transitionStates[clip.id] || { display: isClipActive, opacity: 1, filter: '', transform: '', zIndex: 1 };
                         const localTime = (currentTime - clip.timelineStart) + clip.startOffset;
@@ -3369,11 +3561,19 @@ function EditorMainScreenContent() {
 
                         const isImageOrFreeze = clip.isFreezeFrame || clip.type === 'image' || clip.type === 'freeze' || (clip.url && (clip.url.startsWith('data:image/') || clip.url.endsWith('.png') || clip.url.endsWith('.jpg') || clip.url.endsWith('.jpeg') || clip.url.endsWith('.webp')));
 
+                        const isPreWarming = preWarmingClipIdRef.current === clip.id;
+                        const isVisible = tState.display || isPreWarming;
+
                         return (
                           <div
                             key={clip.id}
                             className="absolute inset-0 pointer-events-none"
-                            style={{ display: tState.display ? 'block' : 'none', zIndex: tState.zIndex }}
+                            style={{
+                              display: isVisible ? 'block' : 'none',
+                              opacity: tState.display ? finalOpacity : 0,
+                              zIndex: tState.display ? tState.zIndex : 0,
+                              visibility: isVisible ? 'visible' : 'hidden'
+                            }}
                           >
                             {isImageOrFreeze ? (
                               <img
@@ -3457,36 +3657,74 @@ function EditorMainScreenContent() {
 
                 {/* Text Overlays Layer */}
                 {textOverlays
-                  .filter((overlay) => currentTime >= (overlay.startTime ?? 0) && currentTime <= (overlay.startTime ?? 0) + 5)
-                  .map((overlay) => (
-                    <div
-                      key={overlay.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveOverlayId(overlay.id);
-                        setActiveTab('text');
-                      }}
-                      className={`absolute cursor-pointer select-none transition-all hover:scale-105 active:scale-95 ${activeOverlayId === overlay.id ? 'ring-1 ring-sky-400 rounded px-1' : ''
+                  .filter((overlay) => currentTime >= (overlay.startTime ?? 0) && currentTime <= (overlay.startTime ?? 0) + (overlay.duration ?? 5))
+                  .map((overlay) => {
+                    const isSelected = activeOverlayId === overlay.id;
+                    const scaleVal = overlay.scale ?? 1;
+                    const rotVal = overlay.rotation ?? 0;
+                    const posXVal = overlay.posX ?? 0;
+                    const posYVal = overlay.posY ?? 0;
+                    const flipHVal = overlay.flipH ? -1 : 1;
+                    const flipVVal = overlay.flipV ? -1 : 1;
+
+                    // Glow & Neon shadows
+                    let shadows: string[] = [];
+                    if (overlay.shadow) {
+                      shadows.push(`${overlay.shadowOffsetX ?? 2}px ${overlay.shadowOffsetY ?? 2}px ${overlay.shadowBlur ?? 6}px ${overlay.shadowColor || 'rgba(0,0,0,0.6)'}`);
+                    }
+                    if (overlay.glow) {
+                      shadows.push(`0 0 12px ${overlay.glowColor || '#38bdf8'}`);
+                    }
+                    if (overlay.neon) {
+                      shadows.push(`0 0 5px #fff, 0 0 10px #fff, 0 0 20px #ec4899, 0 0 30px #ec4899`);
+                    }
+
+                    const bgHex = overlay.bgColor || '#000000';
+
+                    return (
+                      <div
+                        key={overlay.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveOverlayId(overlay.id);
+                          setActiveTab('text');
+                        }}
+                        className={`absolute cursor-pointer select-none transition-all ${
+                          isSelected ? 'ring-2 ring-sky-400 ring-offset-2 ring-offset-black/50 rounded-lg p-1 z-30' : 'z-20'
                         }`}
-                      style={{
-                        color: overlay.color,
-                        fontFamily: overlay.font,
-                        fontSize: `${overlay.size * canvasScale * 0.45}px`,
-                        textAlign: overlay.align,
-                        fontWeight: overlay.bold ? 'bold' : 'normal',
-                        fontStyle: overlay.italic ? 'italic' : 'normal',
-                        textDecoration: overlay.underline ? 'underline' : 'none',
-                        textShadow: overlay.shadow ? `2px 2px ${overlay.shadowBlur}px ${overlay.shadowColor}` : 'none',
-                        WebkitTextStroke: overlay.stroke ? `${overlay.strokeWidth}px ${overlay.strokeColor}` : 'none',
-                        top: '45%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        zIndex: 20
-                      }}
-                    >
-                      {overlay.text}
-                    </div>
-                  ))}
+                        style={{
+                          color: overlay.color,
+                          fontFamily: overlay.font,
+                          fontSize: `${overlay.size * canvasScale * 0.45}px`,
+                          fontWeight: overlay.weight || (overlay.bold ? 'bold' : 'normal'),
+                          fontStyle: overlay.italic ? 'italic' : 'normal',
+                          textAlign: overlay.align || 'center',
+                          textDecoration: [
+                            overlay.underline ? 'underline' : '',
+                            overlay.strikethrough ? 'line-through' : ''
+                          ].filter(Boolean).join(' ') || 'none',
+                          letterSpacing: overlay.letterSpacing ? `${overlay.letterSpacing * canvasScale * 0.45}px` : 'normal',
+                          lineHeight: overlay.lineHeight || 1.2,
+                          textTransform: overlay.textTransform || 'none',
+                          backgroundColor: overlay.bgOpacity ? `${bgHex}${Math.round((overlay.bgOpacity / 100) * 255).toString(16).padStart(2, '0')}` : 'transparent',
+                          opacity: (overlay.opacity ?? 100) / 100,
+                          textShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
+                          WebkitTextStroke: overlay.stroke ? `${(overlay.strokeWidth || 2) * canvasScale * 0.45}px ${overlay.strokeColor || '#000000'}` : 'none',
+                          background: overlay.gradientText || undefined,
+                          WebkitBackgroundClip: overlay.gradientText ? 'text' : undefined,
+                          WebkitTextFillColor: overlay.gradientText ? 'transparent' : undefined,
+                          top: `calc(45% + ${posYVal}px)`,
+                          left: `calc(50% + ${posXVal}px)`,
+                          transform: `translate(-50%, -50%) rotate(${rotVal}deg) scale(${scaleVal * flipHVal}, ${scaleVal * flipVVal})`,
+                          filter: overlay.blur ? `blur(${overlay.blur}px)` : undefined,
+                          padding: overlay.bgOpacity ? '4px 10px' : undefined,
+                          borderRadius: overlay.bgOpacity ? '6px' : undefined,
+                        }}
+                      >
+                        {overlay.text}
+                      </div>
+                    );
+                  })}
 
                 {/* Captions / Subtitles Overlay */}
                 {(() => {
@@ -3652,6 +3890,29 @@ function EditorMainScreenContent() {
               title="Redo"
             >
               <RotateCcw className="h-3.5 w-3.5 transform -scale-x-100" />
+            </button>
+            <div className="h-3.5 w-px bg-surface/10 mx-1" />
+
+            {/* Production Trim Mode Toggle Button */}
+            <button
+              type="button"
+              onClick={() => {
+                const targetId = activeSelectedClipId || activeMediaId || (activeSelectedClip?.id);
+                if (targetId) {
+                  enterTrimMode(targetId, zoomLevel);
+                } else {
+                  showToast('Select a clip to enter Trim Mode');
+                }
+              }}
+              className={`px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition ${
+                isTrimModeActive
+                  ? 'bg-sky-500 text-slate-950 shadow-md'
+                  : 'bg-surface-hover hover:bg-surface-hover/80 text-foreground'
+              }`}
+              title="Enter Frame-Accurate Trim Mode (Ctrl+T)"
+            >
+              <Sliders className="h-3.5 w-3.5" />
+              <span>Trim</span>
             </button>
             <div className="h-3.5 w-px bg-surface/10 mx-1" />
           </div>
@@ -3881,7 +4142,7 @@ function EditorMainScreenContent() {
                                   style={{ left: `${clipLeftPx}px`, width: `${clipWidthPx}px`, top: `${topPx}px` }}
                                   title={`${clip.name} (${formatTimecode(clip.duration)})`}
                                 >
-                                  {isSelected && !isLocked && (
+                                  {(isTrimModeActive ? trimmingClipId === clip.id : isSelected) && !isLocked && (
                                     <ClipTrimHandles
                                       clipId={clip.id}
                                       timelineStart={startSec}
@@ -3891,9 +4152,10 @@ function EditorMainScreenContent() {
                                       pixelsPerSecond={pxPerSec}
                                       playbackRate={clip.playbackRate || 1}
                                       isLocked={isLocked}
+                                      playheadTime={currentTime}
                                       onTrimStart={(edge) => beginTransaction(`Trim audio clip ${edge}`, getProjectState())}
-                                      onTrimUpdate={(newTimelineStart, newSourceStart, newDuration) => {
-                                        handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration);
+                                      onTrimUpdate={(newTimelineStart, newSourceStart, newDuration, activeEdgeTime) => {
+                                        handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration, activeEdgeTime);
                                       }}
                                       onTrimEnd={handleTrimCommit}
                                     />
@@ -3969,7 +4231,10 @@ function EditorMainScreenContent() {
                       <div className="relative flex-1 h-full border-b border-border px-0 flex items-center">
                         {textOverlays.map((overlay) => {
                           const leftPx = (overlay.startTime ?? 0) * pxPerSec;
-                          const widthPx = 5 * pxPerSec; // default 5s duration for text overlays
+                          const durSec = overlay.duration ?? 5;
+                          const widthPx = Math.max(24, durSec * pxPerSec);
+                          const isSelected = activeOverlayId === overlay.id;
+
                           return (
                             <div
                               key={overlay.id}
@@ -3979,11 +4244,74 @@ function EditorMainScreenContent() {
                                 setActiveTab('text');
                                 handleSeek(overlay.startTime ?? 0);
                               }}
-                              className={`absolute h-5 rounded bg-amber-500/25 border text-[9px] px-1.5 truncate flex items-center font-mono cursor-pointer transition top-1.5 ${activeOverlayId === overlay.id ? 'border-amber-400 ring-1 ring-amber-400 bg-amber-500/40' : 'border-amber-500/35'
-                                }`}
-                              style={{ left: `${leftPx}px`, width: `${widthPx}px`, zIndex: 10 }}
+                              className={`absolute h-6 rounded bg-amber-500/25 border text-[9px] px-1.5 truncate flex items-center justify-between font-mono cursor-pointer transition top-1 select-none ${
+                                isSelected ? 'border-amber-400 ring-2 ring-amber-400/50 bg-amber-500/40 text-amber-100 z-20 shadow-glow' : 'border-amber-500/35 text-amber-200 hover:border-amber-400/60 z-10'
+                              }`}
+                              style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                              title={`Text: ${overlay.text} (${durSec.toFixed(1)}s)`}
                             >
-                              ✍️ {overlay.text}
+                              {/* Left Trim Handle (Start Time & Duration adjustment) */}
+                              <div
+                                className="absolute left-0 top-0 bottom-0 w-2.5 bg-amber-400/60 hover:bg-amber-300 cursor-ew-resize flex items-center justify-center rounded-l"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  const startX = e.clientX;
+                                  const initialStart = overlay.startTime ?? 0;
+                                  const initialDur = overlay.duration ?? 5;
+
+                                  const onMouseMove = (moveEv: MouseEvent) => {
+                                    const deltaX = moveEv.clientX - startX;
+                                    const deltaSec = deltaX / pxPerSec;
+                                    const newStart = Math.max(0, initialStart + deltaSec);
+                                    const newDur = Math.max(0.5, initialDur - (newStart - initialStart));
+                                    handleUpdateTextOverlay(overlay.id, { startTime: newStart, duration: newDur });
+                                  };
+
+                                  const onMouseUp = () => {
+                                    window.removeEventListener('mousemove', onMouseMove);
+                                    window.removeEventListener('mouseup', onMouseUp);
+                                  };
+
+                                  window.addEventListener('mousemove', onMouseMove);
+                                  window.addEventListener('mouseup', onMouseUp);
+                                }}
+                              >
+                                <div className="w-0.5 h-3 bg-slate-950 rounded-full" />
+                              </div>
+
+                              {/* Center Text Label */}
+                              <div className="px-3 truncate flex items-center gap-1 min-w-0 flex-1">
+                                <span>✍️</span>
+                                <span className="truncate font-semibold">{overlay.text}</span>
+                                <span className="text-[7.5px] opacity-75">({durSec.toFixed(1)}s)</span>
+                              </div>
+
+                              {/* Right Trim Handle (Extend / Shorten duration) */}
+                              <div
+                                className="absolute right-0 top-0 bottom-0 w-2.5 bg-amber-400/60 hover:bg-amber-300 cursor-ew-resize flex items-center justify-center rounded-r"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  const startX = e.clientX;
+                                  const initialDur = overlay.duration ?? 5;
+
+                                  const onMouseMove = (moveEv: MouseEvent) => {
+                                    const deltaX = moveEv.clientX - startX;
+                                    const deltaSec = deltaX / pxPerSec;
+                                    const newDur = Math.max(0.5, initialDur + deltaSec);
+                                    handleUpdateTextOverlay(overlay.id, { duration: newDur });
+                                  };
+
+                                  const onMouseUp = () => {
+                                    window.removeEventListener('mousemove', onMouseMove);
+                                    window.removeEventListener('mouseup', onMouseUp);
+                                  };
+
+                                  window.addEventListener('mousemove', onMouseMove);
+                                  window.addEventListener('mouseup', onMouseUp);
+                                }}
+                              >
+                                <div className="w-0.5 h-3 bg-slate-950 rounded-full" />
+                              </div>
                             </div>
                           );
                         })}
@@ -4075,7 +4403,7 @@ function EditorMainScreenContent() {
                                 style={{ left: `${clipLeftPx}px`, width: `${clipComputedWidth}px` }}
                               >
                                 {/* Left Trim handle bar */}
-                                {isSelected && !isLocked && (
+                                {(isTrimModeActive ? trimmingClipId === clip.id : isSelected) && !isLocked && (
                                   <ClipTrimHandles
                                     clipId={clip.id}
                                     timelineStart={clip.timelineStart}
@@ -4085,9 +4413,10 @@ function EditorMainScreenContent() {
                                     pixelsPerSecond={pxPerSec}
                                     playbackRate={clip.playbackRate || 1}
                                     isLocked={isLocked}
+                                    playheadTime={currentTime}
                                     onTrimStart={(edge) => beginTransaction(`Trim clip ${edge}`, getProjectState())}
-                                    onTrimUpdate={(newTimelineStart, newSourceStart, newDuration) => {
-                                      handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration);
+                                    onTrimUpdate={(newTimelineStart, newSourceStart, newDuration, activeEdgeTime) => {
+                                      handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration, activeEdgeTime);
                                     }}
                                     onTrimEnd={handleTrimCommit}
                                   />
@@ -4222,7 +4551,7 @@ function EditorMainScreenContent() {
           isLocked={!!(activeSelectedClip && (lockedClips[activeSelectedClip.id] || activeSelectedClip.isLocked))}
           isMuted={isMuted || !!(activeSelectedClip && (mutedClips[activeSelectedClip.id] || activeSelectedClip.isMuted))}
           hasClipboardPayload={false}
-          onAction={(actionId) => handleMenuAction(actionId, activeSelectedClip?.id || '')}
+          onAction={(actionId: string) => handleMenuAction(actionId, activeSelectedClip?.id || '')}
         />
       </footer>
 

@@ -4,7 +4,7 @@ import {
   ZoomOut, Lock, Unlock, Eye, EyeOff, Volume2, VolumeX, Bookmark
 } from 'lucide-react';
 import { ClipActionsPanel } from '../../clip-actions/ClipActionsPanel';
-import { ClipTrimHandles } from '../../trim/ClipTrimHandles';
+import { ClipTrimHandles } from '../../tools/trim';
 import { useDuplicate } from '../../tools/duplicate';
 import { useRename, RenameDialog } from '../../tools/rename';
 import { useReverse } from '../../tools/reverse';
@@ -633,7 +633,7 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
                                 duration={clip.duration}
                                 pixelsPerSecond={scaleFactor}
                                 isLocked={clipIsLocked}
-                                onTrimUpdate={(newTimelineStart, newSourceStart, newDuration) => {
+                                onTrimUpdate={(newTimelineStart: number, newSourceStart: number, newDuration: number) => {
                                   handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration);
                                 }}
                                 onTrimEnd={handleTrimEnd}
