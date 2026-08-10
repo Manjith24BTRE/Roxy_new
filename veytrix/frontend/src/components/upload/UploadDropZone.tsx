@@ -23,7 +23,7 @@ export function UploadDropZone({ activeTab, onFilesSelected }: UploadDropZonePro
         onFilesSelected(e.dataTransfer.files);
       }}
       onClick={() => fileInputRef.current?.click()}
-      className={`relative rounded-[28px] border-2 border-dashed p-10 text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center min-h-[220px] bg-white/70 backdrop-blur-md ${
+      className={`relative rounded-[28px] border-2 border-dashed p-6 md:p-10 text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center min-h-[180px] md:min-h-[220px] bg-white/70 backdrop-blur-md ${
         isDragging
           ? 'border-[#3B6CE7] bg-[#3B6CE7]/5 scale-[1.01] shadow-[0_12px_30px_rgba(59,108,231,0.1)]'
           : 'border-[#1D2B64]/10 hover:border-[#3B6CE7]/50 hover:bg-white/90 shadow-[0_8px_30px_rgba(29,43,100,0.01)]'

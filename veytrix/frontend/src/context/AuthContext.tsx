@@ -7,7 +7,20 @@ export interface UserProfileData {
   id: string;
   email: string | null;
   display_name: string | null;
+  full_name?: string | null;
   avatar_url: string | null;
+  username?: string | null;
+  phone?: string | null;
+  country?: string | null;
+  language?: string | null;
+  timezone?: string | null;
+  bio?: string | null;
+  occupation?: string | null;
+  company?: string | null;
+  website?: string | null;
+  portfolio?: string | null;
+  social_links?: Record<string, string> | null;
+  socialLinks?: Record<string, string> | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -15,6 +28,7 @@ export interface UserProfileData {
 export interface SignUpResult {
   session: Session | null;
   user: User | null;
+  isExistingUser?: boolean;
 }
 
 type AuthModalMode = 'signin' | 'signup' | 'forgot' | null;
@@ -37,39 +51,11 @@ interface AuthContextValue {
   signInWithEmail: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   signUpWithEmail: (email: string, password: string, fullName: string) => Promise<SignUpResult>;
   signInWithGoogle: () => Promise<void>;
-  signInAsDemo: () => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   syncProfile: () => Promise<UserProfileData | null>;
+  updateUserProfile: (data: Partial<UserProfileData>) => Promise<UserProfileData | null>;
 }
-
-const DEV_SESSION_KEY = 'veytrix_auth_dev_session';
-
-const saveDevSession = (sess: Session | null, u: User | null, p: UserProfileData | null) => {
-  if (sess) {
-    try {
-      localStorage.setItem(DEV_SESSION_KEY, JSON.stringify({ session: sess, user: u, profile: p }));
-    } catch {
-      // ignore
-    }
-  } else {
-    try {
-      localStorage.removeItem(DEV_SESSION_KEY);
-    } catch {
-      // ignore
-    }
-  }
-};
-
-const getDevSession = () => {
-  try {
-    const raw = localStorage.getItem(DEV_SESSION_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    // ignore
-  }
-  return null;
-};
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
@@ -86,16 +72,34 @@ const AuthContext = createContext<AuthContextValue>({
   signInWithEmail: async () => {},
   signUpWithEmail: async () => ({ session: null, user: null }),
   signInWithGoogle: async () => {},
-  signInAsDemo: async () => {},
   signOut: async () => {},
   resetPassword: async () => {},
   syncProfile: async () => null,
+  updateUserProfile: async () => null,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfileData | null>(null);
+  const [userProfile, setUserProfileState] = useState<UserProfileData | null>(() => {
+    try {
+      const stored = localStorage.getItem('veytrix_user_profile');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const setUserProfile = useCallback((profileOrUpdater: UserProfileData | null | ((prev: UserProfileData | null) => UserProfileData | null)) => {
+    setUserProfileState(prev => {
+      const next = typeof profileOrUpdater === 'function' ? profileOrUpdater(prev) : profileOrUpdater;
+      if (next) {
+        try { localStorage.setItem('veytrix_user_profile', JSON.stringify(next)); } catch {}
+      }
+      return next;
+    });
+  }, []);
+
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authModalMode, setAuthModalMode] = useState<AuthModalMode>(null);
   const [redirectAfterLogin, setRedirectAfterLogin] = useState<string | null>(null);
@@ -113,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       const token = currentSession?.access_token || null;
-      if (token && token === lastSyncTokenRef.current) {
+      if (token && token === lastSyncTokenRef.current && userProfile) {
         return userProfile;
       }
       lastSyncTokenRef.current = token;
@@ -121,14 +125,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await apiRequest<{ success: boolean; profile?: UserProfileData; user?: UserProfileData }>('/auth/me');
       const profileData = res?.profile || res?.user || null;
       if (profileData) {
-        setUserProfile(profileData);
+        setUserProfile(prev => prev ? { ...profileData, ...prev } : profileData);
         return profileData;
       }
     } catch (err) {
       console.warn('Backend profile sync notice:', err);
     }
-    return null;
-  }, [userProfile]);
+    return userProfile;
+  }, [userProfile, setUserProfile]);
 
   useEffect(() => {
     let isMounted = true;
@@ -141,16 +145,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session);
         setUser(session.user);
         syncProfile();
-        setIsLoading(false);
       } else {
-        const dev = getDevSession();
-        if (dev && dev.session) {
-          setSession(dev.session);
-          setUser(dev.user);
-          setUserProfile(dev.profile);
-        }
-        setIsLoading(false);
+        setSession(null);
+        setUser(null);
+        setUserProfile(null);
       }
+      setIsLoading(false);
     });
 
     // Listen for auth changes
@@ -161,20 +161,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session);
         setUser(session.user);
         await syncProfile();
-        setIsLoading(false);
       } else {
-        const dev = getDevSession();
-        if (dev && dev.session) {
-          setSession(dev.session);
-          setUser(dev.user);
-          setUserProfile(dev.profile);
-        } else {
-          setSession(null);
-          setUser(null);
-          setUserProfile(null);
-        }
-        setIsLoading(false);
+        setSession(null);
+        setUser(null);
+        setUserProfile(null);
       }
+      setIsLoading(false);
     });
 
     return () => {
@@ -195,7 +187,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
 
-      saveDevSession(null, null, null);
       setSession(data.session);
       setUser(data.user);
       if (data.session) {
@@ -224,67 +215,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
 
+      const isExistingUser = !!(
+        data.user &&
+        Array.isArray(data.user.identities) &&
+        data.user.identities.length === 0
+      );
+
       if (data.session) {
-        saveDevSession(null, null, null);
         setSession(data.session);
         setUser(data.user);
         await syncProfile();
       }
 
-      return { session: data.session, user: data.user };
+      return { session: data.session, user: data.user, isExistingUser };
     } finally {
       setIsLoading(false);
     }
   }, [syncProfile]);
 
-  const signInAsDemo = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const devUser = {
-        id: 'demo-creator-id-100',
-        email: 'creator@veytrix.ai',
-        user_metadata: {
-          full_name: 'Veytrix Creator',
-          name: 'Veytrix Creator',
-          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-        },
-        app_metadata: { provider: 'demo' },
-        created_at: new Date().toISOString(),
-      } as any;
-
-      const devSession = {
-        access_token: 'dev-demo-access-token',
-        token_type: 'bearer',
-        user: devUser,
-      } as any;
-
-      const devProfile = {
-        id: devUser.id,
-        email: devUser.email,
-        display_name: devUser.user_metadata.full_name,
-        avatar_url: devUser.user_metadata.avatar_url,
-        created_at: devUser.created_at,
-        updated_at: devUser.created_at,
-      };
-
-      saveDevSession(devSession, devUser, devProfile);
-      setSession(devSession);
-      setUser(devUser);
-      setUserProfile(devProfile);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
   const signInWithGoogle = useCallback(async () => {
-    return signInAsDemo();
-  }, [signInAsDemo]);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/home`,
+      },
+    });
+    if (error) throw error;
+  }, []);
 
   const signOut = useCallback(async () => {
     setIsLoading(true);
     try {
       await supabase.auth.signOut();
-      saveDevSession(null, null, null);
       setSession(null);
       setUser(null);
       setUserProfile(null);
@@ -299,6 +261,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (error) throw error;
   }, []);
+
+  const updateUserProfile = useCallback(async (data: Partial<UserProfileData>): Promise<UserProfileData | null> => {
+    let updatedProfile: UserProfileData | null = null;
+    try {
+      const res = await apiRequest<{ success: boolean; profile?: UserProfileData; user?: UserProfileData }>('/auth/me/profile', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+
+      const updated = res?.profile || res?.user || null;
+      if (updated) {
+        updatedProfile = updated;
+      }
+    } catch (err) {
+      console.warn('Backend profile update notice:', err);
+    }
+
+    if (!updatedProfile) {
+      updatedProfile = {
+        id: userProfile?.id || '00000000-0000-0000-0000-000000000001',
+        email: userProfile?.email || 'member@mavros.in',
+        display_name: data.display_name || userProfile?.display_name || 'Mavros Member',
+        avatar_url: data.avatar_url || userProfile?.avatar_url || null,
+        created_at: userProfile?.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        ...userProfile,
+        ...data,
+      };
+    }
+
+    setUserProfile(updatedProfile);
+    return updatedProfile;
+  }, [userProfile]);
 
   return (
     <AuthContext.Provider
@@ -317,10 +312,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,
-        signInAsDemo,
         signOut,
         resetPassword,
         syncProfile,
+        updateUserProfile,
       }}
     >
       {children}

@@ -6,6 +6,6 @@
   "scripts": {
     "dev": ".venv\\Scripts\\python main.py",
     "start": ".venv\\Scripts\\python main.py",
-    "test": "pytest"
+    "test": ".venv\\Scripts\\pytest"
   }
 }

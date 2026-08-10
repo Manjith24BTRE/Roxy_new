@@ -1,6 +1,32 @@
 // settings.types.ts
-// Purpose: Types for the settings feature.
-// Responsibilities: TODO
-// Dependencies: TODO
-// Future Implementation: TODO
-export {}; // placeholder
+// Strict interfaces for Settings feature (Phase 1A: Account & Profile Settings)
+
+export interface AccountSettingsData {
+  displayName: string;
+  username: string;
+  email: string;
+  phone: string;
+  country: string;
+  language: string;
+  timezone: string;
+  avatarUrl?: string;
+}
+
+export interface ProfileSettingsData {
+  bio: string;
+  occupation: string;
+  company: string;
+  website: string;
+  portfolio: string;
+  socialLinks: {
+    linkedin: string;
+    instagram: string;
+    twitter: string;
+  };
+}
+
+export interface SettingsSaveResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}

@@ -1,5 +1,6 @@
 // src/components/editor-main-screen/tools/project-save/ProjectDB.ts
 import { ProjectSavePayload } from './projectSave.types';
+import { syncService } from '../../../../services/sync.service';
 
 const DB_NAME = 'veytrix_projects_db';
 const DB_VERSION = 1;
@@ -100,11 +101,16 @@ export class ProjectDB {
       } catch (e) {
         // Ignore localStorage quota errors if IndexedDB succeeded
       }
+
+      // Background cloud sync to Supabase
+      syncService.queueSync(projectData).catch((e) => console.warn('Background sync queue error:', e));
+
       return true;
     } catch (err) {
       console.warn('IndexedDB save failed, attempting LocalStorage fallback:', err);
       try {
         localStorage.setItem(`${LOCAL_STORAGE_KEY_PREFIX}${payload.id}`, JSON.stringify(projectData));
+        syncService.queueSync(projectData).catch((e) => console.warn('Background sync queue error:', e));
         return true;
       } catch (fallbackErr) {
         console.error('LocalStorage fallback save failed:', fallbackErr);
@@ -143,5 +149,72 @@ export class ProjectDB {
     }
 
     return null;
+  }
+
+  /**
+   * Retrieves all saved projects from IndexedDB, LocalStorage fallback, and Supabase cloud.
+   */
+  public static async getAllProjects(): Promise<ProjectSavePayload[]> {
+    const projectsMap = new Map<string, ProjectSavePayload>();
+
+    // 1. Fetch from IndexedDB
+    try {
+      const db = await this.getDB();
+      const idbProjects = await new Promise<ProjectSavePayload[]>((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+
+      for (const p of idbProjects) {
+        if (p && p.id) {
+          projectsMap.set(p.id, p);
+        }
+      }
+    } catch (err) {
+      console.warn('IndexedDB getAllProjects failed, checking LocalStorage fallback:', err);
+    }
+
+    // 2. Scan LocalStorage fallback keys
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(LOCAL_STORAGE_KEY_PREFIX)) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const p = JSON.parse(raw) as ProjectSavePayload;
+            if (p && p.id && !projectsMap.has(p.id)) {
+              projectsMap.set(p.id, p);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Ignore localStorage read errors
+    }
+
+    // 3. Merge remote projects from Supabase in background
+    try {
+      const remoteProjects = await syncService.fetchRemoteProjects();
+      for (const rp of remoteProjects) {
+        if (rp && rp.id) {
+          const existing = projectsMap.get(rp.id);
+          // If remote is newer or local does not exist, update local cache
+          if (!existing || (rp.updatedAt && rp.updatedAt > (existing.updatedAt || 0))) {
+            projectsMap.set(rp.id, rp);
+            // Cache to local IndexedDB
+            this.saveProject(rp).catch(() => {});
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Supabase remote fetch warning:', e);
+    }
+
+    const result = Array.from(projectsMap.values());
+    result.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    return result;
   }
 }

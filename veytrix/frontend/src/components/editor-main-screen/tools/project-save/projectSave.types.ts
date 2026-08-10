@@ -15,6 +15,7 @@ export interface ProjectSavePayload {
   isMuted: boolean;
   mutedClips: Record<string, boolean>;
   lockedClips: Record<string, boolean>;
+  syncStatus?: 'synced' | 'pending' | 'conflict' | 'error';
   pxPerSec?: number;
   zoomLevel?: number;
   mediaFiles?: any[];

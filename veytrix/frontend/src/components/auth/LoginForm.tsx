@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, Loader2, Sparkles, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 export function LoginForm() {
-  const { signInWithEmail, signInWithGoogle, signInAsDemo, openAuthModal, closeAuthModal, redirectAfterLogin, setRedirectAfterLogin } = useAuth();
+  const { signInWithEmail, signInWithGoogle, openAuthModal, closeAuthModal, redirectAfterLogin, setRedirectAfterLogin } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,18 +27,6 @@ export function LoginForm() {
       setError(err?.message || 'Invalid email or password.');
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleDemoSignIn = async () => {
-    setError(null);
-    try {
-      await signInAsDemo();
-      closeAuthModal();
-      setRedirectAfterLogin(null);
-      navigate('/home');
-    } catch (err: any) {
-      setError(err?.message || 'Failed to enter workspace.');
     }
   };
 
@@ -66,17 +54,6 @@ export function LoginForm() {
           {error}
         </div>
       )}
-
-      {/* Instant Demo */}
-      <button
-        type="button"
-        onClick={handleDemoSignIn}
-        className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#3B6CE7]/10 border border-[#3B6CE7]/20 px-4 py-3 text-xs font-bold text-[#3B6CE7] hover:bg-[#3B6CE7]/15 transition shadow-sm"
-      >
-        <Sparkles size={14} className="animate-pulse" />
-        <span>Enter Workspace Instant Demo</span>
-        <ArrowRight size={14} />
-      </button>
 
       {/* Google button */}
       <button

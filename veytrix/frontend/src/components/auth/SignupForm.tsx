@@ -22,12 +22,14 @@ export function SignupForm() {
 
     try {
       const res = await signUpWithEmail(email, password, fullName);
-      if (res.session) {
+      if (res.isExistingUser) {
+        setError("This email is already registered. Please sign in.");
+      } else if (res.session) {
         closeAuthModal();
         setRedirectAfterLogin(null);
         navigate('/home');
       } else {
-        setSuccessMsg("Registration initiated. Please check your inbox for verification code.");
+        setSuccessMsg("Verification email sent. Please check your inbox.");
       }
     } catch (err: any) {
       setError(err?.message || 'Failed to sign up.');

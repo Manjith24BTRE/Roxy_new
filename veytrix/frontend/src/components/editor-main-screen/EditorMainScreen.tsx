@@ -1,6 +1,6 @@
 import './theme/editorTheme.css';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Save, Download, Film, Type, AudioWaveform,
   Wand2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
@@ -76,7 +76,9 @@ export function EditorMainScreen() {
 
 function EditorMainScreenContent() {
   const navigate = useNavigate();
-  const { projectId, projectTitle, mediaFiles, activeMediaId, setActiveMediaId, addMediaFiles, updateMediaName, clearMedia } = useProjectMedia();
+  const [searchParams] = useSearchParams();
+  const urlProjectId = searchParams.get('project');
+  const { projectId, projectTitle, setProjectTitle, mediaFiles, activeMediaId, setActiveMediaId, addMediaFiles, updateMediaName, clearMedia } = useProjectMedia();
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
   const importFileInputRef = useRef<HTMLInputElement>(null);
@@ -2543,9 +2545,12 @@ function EditorMainScreenContent() {
 
   // Project Save & Restore initialization
   const getProjectPayload = useCallback(() => {
+    const currentSaveId = urlProjectId || projectId || (displayVideoName !== 'untitled-project.vxp' ? displayVideoName : 'default_project');
+    const currentSaveName = (projectTitle && projectTitle !== 'My Project' ? projectTitle : null) || (displayVideoName !== 'untitled-project.vxp' ? displayVideoName : 'Untitled Project');
+
     return {
-      id: displayVideoName || 'default_project',
-      name: displayVideoName || 'Untitled Project',
+      id: currentSaveId,
+      name: currentSaveName,
       updatedAt: Date.now(),
       timelineClips,
       textOverlays,
@@ -2562,6 +2567,9 @@ function EditorMainScreenContent() {
       mediaFiles,
     };
   }, [
+    urlProjectId,
+    projectId,
+    projectTitle,
     displayVideoName,
     timelineClips,
     textOverlays,
@@ -2579,6 +2587,49 @@ function EditorMainScreenContent() {
   ]);
 
   const { performSave, isSaving } = useProjectSave(getProjectPayload, showToast);
+
+  // Restore saved project state from ProjectDB if project query param is present
+  useEffect(() => {
+    if (!urlProjectId) return;
+    let isMounted = true;
+
+    ProjectDB.loadProject(urlProjectId).then((payload) => {
+      if (!isMounted || !payload) return;
+
+      if (payload.name) {
+        setProjectTitle(payload.name);
+      }
+      if (Array.isArray(payload.timelineClips) && payload.timelineClips.length > 0) {
+        setTimelineClipsState(payload.timelineClips);
+      }
+      if (Array.isArray(payload.textOverlays)) {
+        setTextOverlays(payload.textOverlays);
+      }
+      if (Array.isArray(payload.captions)) {
+        setCaptions(payload.captions);
+      }
+      if (typeof payload.volume === 'number') {
+        setVolumeState(payload.volume);
+      }
+      if (typeof payload.isMuted === 'boolean') {
+        setIsMutedState(payload.isMuted);
+      }
+      if (payload.mutedClips) {
+        setMutedClipsState(payload.mutedClips);
+      }
+      if (payload.lockedClips) {
+        setLockedClipsState(payload.lockedClips);
+      }
+      if (payload.aspectRatio) {
+        setAspectRatio(payload.aspectRatio);
+      }
+      showToast(`Restored project: ${payload.name || 'Untitled'}`);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [urlProjectId, setProjectTitle]);
 
   // Production Trim Mode hook initialization
   const {
