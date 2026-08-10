@@ -52,6 +52,8 @@ import {
 import { ClipTrimHandles, TrimToolbar, useTrimMode } from './tools/trim';
 import { ClipActionsPanel } from './clip-actions/ClipActionsPanel';
 import { EditorHistoryProvider, useEditorHistory, ProjectState } from './history';
+import { OverlapUtils } from './tools/overlap/overlapUtils';
+import { ClipReorderUtils } from './tools/overlap/clipReorderUtils';
 
 const getProjectTotalDuration = (clips: any[]): number => {
   if (!clips || clips.length === 0) return 0;
@@ -259,10 +261,13 @@ function EditorMainScreenContent() {
     getClips: () => timelineClips,
     getSelectedClip: () => activeSelectedClip,
     getPlayheadTime: () => currentTime,
-    getVideoElement: (clipId) => videoRefs.current[clipId || activeSelectedClip?.id || ''],
+    getVideoElement: (clipId) => {
+      // Try direct lookup first, then fall back to activeSelectedClip's video element
+      return videoRefs.current[clipId || ''] || videoRefs.current[activeSelectedClip?.id || ''] || null;
+    },
     onUpdateClips: (updatedClips, createdFreezeId) => {
       beginTransaction('Create Freeze Frame', getProjectState());
-      setTimelineClips(updatedClips);
+      setTimelineClips(recalculateSequence(updatedClips));
       if (createdFreezeId) {
         setActiveSelectedClipId(createdFreezeId);
       }
@@ -288,37 +293,100 @@ function EditorMainScreenContent() {
   });
 
   // Drag and drop index tracking
-  const [draggedClipIndex, setDraggedClipIndex] = useState<number | null>(null);
+  const [draggedClipId, setDraggedClipId] = useState<string | null>(null);
   const [selectedTransitionIndex, setSelectedTransitionIndex] = useState<number | null>(null);
 
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    const clip = timelineClips[index];
-    if (clip && !validateCanEdit(clip.id, 'move')) {
+  const handleDragStart = (e: React.DragEvent, clipId: string) => {
+    if (!validateCanEdit(clipId, 'move')) {
       e.preventDefault();
       return;
     }
     beginTransaction('Move clip', getProjectState());
-    setDraggedClipIndex(index);
+    setDraggedClipId(clipId);
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDragOver = (e: React.DragEvent, overIndex: number) => {
+  const handleDragOver = (e: React.DragEvent, overClipId: string) => {
     e.preventDefault();
-    if (draggedClipIndex === null || draggedClipIndex === overIndex) return;
+    if (draggedClipId === null || draggedClipId === overClipId) return;
 
     setTimelineClips((prev: any[]) => {
+      const draggedIdx = prev.findIndex(c => c.id === draggedClipId);
+      const overIdx = prev.findIndex(c => c.id === overClipId);
+      if (draggedIdx === -1 || overIdx === -1) return prev;
+
       const updated = [...prev];
-      const [draggedClip] = updated.splice(draggedClipIndex, 1);
-      updated.splice(overIndex, 0, draggedClip);
+      const [draggedClip] = updated.splice(draggedIdx, 1);
+      updated.splice(overIdx, 0, draggedClip);
       return recalculateSequence(updated);
     });
-    setDraggedClipIndex(overIndex);
   };
 
   const handleDragEnd = () => {
-    setDraggedClipIndex(null);
+    setDraggedClipId(null);
     commitTransaction(getProjectState());
-    showToast('Clips reordered and snapped end-to-end');
+  };
+
+  const handleTrackDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleTrackDrop = (e: React.DragEvent, trackId: string) => {
+    e.preventDefault();
+    if (!draggedClipId) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const localPxPerSec = (zoomLevel / 100) * 35;
+    const dropTime = Math.max(0, offsetX / localPxPerSec);
+
+    setTimelineClips((prev: any[]) => {
+      const draggedClip = prev.find(c => c.id === draggedClipId);
+      if (!draggedClip) return prev;
+
+      let updated = prev.map(c => {
+        if (c.id === draggedClipId) {
+          if (trackId === 'overlay') {
+            return {
+              ...OverlapUtils.convertToOverlay(c),
+              timelineStart: dropTime,
+              start: dropTime
+            };
+          } else if (trackId === 'video') {
+            return OverlapUtils.convertToMain(c);
+          }
+        }
+        return c;
+      });
+
+      if (trackId === 'video') {
+        const mainClipsWithoutDragged = updated.filter(
+          c => c.id !== draggedClipId && c.trackId !== 'overlay' && c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio
+        );
+        
+        let insertIdx = mainClipsWithoutDragged.findIndex(c => dropTime < c.timelineStart + c.duration / 2);
+        if (insertIdx === -1) {
+          insertIdx = mainClipsWithoutDragged.length;
+        }
+
+        const others = updated.filter(
+          c => c.id === draggedClipId || c.trackId === 'overlay' || c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio
+        );
+        const canonicalMain = [...mainClipsWithoutDragged];
+        const canonicalDragged = updated.find(c => c.id === draggedClipId)!;
+        canonicalMain.splice(insertIdx, 0, canonicalDragged);
+
+        const overlaysAndAudios = others.filter(c => c.id !== draggedClipId);
+        updated = [...canonicalMain, ...overlaysAndAudios];
+      }
+
+      return recalculateSequence(updated);
+    });
+
+    setDraggedClipId(null);
+    commitTransaction(getProjectState());
+    showToast(trackId === 'overlay' ? 'Clip moved to Overlay Track' : 'Clip moved to Main Video Track');
   };
 
   const handleSelectTransition = (transitionId: string | null) => {
@@ -359,36 +427,7 @@ function EditorMainScreenContent() {
   };
 
   const recalculateSequence = (clips: any[]) => {
-    let currentStart = 0;
-    const updatedClips = clips.map((c) => {
-      const isAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
-      if (isAudio) return c;
-
-      const updated = { ...c, timelineStart: currentStart, start: currentStart };
-      currentStart += c.duration;
-      return updated;
-    });
-
-    return updatedClips.map((c) => {
-      const isAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
-      if (!isAudio) return c;
-
-      const parentVideo = updatedClips.find(
-        (v) => (v.trackId !== 'audio' && v.trackId !== 'music' && v.type !== 'audio' && !v.isDetachedAudio) &&
-               (v.id === c.sourceVideoId || c.id === `detached-audio-${v.id}` || v.mediaId === c.mediaId)
-      );
-
-      if (parentVideo) {
-        return {
-          ...c,
-          timelineStart: parentVideo.timelineStart,
-          start: parentVideo.timelineStart,
-          startOffset: parentVideo.startOffset ?? 0,
-          duration: parentVideo.duration
-        };
-      }
-      return c;
-    });
+    return ClipReorderUtils.recalculateClipSequence(clips);
   };
 
   const handleUpdateClipSpeed = (clipId: string, newSpeed: number) => {
@@ -426,7 +465,7 @@ function EditorMainScreenContent() {
       if (isPlayheadInside) {
         const updatedClip = reflowed.find((c) => c.id === clipId);
         if (updatedClip) {
-          newCurrentTime = sourceTimeToTimelineTime(updatedClip, targetSourceTime);
+          newCurrentTime = sourceTimeToTimelineTime(updatedClip as any, targetSourceTime);
           playheadUpdated = true;
         }
       }
@@ -767,12 +806,19 @@ function EditorMainScreenContent() {
 
       const updated = prev.map((c) => {
         if (c.id === clipId) {
+          const delta = newTimelineStart - c.timelineStart;
+          let kfs = c.keyframes || [];
+          if (delta !== 0) {
+            kfs = kfs.map((k: any) => ({ ...k, time: k.time - delta }));
+          }
+          kfs = KeyframeManager.trimClipKeyframes(kfs, validDuration);
           return {
             ...c,
             timelineStart: newTimelineStart,
             start: newTimelineStart,
             startOffset: newSourceStart,
-            duration: validDuration
+            duration: validDuration,
+            keyframes: kfs
           };
         }
 
@@ -784,12 +830,19 @@ function EditorMainScreenContent() {
                              c.id === `detached-audio-${clipId}` ||
                              (c.mediaId === targetClip.mediaId && Math.abs((c.timelineStart ?? c.start ?? 0) - (targetClip.timelineStart ?? targetClip.start ?? 0)) < 0.5);
             if (isLinked) {
+              const delta = newTimelineStart - c.timelineStart;
+              let kfs = c.keyframes || [];
+              if (delta !== 0) {
+                kfs = kfs.map((k: any) => ({ ...k, time: k.time - delta }));
+              }
+              kfs = KeyframeManager.trimClipKeyframes(kfs, validDuration);
               return {
                 ...c,
                 timelineStart: newTimelineStart,
                 start: newTimelineStart,
                 startOffset: newSourceStart,
-                duration: validDuration
+                duration: validDuration,
+                keyframes: kfs
               };
             }
           }
@@ -802,12 +855,19 @@ function EditorMainScreenContent() {
             const isLinked = c.id === targetClip.sourceVideoId ||
                              (c.mediaId === targetClip.mediaId && Math.abs((c.timelineStart ?? c.start ?? 0) - (targetClip.timelineStart ?? targetClip.start ?? 0)) < 0.5);
             if (isLinked) {
+              const delta = newTimelineStart - c.timelineStart;
+              let kfs = c.keyframes || [];
+              if (delta !== 0) {
+                kfs = kfs.map((k: any) => ({ ...k, time: k.time - delta }));
+              }
+              kfs = KeyframeManager.trimClipKeyframes(kfs, validDuration);
               return {
                 ...c,
                 timelineStart: newTimelineStart,
                 start: newTimelineStart,
                 startOffset: newSourceStart,
-                duration: validDuration
+                duration: validDuration,
+                keyframes: kfs
               };
             }
           }
@@ -912,10 +972,12 @@ function EditorMainScreenContent() {
   const [canvasPos, setCanvasPosState] = useState({ x: 0, y: 0 });
   const [canvasScale, setCanvasScaleState] = useState(1);
   const [canvasRotation, setCanvasRotationState] = useState(0);
+  const [selectedKeyframeProperty, setSelectedKeyframeProperty] = useState<KeyframeProperty>('scale');
   const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 }); // Wait, let's define dragStart type properly as { x: number, y: number }
   const [isResizingCanvas, setIsResizingCanvas] = useState<string | null>(null);
   const [isRotatingCanvas, setIsRotatingCanvas] = useState(false);
+  const [isCropModeActive, setIsCropModeActive] = useState(false);
 
   const {
     canUndo,
@@ -927,6 +989,11 @@ function EditorMainScreenContent() {
     commitTransaction,
     isInTransaction
   } = useEditorHistory();
+
+  const activeSelectedClipIdRef = useRef(activeSelectedClipId);
+  useEffect(() => {
+    activeSelectedClipIdRef.current = activeSelectedClipId;
+  }, [activeSelectedClipId]);
 
   // Helper refs to avoid state capture issues
   const isInTransactionRef = useRef(isInTransaction);
@@ -1109,6 +1176,19 @@ function EditorMainScreenContent() {
     const before = getProjectStateRef.current();
     setCanvasPosState((prev) => {
       const resolved = typeof val === 'function' ? val(prev) : val;
+      
+      setTimelineClips((prevClips) => prevClips.map(c => {
+        if (c.id === activeSelectedClipIdRef.current) {
+          return {
+            ...c,
+            posX: resolved.x,
+            posY: resolved.y,
+            position: resolved
+          };
+        }
+        return c;
+      }));
+
       if (!isInTransactionRef.current) {
         commitStateChange('Move clip', before, { ...before, canvasPos: resolved });
       }
@@ -1120,6 +1200,14 @@ function EditorMainScreenContent() {
     const before = getProjectStateRef.current();
     setCanvasScaleState((prev) => {
       const resolved = typeof val === 'function' ? val(prev) : val;
+
+      setTimelineClips((prevClips) => prevClips.map(c => {
+        if (c.id === activeSelectedClipIdRef.current) {
+          return { ...c, scale: resolved };
+        }
+        return c;
+      }));
+
       if (!isInTransactionRef.current) {
         commitStateChange('Scale clip', before, { ...before, canvasScale: resolved });
       }
@@ -1131,6 +1219,14 @@ function EditorMainScreenContent() {
     const before = getProjectStateRef.current();
     setCanvasRotationState((prev) => {
       const resolved = typeof val === 'function' ? val(prev) : val;
+
+      setTimelineClips((prevClips) => prevClips.map(c => {
+        if (c.id === activeSelectedClipIdRef.current) {
+          return { ...c, rotation: resolved };
+        }
+        return c;
+      }));
+
       if (!isInTransactionRef.current) {
         commitStateChange('Rotate clip', before, { ...before, canvasRotation: resolved });
       }
@@ -1438,6 +1534,29 @@ function EditorMainScreenContent() {
         showToast(`Keyframe inspector opened for ${targetClip ? targetClip.name : 'clip'}`);
         break;
       }
+      case 'overlap': {
+        const targetClip = timelineClips.find((c) => c.id === clipId) || clip;
+        if (!targetClip) return;
+        beginTransaction('Toggle overlap track', getProjectState());
+        
+        const nextTrackId = targetClip.trackId === 'overlay' ? 'video' : 'overlay';
+        let updatedClips = timelineClips.map((c) => {
+          if (c.id === targetClip.id) {
+            return nextTrackId === 'overlay'
+              ? OverlapUtils.convertToOverlay(c)
+              : OverlapUtils.convertToMain(c);
+          }
+          return c;
+        });
+
+        updatedClips = recalculateSequence(updatedClips);
+        setTimelineClips(updatedClips);
+        commitTransaction(getProjectState());
+        
+        showToast(nextTrackId === 'overlay' ? `Moved ${targetClip.name} to Overlay` : `Moved ${targetClip.name} to Main Track`);
+        setActiveSelectedClipId(targetClip.id);
+        break;
+      }
       case 'replace-media':
         const clipToReplace = timelineClips.find(c => c.id === clipId || c.mediaId === activeMediaId) || timelineClips[0];
         if (!clipToReplace) {
@@ -1551,7 +1670,8 @@ function EditorMainScreenContent() {
     if (!isPlaying) {
       timelineClips.forEach((clip) => {
         const video = videoRefs.current[clip.id];
-        if (video && !video.seeking) {
+        const isActiveOrSelected = clip.id === activeSelectedClipId || (currentTime >= clip.timelineStart && currentTime < clip.timelineStart + clip.duration);
+        if (video && !video.seeking && !isActiveOrSelected) {
           const targetTime = timelineTimeToSourceTime(clip, clip.timelineStart);
           if (Math.abs(video.currentTime - targetTime) > 0.08) {
             try {
@@ -1561,7 +1681,7 @@ function EditorMainScreenContent() {
         }
       });
     }
-  }, [timelineClips, isPlaying]);
+  }, [timelineClips, isPlaying, activeSelectedClipId, currentTime]);
 
   // Clean up videoRefs
   useEffect(() => {
@@ -1573,51 +1693,56 @@ function EditorMainScreenContent() {
     });
   }, [timelineClips]);
 
-  // Keyframe interpolation handler
+  // Keyframe interpolation and transform synchronization handler
   useEffect(() => {
-    const totalDur = getProjectTotalDuration(timelineClips);
-    const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
-      (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
-    if (activeClip && activeClip.keyframes && activeClip.keyframes.length > 0) {
-      const localTime = (currentTime - activeClip.timelineStart) + (activeClip.startOffset || 0);
+    const targetClip = activeSelectedClip || timelineClips.find(c => c.id === activeSelectedClipId) || null;
+    if (targetClip) {
+      const kfs = targetClip.keyframes || [];
+      if (kfs.length > 0) {
+        const localTime = Math.max(0, currentTime - targetClip.timelineStart);
+        const kfProps = interpolateAllProperties(kfs, localTime);
 
-      // Filter legacy keyframes containing a .properties object
-      const legacyKeyframes = activeClip.keyframes.filter((k: any) => k && k.properties);
-      if (legacyKeyframes.length > 0) {
-        const sorted = [...legacyKeyframes].sort((a, b) => a.time - b.time);
-
-        let prevKf = sorted[0];
-        let nextKf = sorted[sorted.length - 1];
-
-        for (let i = 0; i < sorted.length; i++) {
-          if (sorted[i].time <= localTime) {
-            prevKf = sorted[i];
-          }
-          if (sorted[i].time >= localTime) {
-            nextKf = sorted[i];
-            break;
-          }
+        if (hasKeyframeForProperty(kfs, 'scale')) {
+          setCanvasScaleState(kfProps.scale);
         }
+        if (hasKeyframeForProperty(kfs, 'rotation')) {
+          setCanvasRotationState(kfProps.rotation);
+        }
+        setCanvasPosState(prev => ({
+          x: hasKeyframeForProperty(kfs, 'positionX') ? kfProps.positionX : prev.x,
+          y: hasKeyframeForProperty(kfs, 'positionY') ? kfProps.positionY : prev.y
+        }));
+      }
+    }
+  }, [currentTime, timelineClips, activeSelectedClipId]);
 
-        if (prevKf && prevKf.properties) {
-          if (prevKf.id === nextKf?.id || prevKf.time === nextKf?.time) {
-            if (prevKf.properties.scale !== undefined) setCanvasScale(prevKf.properties.scale);
-            if (prevKf.properties.rotation !== undefined) setCanvasRotation(prevKf.properties.rotation);
-          } else if (nextKf && nextKf.properties) {
-            const progress = (localTime - prevKf.time) / (nextKf.time - prevKf.time);
-            const lerp = (start: number, end: number) => start + (end - start) * progress;
+  // Selection change reset handler
+  const prevSelectedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeSelectedClipId !== prevSelectedIdRef.current) {
+      prevSelectedIdRef.current = activeSelectedClipId;
+      const targetClip = timelineClips.find(c => c.id === activeSelectedClipId);
+      if (targetClip) {
+        const kfs = targetClip.keyframes || [];
+        const baseScale = targetClip.scale ?? (targetClip.trackId === 'overlay' ? 0.75 : 1.0);
+        const baseRotation = targetClip.rotation ?? 0.0;
+        const basePosX = targetClip.posX ?? (targetClip.position?.x ?? 0.0);
+        const basePosY = targetClip.posY ?? (targetClip.position?.y ?? 0.0);
 
-            if (prevKf.properties.scale !== undefined && nextKf.properties.scale !== undefined) {
-              setCanvasScale(lerp(prevKf.properties.scale, nextKf.properties.scale));
-            }
-            if (prevKf.properties.rotation !== undefined && nextKf.properties.rotation !== undefined) {
-              setCanvasRotation(lerp(prevKf.properties.rotation, nextKf.properties.rotation));
-            }
-          }
+        if (kfs.length > 0) {
+          const localTime = Math.max(0, currentTime - targetClip.timelineStart);
+          const kfProps = interpolateAllProperties(kfs, localTime);
+          setCanvasScaleState(kfProps.scale);
+          setCanvasRotationState(kfProps.rotation);
+          setCanvasPosState({ x: kfProps.positionX, y: kfProps.positionY });
+        } else {
+          setCanvasScaleState(baseScale);
+          setCanvasRotationState(baseRotation);
+          setCanvasPosState({ x: basePosX, y: basePosY });
         }
       }
     }
-  }, [currentTime, timelineClips]);
+  }, [activeSelectedClipId, timelineClips]);
 
   // Video playback time update handler
   const handleTimeUpdate = (clipId: string) => {
@@ -1877,10 +2002,22 @@ function EditorMainScreenContent() {
               }
             } else if (video) {
               if (video.paused && !video.seeking) {
+                const activeOverlayClips = timelineClips.filter((c) => 
+                  c.trackId === 'overlay' && curTime >= c.timelineStart && curTime < c.timelineStart + c.duration
+                );
+                const activeIds = new Set([activeClip.id, ...activeOverlayClips.map(c => c.id)]);
+
                 timelineClips.forEach((c) => {
                   const v = videoRefs.current[c.id];
-                  if (v && c.id !== activeClip.id) {
-                    v.pause();
+                  if (v) {
+                    if (activeIds.has(c.id)) {
+                      if (v.paused && !v.seeking && !c.isReversed && !c.isFreezeFrame && c.type !== 'image' && c.type !== 'freeze') {
+                        v.currentTime = timelineTimeToSourceTime(c, curTime);
+                        v.play().catch(() => {});
+                      }
+                    } else {
+                      v.pause();
+                    }
                   }
                 });
                 const targetLocalTime = timelineTimeToSourceTime(activeClip, curTime);
@@ -1891,6 +2028,29 @@ function EditorMainScreenContent() {
                 currentTimeRef.current = absoluteTime;
                 setCurrentTime(absoluteTime);
                 syncAudioClips(absoluteTime, true);
+
+                // Drift check and synchronization for overlays
+                timelineClips.forEach((c) => {
+                  if (c.trackId === 'overlay' && c.id !== activeClip.id) {
+                    const v = videoRefs.current[c.id];
+                    if (v && c.type !== 'image' && c.type !== 'freeze' && !c.isFreezeFrame) {
+                      const isActive = absoluteTime >= c.timelineStart && absoluteTime < c.timelineStart + c.duration;
+                      if (isActive) {
+                        if (v.paused && !v.seeking && !c.isReversed) {
+                          v.currentTime = timelineTimeToSourceTime(c, absoluteTime);
+                          v.play().catch(() => {});
+                        } else if (!v.seeking && !v.paused) {
+                          const expectedLocalTime = timelineTimeToSourceTime(c, absoluteTime);
+                          if (Math.abs(v.currentTime - expectedLocalTime) > 0.15) {
+                            v.currentTime = expectedLocalTime;
+                          }
+                        }
+                      } else if (!v.paused) {
+                        v.pause();
+                      }
+                    }
+                  }
+                });
 
                 if (timelineScrollRef.current) {
                   const pxPerSec = (zoomLevel / 100) * 35;
@@ -2007,47 +2167,47 @@ function EditorMainScreenContent() {
     setIsPlaying(nextPlaying);
     syncAudioClips(currentTime, nextPlaying);
 
-    const videoClipsOnly = timelineClips.filter(
-      (c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio
+    const activeVideoClips = timelineClips.filter((c) => 
+      c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio &&
+      currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration
     );
+    const activeIds = new Set(activeVideoClips.map(c => c.id));
 
-    const activeClip = videoClipsOnly.find(
-      (c) => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration
-    ) || videoClipsOnly[0];
-
-    if (activeClip) {
-      const activeVid = videoRefs.current[activeClip.id];
-      if (nextPlaying) {
-        timelineClips.forEach((c) => {
-          const v = videoRefs.current[c.id];
-          if (v && c.id !== activeClip.id) {
+    if (nextPlaying) {
+      timelineClips.forEach((c) => {
+        const v = videoRefs.current[c.id];
+        if (v) {
+          if (activeIds.has(c.id)) {
+            const targetLocalTime = timelineTimeToSourceTime(c, currentTime);
+            v.currentTime = targetLocalTime;
+            if (c.isReversed) {
+              v.pause();
+              const relTime = Math.max(0, currentTime - c.timelineStart);
+              const clipVol = isMuted || mutedClips[c.id] ? 0 : volume;
+              const mediaSource = getClipMediaSource(c);
+              reversedAudioEngine.playReversedAudio(
+                c.id,
+                mediaSource,
+                relTime,
+                c.duration,
+                clipVol,
+                c.playbackRate || c.speed || 1
+              );
+            } else {
+              reversedAudioEngine.stopReversedAudio();
+              v.play().catch(() => { });
+            }
+          } else {
             v.pause();
           }
-        });
-        const targetLocalTime = timelineTimeToSourceTime(activeClip, currentTime);
-        if (activeVid) activeVid.currentTime = targetLocalTime;
-
-        if (activeClip.isReversed) {
-          if (activeVid) activeVid.pause();
-          const relTime = Math.max(0, currentTime - activeClip.timelineStart);
-          const clipVol = isMuted || mutedClips[activeClip.id] ? 0 : volume;
-          const mediaSource = getClipMediaSource(activeClip);
-          reversedAudioEngine.playReversedAudio(
-            activeClip.id,
-            mediaSource,
-            relTime,
-            activeClip.duration,
-            clipVol,
-            activeClip.playbackRate || activeClip.speed || 1
-          );
-        } else {
-          reversedAudioEngine.stopReversedAudio();
-          if (activeVid) activeVid.play().catch(() => { });
         }
-      } else {
-        if (activeVid) activeVid.pause();
-        reversedAudioEngine.stopReversedAudio();
-      }
+      });
+    } else {
+      timelineClips.forEach((c) => {
+        const v = videoRefs.current[c.id];
+        if (v) v.pause();
+      });
+      reversedAudioEngine.stopReversedAudio();
     }
   };
 
@@ -2067,71 +2227,64 @@ function EditorMainScreenContent() {
       timelineScrollRef.current.scrollLeft = clampedTime * pxPerSec;
     }
 
-    const videoClipsOnly = timelineClips.filter(
-      (c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio
+    const activeVideoClips = timelineClips.filter((c) => 
+      c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio &&
+      clampedTime >= c.timelineStart && clampedTime < c.timelineStart + c.duration
     );
+    const activeIds = new Set(activeVideoClips.map(c => c.id));
 
-    const targetActiveClip = videoClipsOnly.find(
-      (c) => clampedTime >= c.timelineStart && clampedTime < c.timelineStart + c.duration
-    ) || (clampedTime >= totalDur ? videoClipsOnly[videoClipsOnly.length - 1] : videoClipsOnly[0]);
-
-    if (targetActiveClip) {
-      if (activeMediaId !== targetActiveClip.mediaId) {
-        setActiveMediaId(targetActiveClip.mediaId);
-      }
-
-      const localTime = Math.max(
-        targetActiveClip.startOffset,
-        Math.min(
-          targetActiveClip.startOffset + getSourceDuration(targetActiveClip) - 0.05,
-          timelineTimeToSourceTime(targetActiveClip, clampedTime)
-        )
-      );
-
-      // Pause all video elements except the target active one
-      timelineClips.forEach((c) => {
-        const v = videoRefs.current[c.id];
-        if (v && c.id !== targetActiveClip.id) {
-          v.pause();
-        }
-      });
-
-      const activeVid = videoRefs.current[targetActiveClip.id];
-      if (activeVid) {
-        if (!activeVid.seeking) {
-          if ('fastSeek' in activeVid && typeof (activeVid as any).fastSeek === 'function') {
-            try {
-              (activeVid as any).fastSeek(localTime);
-            } catch {
-              activeVid.currentTime = localTime;
+    timelineClips.forEach((c) => {
+      const v = videoRefs.current[c.id];
+      if (v) {
+        if (activeIds.has(c.id)) {
+          const localTime = Math.max(
+            c.startOffset,
+            Math.min(
+              c.startOffset + getSourceDuration(c) - 0.05,
+              timelineTimeToSourceTime(c, clampedTime)
+            )
+          );
+          if (!v.seeking) {
+            if ('fastSeek' in v && typeof (v as any).fastSeek === 'function') {
+              try {
+                (v as any).fastSeek(localTime);
+              } catch {
+                v.currentTime = localTime;
+              }
+            } else {
+              v.currentTime = localTime;
+            }
+          }
+          if (isPlaying) {
+            if (c.isReversed) {
+              v.pause();
+              const relTime = Math.max(0, clampedTime - c.timelineStart);
+              const clipVol = isMuted || mutedClips[c.id] ? 0 : volume;
+              const mediaSource = getClipMediaSource(c);
+              reversedAudioEngine.playReversedAudio(
+                c.id,
+                mediaSource,
+                relTime,
+                c.duration,
+                clipVol,
+                c.playbackRate || c.speed || 1
+              );
+            } else {
+              reversedAudioEngine.stopReversedAudio();
+              v.play().catch(() => { });
             }
           } else {
-            activeVid.currentTime = localTime;
+            v.pause();
           }
-        }
-      }
-
-      if (isPlaying) {
-        if (targetActiveClip.isReversed) {
-          if (activeVid) activeVid.pause();
-          const relTime = Math.max(0, clampedTime - targetActiveClip.timelineStart);
-          const clipVol = isMuted || mutedClips[targetActiveClip.id] ? 0 : volume;
-          const mediaSource = getClipMediaSource(targetActiveClip);
-          reversedAudioEngine.playReversedAudio(
-            targetActiveClip.id,
-            mediaSource,
-            relTime,
-            targetActiveClip.duration,
-            clipVol,
-            targetActiveClip.playbackRate || targetActiveClip.speed || 1
-          );
         } else {
-          reversedAudioEngine.stopReversedAudio();
-          if (activeVid) activeVid.play().catch(() => { });
+          v.pause();
         }
-      } else {
-        reversedAudioEngine.stopReversedAudio();
       }
+    });
+
+    const primaryActiveClip = activeVideoClips.find(c => c.trackId !== 'overlay') || activeVideoClips[0];
+    if (primaryActiveClip && activeMediaId !== primaryActiveClip.mediaId) {
+      setActiveMediaId(primaryActiveClip.mediaId);
     }
   };
 
@@ -2377,17 +2530,92 @@ function EditorMainScreenContent() {
 
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
     if (isDraggingCanvas) {
-      setCanvasPos({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y,
-      });
+      const newX = e.clientX - dragStart.x;
+      const newY = e.clientY - dragStart.y;
+
+      const hasKfX = hasKeyframeForProperty(activeSelectedClip?.keyframes, 'positionX');
+      const hasKfY = hasKeyframeForProperty(activeSelectedClip?.keyframes, 'positionY');
+
+      if (activeSelectedClip && (hasKfX || hasKfY || autoKeyframeEnabled)) {
+        setTimelineClips(prev => prev.map(c => {
+          if (c.id === activeSelectedClip.id) {
+            let kfs = c.keyframes || [];
+            const relTime = Math.max(0, currentTime - c.timelineStart);
+            kfs = KeyframeManager.addOrUpdateKeyframe(kfs, 'positionX', relTime, newX);
+            kfs = KeyframeManager.addOrUpdateKeyframe(kfs, 'positionY', relTime, newY);
+            return { ...c, keyframes: kfs, posX: newX, posY: newY, position: { x: newX, y: newY } };
+          }
+          return c;
+        }));
+      } else {
+        setCanvasPos({ x: newX, y: newY });
+      }
     } else if (isResizingCanvas) {
       const deltaX = e.clientX - dragStart.x;
-      const newScale = Math.max(0.3, Math.min(2.5, canvasScale + deltaX * 0.005));
-      setCanvasScale(newScale);
+      const deltaY = e.clientY - dragStart.y;
+
+      if (activeSelectedClip && isCropModeActive) {
+        setTimelineClips(prev => prev.map(c => {
+          if (c.id === activeSelectedClip.id) {
+            const currentCrop = c.crop || { left: 0, right: 0, top: 0, bottom: 0 };
+            let newCrop = { ...currentCrop };
+            const factor = 0.25;
+            
+            if (isResizingCanvas === 'se') {
+              newCrop.right = Math.max(0, Math.min(99 - newCrop.left, newCrop.right - deltaX * factor));
+              newCrop.bottom = Math.max(0, Math.min(99 - newCrop.top, newCrop.bottom - deltaY * factor));
+            } else if (isResizingCanvas === 'nw') {
+              newCrop.left = Math.max(0, Math.min(99 - newCrop.right, newCrop.left + deltaX * factor));
+              newCrop.top = Math.max(0, Math.min(99 - newCrop.bottom, newCrop.top + deltaY * factor));
+            } else if (isResizingCanvas === 'ne') {
+              newCrop.right = Math.max(0, Math.min(99 - newCrop.left, newCrop.right - deltaX * factor));
+              newCrop.top = Math.max(0, Math.min(99 - newCrop.bottom, newCrop.top + deltaY * factor));
+            } else if (isResizingCanvas === 'sw') {
+              newCrop.left = Math.max(0, Math.min(99 - newCrop.right, newCrop.left + deltaX * factor));
+              newCrop.bottom = Math.max(0, Math.min(99 - newCrop.top, newCrop.bottom - deltaY * factor));
+            }
+            return { ...c, crop: newCrop };
+          }
+          return c;
+        }));
+        setDragStart({ x: e.clientX, y: e.clientY });
+      } else {
+        const direction = (isResizingCanvas === 'nw' || isResizingCanvas === 'sw') ? -1 : 1;
+        const newScale = Math.max(0.1, Math.min(3.0, canvasScale + direction * deltaX * 0.005));
+
+        const hasKfScale = hasKeyframeForProperty(activeSelectedClip?.keyframes, 'scale');
+        if (activeSelectedClip && (hasKfScale || autoKeyframeEnabled)) {
+          setTimelineClips(prev => prev.map(c => {
+            if (c.id === activeSelectedClip.id) {
+              const relTime = Math.max(0, currentTime - c.timelineStart);
+              const kfs = KeyframeManager.addOrUpdateKeyframe(c.keyframes, 'scale', relTime, newScale);
+              return { ...c, keyframes: kfs, scale: newScale };
+            }
+            return c;
+          }));
+        } else {
+          setCanvasScale(newScale);
+        }
+        setDragStart({ x: e.clientX, y: e.clientY });
+      }
     } else if (isRotatingCanvas) {
       const deltaX = e.clientX - dragStart.x;
-      setCanvasRotation((prev: number) => (prev + deltaX * 0.5) % 360);
+      const newRotation = (canvasRotation + deltaX * 0.8) % 360;
+
+      const hasKfRot = hasKeyframeForProperty(activeSelectedClip?.keyframes, 'rotation');
+      if (activeSelectedClip && (hasKfRot || autoKeyframeEnabled)) {
+        setTimelineClips(prev => prev.map(c => {
+          if (c.id === activeSelectedClip.id) {
+            const relTime = Math.max(0, currentTime - c.timelineStart);
+            const kfs = KeyframeManager.addOrUpdateKeyframe(c.keyframes, 'rotation', relTime, newRotation);
+            return { ...c, keyframes: kfs, rotation: newRotation };
+          }
+          return c;
+        }));
+      } else {
+        setCanvasRotation(newRotation);
+      }
+      setDragStart({ x: e.clientX, y: e.clientY });
     }
   };
 
@@ -3002,24 +3230,36 @@ function EditorMainScreenContent() {
                   keyframes={targetClip?.keyframes || []}
                   autoKeyframeEnabled={autoKeyframeEnabled}
                   onToggleAutoKeyframe={() => setAutoKeyframeEnabled(!autoKeyframeEnabled)}
-                  onAddOrUpdateKeyframe={(property, value, interpolation) => {
+                  selectedProperty={selectedKeyframeProperty}
+                  onSelectedPropertyChange={setSelectedKeyframeProperty}
+                  onAddOrUpdateKeyframe={(property, value, interpolation, isExplicit) => {
                     if (!targetClip) return;
-                    beginTransaction(`Add keyframe ${property}`, getProjectState());
-                    setTimelineClips(prev => prev.map(c => {
-                      if (c.id === targetClip.id) {
-                        const updated = KeyframeManager.addOrUpdateKeyframe(
-                          c.keyframes,
-                          property,
-                          Math.max(0, currentTime - c.timelineStart),
-                          value,
-                          interpolation
-                        );
-                        return { ...c, keyframes: updated };
-                      }
-                      return c;
-                    }));
-                    commitTransaction(getProjectState());
-                    showToast(`Keyframe added for ${property}`);
+                    const relTime = Math.max(0, currentTime - targetClip.timelineStart);
+                    const hasKfAtPlayhead = targetClip.keyframes?.some((k: any) => k.property === property && Math.abs(k.time - relTime) < 0.04);
+
+                    if (isExplicit || autoKeyframeEnabled || hasKfAtPlayhead) {
+                      beginTransaction(`Add keyframe ${property}`, getProjectState());
+                      setTimelineClips(prev => prev.map(c => {
+                        if (c.id === targetClip.id) {
+                          const updated = KeyframeManager.addOrUpdateKeyframe(
+                            c.keyframes,
+                            property,
+                            relTime,
+                            value,
+                            interpolation
+                          );
+                          return { ...c, keyframes: updated };
+                        }
+                        return c;
+                      }));
+                      commitTransaction(getProjectState());
+                      showToast(`Keyframe added for ${property}`);
+                    } else {
+                      if (property === 'scale') setCanvasScaleState(value);
+                      else if (property === 'rotation') setCanvasRotationState(value);
+                      else if (property === 'positionX') setCanvasPosState(prev => ({ ...prev, x: value }));
+                      else if (property === 'positionY') setCanvasPosState(prev => ({ ...prev, y: value }));
+                    }
                   }}
                   onDeleteKeyframe={(kfId) => {
                     if (!targetClip) return;
@@ -3169,36 +3409,56 @@ function EditorMainScreenContent() {
                     (c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio
                   );
                   const totalDur = getProjectTotalDuration(videoClipsOnly);
-                  const activeClip = videoClipsOnly.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
-                    (currentTime >= totalDur ? videoClipsOnly[videoClipsOnly.length - 1] : videoClipsOnly[0]);
+                  const mainVideoClips = videoClipsOnly.filter(c => c.trackId !== 'overlay');
+                  const activeMainClip = mainVideoClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
+                    (currentTime >= totalDur ? mainVideoClips[mainVideoClips.length - 1] : mainVideoClips[0]);
 
                   return videoClipsOnly.length > 0 ? (
                     <>
                       {videoClipsOnly.map((clip) => {
-                        const isClipActive = activeClip?.id === clip.id;
+                        const isClipActive = clip.trackId === 'overlay'
+                          ? (currentTime >= clip.timelineStart && currentTime < clip.timelineStart + clip.duration)
+                          : (activeMainClip?.id === clip.id);
                         const tState = transitionStates[clip.id] || { display: isClipActive, opacity: 1, filter: '', transform: '', zIndex: 1 };
                         const localTime = (currentTime - clip.timelineStart) + clip.startOffset;
 
                         // Dynamic transform interpolation from applied effects keyframes
-                        let clipScale = canvasScale;
-                        let clipRotation = canvasRotation;
-                        let clipScaleX = 1;
-                        let clipScaleY = 1;
-                        let posX = 0;
-                        let posY = 0;
-                        let kfFilterStr = '';
-                        let kfOpacityMultiplier = 1;
-                        let kfClipPathStr = 'none';
+                        const isSelected = activeSelectedClipId === clip.id;
+                        const isClipVisible = isClipActive || tState.display;
+
+                        const baseScale = clip.scale ?? (clip.trackId === 'overlay' ? 0.75 : 1.0);
+                        const baseRotation = clip.rotation ?? 0.0;
+                        const basePosX = clip.posX ?? (clip.position?.x ?? 0.0);
+                        const basePosY = clip.posY ?? (clip.position?.y ?? 0.0);
 
                         const clipRelTime = Math.max(0, currentTime - clip.timelineStart);
                         const kfProps = interpolateAllProperties(clip.keyframes, clipRelTime);
 
+                        const hasKfScale = hasKeyframeForProperty(clip.keyframes, 'scale');
+                        const hasKfRot = hasKeyframeForProperty(clip.keyframes, 'rotation');
+                        const hasKfX = hasKeyframeForProperty(clip.keyframes, 'positionX');
+                        const hasKfY = hasKeyframeForProperty(clip.keyframes, 'positionY');
+
+                        let clipScale = hasKfScale 
+                          ? kfProps.scale 
+                          : (isSelected ? canvasScale : baseScale);
+                        let clipRotation = hasKfRot 
+                          ? kfProps.rotation 
+                          : (isSelected ? canvasRotation : baseRotation);
+                        let clipScaleX = 1;
+                        let clipScaleY = 1;
+                        let posX = hasKfX 
+                          ? kfProps.positionX 
+                          : (isSelected ? canvasPos.x : basePosX);
+                        let posY = hasKfY 
+                          ? kfProps.positionY 
+                          : (isSelected ? canvasPos.y : basePosY);
+                        let kfFilterStr = '';
+                        let kfOpacityMultiplier = 1;
+                        let kfClipPathStr = 'none';
+
                         const hasKf = (p: KeyframeProperty) => hasKeyframeForProperty(clip.keyframes, p);
 
-                        if (hasKf('scale')) clipScale = kfProps.scale * canvasScale;
-                        if (hasKf('rotation')) clipRotation = canvasRotation + kfProps.rotation;
-                        if (hasKf('positionX')) posX = kfProps.positionX;
-                        if (hasKf('positionY')) posY = kfProps.positionY;
                         if (hasKf('opacity')) kfOpacityMultiplier = kfProps.opacity;
 
                         if (hasKf('blur')) kfFilterStr += ` blur(${kfProps.blur}px)`;
@@ -3608,35 +3868,62 @@ function EditorMainScreenContent() {
 
                         const finalOpacity = tState.opacity * renderedCSS.opacityVal * kfOpacityMultiplier * (filterEnabled && !showBeforeOnly ? filterOpacity / 100 : 1);
                         const finalBlendMode = (filterEnabled && !showBeforeOnly) ? (filterBlendMode as any) : renderedCSS.mixBlendModeVal;
-                        const finalTransform = `translate(${posX}px, ${posY}px) scale(${clipScale * clipScaleX}, ${clipScale * clipScaleY}) rotate(${clipRotation}deg) ${renderedCSS.transformStr} ${tState.transform}`;
+                        let canvasAspect = 16 / 9;
+                        if (aspectRatio === '9/16') canvasAspect = 9 / 16;
+                        else if (aspectRatio === '1/1') canvasAspect = 1.0;
+                        else if (aspectRatio === '4/3') canvasAspect = 4 / 3;
+                        else if (aspectRatio === '21/9') canvasAspect = 21 / 9;
+
+                        const clipMedia = mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id) as any;
+                        const mediaWidth = clipMedia?.width || 1920;
+                        const mediaHeight = clipMedia?.height || 1080;
+                        const mediaAspect = mediaWidth / mediaHeight;
+
+                        const wrapperWidth = mediaAspect > canvasAspect ? '100%' : 'auto';
+                        const wrapperHeight = mediaAspect > canvasAspect ? 'auto' : '100%';
+
+                        const finalTransform = `translate(-50%, -50%) translate(${posX}px, ${posY}px) scale(${clipScale * clipScaleX}, ${clipScale * clipScaleY}) rotate(${clipRotation}deg) ${renderedCSS.transformStr} ${tState.transform}`;
 
                         const isImageOrFreeze = clip.isFreezeFrame || clip.type === 'image' || clip.type === 'freeze' || (clip.url && (clip.url.startsWith('data:image/') || clip.url.endsWith('.png') || clip.url.endsWith('.jpg') || clip.url.endsWith('.jpeg') || clip.url.endsWith('.webp')));
-
-                        const isPreWarming = preWarmingClipIdRef.current === clip.id;
-                        const isVisible = tState.display || isPreWarming;
 
                         return (
                           <div
                             key={clip.id}
-                            className="absolute inset-0 pointer-events-none"
+                            className="absolute select-none cursor-move"
                             style={{
-                              display: isVisible ? 'block' : 'none',
-                              opacity: tState.display ? finalOpacity : 0,
-                              zIndex: tState.display ? tState.zIndex : 0,
-                              visibility: isVisible ? 'visible' : 'hidden'
+                              display: isClipVisible ? 'block' : 'none',
+                              opacity: isClipVisible ? finalOpacity : 0,
+                              zIndex: clip.trackId === 'overlay' ? 20 : (tState.zIndex || 1),
+                              visibility: isClipVisible ? 'visible' : 'hidden',
+                              position: 'absolute',
+                              left: '50%',
+                              top: '50%',
+                              width: wrapperWidth,
+                              height: wrapperHeight,
+                              aspectRatio: `${mediaWidth}/${mediaHeight}`,
+                              transform: finalTransform,
+                              pointerEvents: isClipVisible ? 'auto' : 'none'
+                            }}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              setActiveSelectedClipId(clip.id);
+                              setActiveMediaId(clip.mediaId || clip.id);
+                              setIsSelectedOnCanvas(true);
+                              beginTransaction('Transform clip', getProjectState());
+                              setIsDraggingCanvas(true);
+                              setDragStart({ x: e.clientX - posX, y: e.clientY - posY });
                             }}
                           >
                             {isImageOrFreeze ? (
                               <img
                                 src={clip.url || clip.thumbnails?.[0]}
                                 alt={clip.name}
-                                className="h-full w-full object-contain mx-auto pointer-events-none transition-all duration-150 absolute inset-0"
+                                className="h-full w-full object-cover pointer-events-none transition-all duration-150 absolute inset-0"
                                 style={{
                                   filter: finalFilterStr,
                                   opacity: finalOpacity,
                                   mixBlendMode: finalBlendMode,
-                                  transform: finalTransform,
-                                  clipPath: kfClipPathStr !== 'none' ? kfClipPathStr : undefined
+                                  clipPath: clip.crop ? `inset(${clip.crop.top}% ${clip.crop.right}% ${clip.crop.bottom}% ${clip.crop.left}%)` : (kfClipPathStr !== 'none' ? kfClipPathStr : undefined)
                                 }}
                               />
                             ) : (
@@ -3651,17 +3938,110 @@ function EditorMainScreenContent() {
                                 }}
                                 src={clip.url}
                                 preload="auto"
-                                className="h-full w-full object-contain mx-auto pointer-events-none transition-all duration-150 absolute inset-0"
+                                className="h-full w-full object-cover pointer-events-none transition-all duration-150 absolute inset-0"
                                 style={{
                                   filter: finalFilterStr,
                                   opacity: finalOpacity,
                                   mixBlendMode: finalBlendMode,
-                                  transform: finalTransform,
-                                  clipPath: kfClipPathStr !== 'none' ? kfClipPathStr : undefined
+                                  clipPath: clip.crop ? `inset(${clip.crop.top}% ${clip.crop.right}% ${clip.crop.bottom}% ${clip.crop.left}%)` : (kfClipPathStr !== 'none' ? kfClipPathStr : undefined)
                                 }}
                                 onTimeUpdate={() => handleTimeUpdate(clip.id)}
                                 onEnded={() => handleClipEnded(clip.id)}
                               />
+                            )}
+                            {isSelected && (
+                              <div className="absolute inset-0 border-2 border-sky-400 pointer-events-none select-none z-30">
+                                {/* Floating toolbar */}
+                                <div className="absolute top-[-35px] left-1/2 -translate-x-1/2 flex items-center gap-1 bg-black/95 border border-white/10 rounded-md p-1 pointer-events-auto shadow-xl z-50">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setIsCropModeActive(!isCropModeActive);
+                                    }}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                                      isCropModeActive 
+                                        ? 'bg-sky-500 text-white' 
+                                        : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                                    }`}
+                                  >
+                                    ✂️ {isCropModeActive ? 'Done Crop' : 'Crop'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteClip(clip.id);
+                                    }}
+                                    className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/25 hover:bg-red-500 text-red-200 hover:text-white transition cursor-pointer"
+                                  >
+                                    🗑️ Delete
+                                  </button>
+                                </div>
+
+                                {/* Corner resize handles */}
+                                <div
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    beginTransaction('Transform/Crop clip', getProjectState());
+                                    setIsResizingCanvas('se');
+                                    setDragStart({ x: e.clientX, y: e.clientY });
+                                  }}
+                                  className={`absolute bottom-[-5px] right-[-5px] w-3 h-3 border border-white rounded-full pointer-events-auto shadow-sm cursor-se-resize ${
+                                    isCropModeActive ? 'bg-amber-500' : 'bg-sky-400'
+                                  }`}
+                                />
+                                <div
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    beginTransaction('Transform/Crop clip', getProjectState());
+                                    setIsResizingCanvas('sw');
+                                    setDragStart({ x: e.clientX, y: e.clientY });
+                                  }}
+                                  className={`absolute bottom-[-5px] left-[-5px] w-3 h-3 border border-white rounded-full pointer-events-auto shadow-sm cursor-sw-resize ${
+                                    isCropModeActive ? 'bg-amber-500' : 'bg-sky-400'
+                                  }`}
+                                />
+                                <div
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    beginTransaction('Transform/Crop clip', getProjectState());
+                                    setIsResizingCanvas('ne');
+                                    setDragStart({ x: e.clientX, y: e.clientY });
+                                  }}
+                                  className={`absolute top-[-5px] right-[-5px] w-3 h-3 border border-white rounded-full pointer-events-auto shadow-sm cursor-ne-resize ${
+                                    isCropModeActive ? 'bg-amber-500' : 'bg-sky-400'
+                                  }`}
+                                />
+                                <div
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    beginTransaction('Transform/Crop clip', getProjectState());
+                                    setIsResizingCanvas('nw');
+                                    setDragStart({ x: e.clientX, y: e.clientY });
+                                  }}
+                                  className={`absolute top-[-5px] left-[-5px] w-3 h-3 border border-white rounded-full pointer-events-auto shadow-sm cursor-nw-resize ${
+                                    isCropModeActive ? 'bg-amber-500' : 'bg-sky-400'
+                                  }`}
+                                />
+
+                                {/* Top rotation handle */}
+                                {!isCropModeActive && (
+                                  <div className="absolute top-[-20px] left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none">
+                                    <div
+                                      onMouseDown={(e) => {
+                                        e.stopPropagation();
+                                        beginTransaction('Rotate clip', getProjectState());
+                                        setIsRotatingCanvas(true);
+                                        setDragStart({ x: e.clientX, y: e.clientY });
+                                      }}
+                                      className="w-3.5 h-3.5 bg-sky-400 border border-white rounded-full cursor-alias pointer-events-auto hover:bg-sky-300 transition-colors shadow-md"
+                                      title="Rotate"
+                                    />
+                                    <div className="w-0.5 h-5 bg-sky-400" />
+                                  </div>
+                                )}
+                              </div>
                             )}
                             {pipelineState.overlays.map((ov, idx) => (
                               <div
@@ -3899,21 +4279,100 @@ function EditorMainScreenContent() {
             <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-3">
               Transform & Blend
             </div>
-            <div className="space-y-3">
-              {[
-                ['Opacity', '100%'],
-                ['Scale', `${canvasScale.toFixed(2)}x`],
-                ['Rotation', `${canvasRotation.toFixed(1)}°`],
-                ['Position X', `${Math.round(canvasPos.x)} px`],
-                ['Position Y', `${Math.round(canvasPos.y)} px`],
-              ].map(([k, v]) => (
-                <div key={k} className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{k}</span>
-                  <span className="font-mono text-foreground bg-surface border border-border px-2 py-1 rounded">
-                    {v}
-                  </span>
+            <div className="space-y-4">
+              {/* Opacity */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Opacity</span>
+                  <span className="font-mono text-foreground">{Math.round((activeSelectedClip?.opacity ?? 1.0) * 100)}%</span>
                 </div>
-              ))}
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={Math.round((activeSelectedClip?.opacity ?? 1.0) * 100)}
+                  onChange={(e) => {
+                    const nextVal = Number(e.target.value) / 100;
+                    setTimelineClips((prev) => prev.map((c) => {
+                      if (c.id === activeSelectedClip?.id) {
+                        return { ...c, opacity: nextVal };
+                      }
+                      return c;
+                    }));
+                  }}
+                  className="w-full accent-primary h-1 bg-slate-800 rounded-lg cursor-pointer"
+                />
+              </div>
+
+              {/* Scale */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Scale</span>
+                  <span className="font-mono text-foreground">{canvasScale.toFixed(2)}x</span>
+                </div>
+                <input
+                  type="range"
+                  min="10"
+                  max="250"
+                  value={Math.round(canvasScale * 100)}
+                  onChange={(e) => {
+                    const nextVal = Number(e.target.value) / 100;
+                    setCanvasScale(nextVal);
+                  }}
+                  className="w-full accent-primary h-1 bg-slate-800 rounded-lg cursor-pointer"
+                />
+              </div>
+
+              {/* Rotation */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Rotation</span>
+                  <span className="font-mono text-foreground">{Math.round(canvasRotation)}°</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="360"
+                  value={Math.round(canvasRotation)}
+                  onChange={(e) => {
+                    const nextVal = Number(e.target.value);
+                    setCanvasRotation(nextVal);
+                  }}
+                  className="w-full accent-primary h-1 bg-slate-800 rounded-lg cursor-pointer"
+                />
+              </div>
+
+              {/* Crop Controls */}
+              <div className="space-y-2 pt-2 border-t border-border-strong">
+                <span className="text-xs font-semibold text-muted-foreground">Crop Visuals (%)</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {['left', 'right', 'top', 'bottom'].map((side) => {
+                    const currentCropVal = activeSelectedClip?.crop?.[side as any] ?? 0;
+                    return (
+                      <div key={side} className="space-y-1">
+                        <span className="text-[10px] text-muted-foreground capitalize">{side}</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="99"
+                          value={currentCropVal}
+                          onChange={(e) => {
+                            const val = Math.max(0, Math.min(99, Number(e.target.value) || 0));
+                            setTimelineClips((prev) => prev.map((c) => {
+                              if (c.id === activeSelectedClip?.id) {
+                                const nextCrop = { ...(c.crop || { left: 0, right: 0, top: 0, bottom: 0 }), [side]: val };
+                                return { ...c, crop: nextCrop };
+                              }
+                              return c;
+                            }));
+                          }}
+                          className="w-full text-xs font-mono bg-background border border-border rounded px-1.5 py-0.5 text-foreground focus:outline-none"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </aside>
@@ -4166,7 +4625,7 @@ function EditorMainScreenContent() {
                               const startSec = clip.timelineStart ?? clip.start ?? 0;
                               const clipLeftPx = startSec * pxPerSec;
                               const clipWidthPx = Math.max(24, clip.duration * pxPerSec);
-                              const isSelected = activeSelectedClipId ? clip.id === activeSelectedClipId : (activeMediaId === clip.id || activeMediaId === clip.mediaId);
+                              const isSelected = clip.id === activeSelectedClipId;
                               const isMuted = !!mutedClips[clip.id] || !!clip.isMuted;
                               const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
                               const laneIndex = audioClipLaneMap.get(clip.id) ?? 0;
@@ -4252,6 +4711,11 @@ function EditorMainScreenContent() {
                                           return c;
                                         }));
                                         commitTransaction(getProjectState());
+                                      }}
+                                      onKeyframeMarkerClick={(kf) => {
+                                        handleSeek(clip.timelineStart + kf.time);
+                                        setSelectedKeyframeProperty(kf.property);
+                                        setActiveTab('keyframes');
                                       }}
                                     />
                                   )}
@@ -4399,8 +4863,71 @@ function EditorMainScreenContent() {
                         <Layers className="h-3.5 w-3.5" />
                         <span className="text-[10px] font-medium tracking-wide">Overlay</span>
                       </div>
-                      <div className="relative flex-1 h-full border-b border-border">
-                        <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
+                      <div
+                        className="relative flex-1 h-full border-b border-border px-0 flex items-center"
+                        onDragOver={handleTrackDragOver}
+                        onDrop={(e) => handleTrackDrop(e, 'overlay')}
+                      >
+                        {(() => {
+                          const overlayClips = timelineClips.filter((c) => c.trackId === 'overlay');
+                          return (
+                            <>
+                              {overlayClips.map((clip) => {
+                                const startSec = clip.timelineStart ?? clip.start ?? 0;
+                                const clipLeftPx = startSec * pxPerSec;
+                                const clipWidthPx = Math.max(24, clip.duration * pxPerSec);
+                                const isSelected = activeSelectedClipId === clip.id;
+                                const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
+
+                                return (
+                                  <div
+                                    key={clip.id}
+                                    draggable={!isLocked}
+                                    onDragStart={(e) => handleDragStart(e, clip.id)}
+                                    onDragEnd={handleDragEnd}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveSelectedClipId(clip.id);
+                                      setActiveMediaId(clip.mediaId || clip.id);
+                                      setIsSelectedOnCanvas(true);
+                                    }}
+                                    className={`h-6 rounded border flex items-center overflow-hidden cursor-pointer absolute transition px-1.5 font-mono text-[8.5px] font-semibold gap-1 select-none ${isSelected
+                                        ? 'border-sky-400 ring-2 ring-sky-400/50 bg-primary/25 text-white z-20 shadow-glow'
+                                        : 'border-sky-500/30 bg-sky-500/20 text-sky-200 hover:border-sky-400/50 z-10'
+                                      } ${isLocked ? 'opacity-70 border-dashed border-amber-500/40' : ''}`}
+                                    style={{ left: `${clipLeftPx}px`, width: `${clipWidthPx}px`, top: '4px' }}
+                                    title={`${clip.name} (${formatTimecode(clip.duration)})`}
+                                  >
+                                    {(isTrimModeActive ? trimmingClipId === clip.id : isSelected) && !isLocked && (
+                                      <ClipTrimHandles
+                                        clipId={clip.id}
+                                        timelineStart={startSec}
+                                        sourceStart={clip.startOffset || 0}
+                                        duration={clip.duration}
+                                        maxSourceDuration={mediaFiles.find(m => m.id === clip.mediaId)?.duration || clip.duration || Infinity}
+                                        pixelsPerSecond={pxPerSec}
+                                        playbackRate={clip.playbackRate || 1}
+                                        isLocked={isLocked}
+                                        playheadTime={currentTime}
+                                        onTrimStart={(edge) => beginTransaction(`Trim overlay clip ${edge}`, getProjectState())}
+                                        onTrimUpdate={(newTimelineStart, newSourceStart, newDuration, activeEdgeTime) => {
+                                          handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration, activeEdgeTime);
+                                        }}
+                                        onTrimEnd={handleTrimCommit}
+                                      />
+                                    )}
+                                    <span className="text-[9px] flex-shrink-0">🎞️</span>
+                                    <span className="truncate flex-1">{clip.name}</span>
+                                    <span className="text-[7.5px] opacity-80 flex-shrink-0">({formatTimecode(clip.duration)})</span>
+                                  </div>
+                                );
+                              })}
+                              {overlayClips.length === 0 && (
+                                <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -4413,9 +4940,13 @@ function EditorMainScreenContent() {
                         <span className="text-sm">🎞️</span>
                         <span className="text-[10px] font-medium tracking-wide">Video</span>
                       </div>
-                      <div className="relative flex-1 h-full px-0 flex items-center">
+                      <div
+                        className="relative flex-1 h-full px-0 flex items-center"
+                        onDragOver={handleTrackDragOver}
+                        onDrop={(e) => handleTrackDrop(e, 'video')}
+                      >
                         {timelineClips
-                          .filter((c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio)
+                          .filter((c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio && c.trackId !== 'overlay')
                           .reduce<React.ReactNode[]>((acc, clip, idx, videoClipsArray) => {
                             const clipWidthPx = clip.duration * pxPerSec;
                             const isMulti = videoClipsArray.length > 1;
@@ -4431,7 +4962,7 @@ function EditorMainScreenContent() {
                             const numThumbnails = Math.max(1, Math.floor(clipComputedWidth / 48));
                             const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
                             const isMuted = !!mutedClips[clip.id];
-                            const isSelected = activeSelectedClipId ? clip.id === activeSelectedClipId : clip.mediaId === activeMediaId;
+                            const isSelected = clip.id === activeSelectedClipId;
 
                             const clipEl = (
                               <div
@@ -4441,15 +4972,16 @@ function EditorMainScreenContent() {
                                   setActiveSelectedClipId(clip.id);
                                   setActiveMediaId(clip.mediaId);
                                   setIsSelectedOnCanvas(true);
-                                  handleSeek(clip.timelineStart);
                                 }}
                                 draggable={!isLocked}
-                                onDragStart={(e) => handleDragStart(e, idx)}
-                                onDragOver={(e) => handleDragOver(e, idx)}
+                                onDragStart={(e) => handleDragStart(e, clip.id)}
+                                onDragOver={(e) => handleDragOver(e, clip.id)}
                                 onDragEnd={handleDragEnd}
                                 className={`h-12 rounded-md border flex items-center overflow-hidden cursor-pointer flex-shrink-0 transition absolute ${isSelected
                                     ? 'border-sky-400 ring-2 ring-sky-400/50 bg-primary/25 z-20 shadow-glow scale-[1.01]'
-                                    : 'border-border-strong bg-surface hover:border-sky-400/60 z-10'
+                                    : clip.isFreezeFrame
+                                      ? 'border-cyan-500/60 bg-cyan-500/10 hover:border-cyan-400/80 z-10'
+                                      : 'border-border-strong bg-surface hover:border-sky-400/60 z-10'
                                   } ${isLocked ? 'opacity-70 border-dashed border-amber-500/30' : ''}`}
                                 style={{ left: `${clipLeftPx}px`, width: `${clipComputedWidth}px` }}
                               >
@@ -4514,6 +5046,11 @@ function EditorMainScreenContent() {
                                       }));
                                       commitTransaction(getProjectState());
                                     }}
+                                    onKeyframeMarkerClick={(kf) => {
+                                      handleSeek(clip.timelineStart + kf.time);
+                                      setSelectedKeyframeProperty(kf.property);
+                                      setActiveTab('keyframes');
+                                    }}
                                   />
                                 )}
 
@@ -4528,10 +5065,11 @@ function EditorMainScreenContent() {
                                   ))}
                                 </div>
 
-                                <span className="px-2 font-mono text-[9px] text-foreground font-semibold truncate bg-black/80 py-0.5 rounded-l absolute right-2 bottom-1 pointer-events-none flex items-center gap-1">
+                                <span className={`px-2 font-mono text-[9px] text-foreground font-semibold truncate py-0.5 rounded-l absolute right-2 bottom-1 pointer-events-none flex items-center gap-1 ${clip.isFreezeFrame ? 'bg-cyan-950/90' : 'bg-black/80'}`}>
                                   {isLocked && <Lock className="h-2.5 w-2.5 text-amber-400 flex-shrink-0" />}
                                   {isMuted && <VolumeX className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />}
                                   {clip.isReversed && <span className="text-sky-400 font-bold text-[9px] flex-shrink-0">⏪ Reversed</span>}
+                                  {clip.isFreezeFrame && <span className="text-cyan-400 font-bold text-[9px] flex-shrink-0">❄️ Frozen</span>}
                                   {clip.name} ({formatTimecode(clip.duration)})
                                 </span>
                               </div>
@@ -4837,7 +5375,8 @@ function EditorMainScreenContent() {
               : []),
           ];
 
-          const videoClips = formattedClips.filter((c) => c.asset_type === 'VIDEO' || c.asset_type === 'IMAGE');
+          const videoClips = formattedClips.filter((c) => (c.asset_type === 'VIDEO' || c.asset_type === 'IMAGE') && c.trackId !== 'overlay');
+          const overlayClips = formattedClips.filter((c) => (c.asset_type === 'VIDEO' || c.asset_type === 'IMAGE') && c.trackId === 'overlay');
           const audioClips = formattedClips.filter((c) => c.asset_type === 'AUDIO');
 
           const tracksList = [
@@ -4847,7 +5386,7 @@ function EditorMainScreenContent() {
               type: 'VIDEO',
               order: 0,
               muted: false,
-              clips: videoClips.length > 0 ? videoClips : formattedClips,
+              clips: videoClips,
             },
             {
               id: 'track-audio-main',
@@ -4859,12 +5398,23 @@ function EditorMainScreenContent() {
             },
           ];
 
+          if (overlayClips.length > 0) {
+            tracksList.push({
+              id: 'track-video-overlay',
+              name: 'Overlay Track',
+              type: 'VIDEO',
+              order: 2,
+              muted: false,
+              clips: overlayClips,
+            });
+          }
+
           if (textClips.length > 0) {
             tracksList.push({
               id: 'track-text-main',
               name: 'Text Track',
               type: 'TEXT',
-              order: 2,
+              order: 3,
               muted: false,
               clips: textClips,
             });

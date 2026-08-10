@@ -1,5 +1,6 @@
 // src/components/editor-main-screen/tools/split/SplitManager.ts
 import { deepCloneArray, deepCloneObject, generateSplitClipId, calculateSourceDurations } from './split.utils';
+import { KeyframeManager } from '../keyframes/KeyframeManager';
 
 export class SplitManager {
   /**
@@ -10,12 +11,14 @@ export class SplitManager {
     const relativePlayhead = playheadTime - startSec;
     const { leftSourceDur, rightSourceDur } = calculateSourceDurations(clip, relativePlayhead);
 
+    const { leftKeyframes, rightKeyframes } = KeyframeManager.splitClipKeyframes(clip.keyframes, relativePlayhead);
+
     const leftPart = {
       ...clip,
       id: clip.id,
       appliedEffects: deepCloneArray(clip.appliedEffects),
       filters: deepCloneArray(clip.filters),
-      keyframes: deepCloneArray(clip.keyframes),
+      keyframes: leftKeyframes,
       transitions: deepCloneArray(clip.transitions),
       transforms: deepCloneObject(clip.transforms),
       baseDuration: leftSourceDur,
@@ -33,7 +36,7 @@ export class SplitManager {
       start: splitTimelineStart,
       appliedEffects: deepCloneArray(clip.appliedEffects),
       filters: deepCloneArray(clip.filters),
-      keyframes: deepCloneArray(clip.keyframes),
+      keyframes: rightKeyframes,
       transitions: deepCloneArray(clip.transitions),
       transforms: deepCloneObject(clip.transforms),
       startOffset: (clip.startOffset || 0) + leftSourceDur,

@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { TimelineClipRef, FreezeOptions, FreezeOperationResult } from './freeze.types';
 import { freezeManager } from './FreezeManager';
+import { findClipAtPlayhead } from './freeze.utils';
 
 export interface UseFreezeParams {
   getClips?: () => TimelineClipRef[];
@@ -24,17 +25,29 @@ export function useFreeze(params: UseFreezeParams = {}) {
   const freezeFrame = useCallback(
     (clipId?: string, options: FreezeOptions = {}): FreezeOperationResult | null => {
       const clips = getClips ? getClips() : [];
-      let targetClip = getSelectedClip ? getSelectedClip() : null;
+      const playheadTime = options.playheadTime ?? (getPlayheadTime ? getPlayheadTime() : 0);
+
+      // Determine target clip with fallback chain:
+      // 1. Explicit clipId parameter
+      // 2. Currently selected clip
+      // 3. Auto-detect: video clip under the playhead
+      let targetClip: TimelineClipRef | null = null;
 
       if (clipId) {
         targetClip = clips.find((c) => c.id === clipId) || null;
       }
 
-      const playheadTime = options.playheadTime ?? (getPlayheadTime ? getPlayheadTime() : 0);
+      if (!targetClip) {
+        targetClip = getSelectedClip ? getSelectedClip() : null;
+      }
+
+      if (!targetClip) {
+        targetClip = findClipAtPlayhead(clips, playheadTime);
+      }
 
       if (!targetClip) {
         if (showToast && !options.silent) {
-          showToast('Select a video clip to freeze frame.');
+          showToast('Place the playhead over a video clip to freeze a frame.');
         }
         return null;
       }
@@ -67,13 +80,22 @@ export function useFreeze(params: UseFreezeParams = {}) {
   const canFreezeFrame = useCallback(
     (clipId?: string): boolean => {
       const clips = getClips ? getClips() : [];
-      let targetClip = getSelectedClip ? getSelectedClip() : null;
+      const playheadTime = getPlayheadTime ? getPlayheadTime() : 0;
+
+      let targetClip: TimelineClipRef | null = null;
 
       if (clipId) {
         targetClip = clips.find((c) => c.id === clipId) || null;
       }
 
-      const playheadTime = getPlayheadTime ? getPlayheadTime() : 0;
+      if (!targetClip) {
+        targetClip = getSelectedClip ? getSelectedClip() : null;
+      }
+
+      if (!targetClip) {
+        targetClip = findClipAtPlayhead(clips, playheadTime);
+      }
+
       if (!targetClip) return false;
 
       return freezeManager.validate(targetClip, playheadTime).canFreeze;
@@ -87,3 +109,4 @@ export function useFreeze(params: UseFreezeParams = {}) {
     freezeManager
   };
 }
+

@@ -1,10 +1,11 @@
 import { DuplicateTimelineClipOptions, DuplicateEffectCheckResult } from './duplicate.types';
+import { KeyframeManager } from '../keyframes/KeyframeManager';
 
 /**
  * Creates a duplicate of a target clip inside a sequence array (used by EditorMainScreen).
  * Inserts the copy right after the original clip index.
  */
-export function duplicateClipInSequence<T extends { id: string; name: string }>(
+export function duplicateClipInSequence<T extends { id: string; name: string; keyframes?: any[] }>(
   clips: T[],
   clipId: string
 ): { updatedClips: T[]; copy: T } | null {
@@ -16,6 +17,7 @@ export function duplicateClipInSequence<T extends { id: string; name: string }>(
     ...clip,
     id: `${clip.id}-dup-${Date.now()}`,
     name: `${clip.name} (Copy)`,
+    keyframes: KeyframeManager.duplicateClipKeyframes(clip.keyframes),
   };
 
   const updatedClips = [...clips];
@@ -27,7 +29,7 @@ export function duplicateClipInSequence<T extends { id: string; name: string }>(
  * Creates a duplicate of a Timeline clip (used by Timeline component).
  * Checks lock status and places duplicated clip right after original start + duration.
  */
-export function duplicateTimelineClip<T extends { id: string; name: string; start: number; duration: number; trackId: string }>(
+export function duplicateTimelineClip<T extends { id: string; name: string; start: number; duration: number; trackId: string; keyframes?: any[] }>(
   clips: T[],
   clipId: string,
   options: DuplicateTimelineClipOptions = {}
@@ -48,6 +50,7 @@ export function duplicateTimelineClip<T extends { id: string; name: string; star
     id: `${clip.id}-dup-${Date.now()}`,
     name: `${clip.name} (Copy)`,
     start: clip.start + clip.duration,
+    keyframes: KeyframeManager.duplicateClipKeyframes(clip.keyframes),
   };
 
   const updatedClips = [...clips, newClip];

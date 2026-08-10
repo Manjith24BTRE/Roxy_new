@@ -14,6 +14,7 @@ export interface KeyframeTimelineOverlayProps {
   onSelectKeyframes?: (keyframeIds: string[]) => void;
   onDeleteKeyframe: (keyframeId: string) => void;
   onDeleteMultipleKeyframes?: (keyframeIds: string[]) => void;
+  onKeyframeMarkerClick?: (keyframe: KeyframePoint) => void;
 }
 
 export const KeyframeTimelineOverlay: React.FC<KeyframeTimelineOverlayProps> = ({
@@ -28,7 +29,8 @@ export const KeyframeTimelineOverlay: React.FC<KeyframeTimelineOverlayProps> = (
   onMoveMultipleKeyframes,
   onSelectKeyframes,
   onDeleteKeyframe,
-  onDeleteMultipleKeyframes
+  onDeleteMultipleKeyframes,
+  onKeyframeMarkerClick
 }) => {
   const [selectedKeyframeIds, setSelectedKeyframeIds] = useState<string[]>([]);
   const [draggingKeyframeId, setDraggingKeyframeId] = useState<string | null>(null);
@@ -39,15 +41,19 @@ export const KeyframeTimelineOverlay: React.FC<KeyframeTimelineOverlayProps> = (
   }
 
   // Handle single / toggle keyframe selection
-  const handleKeyframeClick = (e: React.MouseEvent, keyframeId: string) => {
+  const handleKeyframeClick = (e: React.MouseEvent, keyframe: KeyframePoint) => {
     e.stopPropagation();
 
     if (e.shiftKey || e.ctrlKey || e.metaKey) {
       setSelectedKeyframeIds((prev) =>
-        prev.includes(keyframeId) ? prev.filter((id) => id !== keyframeId) : [...prev, keyframeId]
+        prev.includes(keyframe.id) ? prev.filter((id) => id !== keyframe.id) : [...prev, keyframe.id]
       );
     } else {
-      setSelectedKeyframeIds([keyframeId]);
+      setSelectedKeyframeIds([keyframe.id]);
+    }
+
+    if (onKeyframeMarkerClick) {
+      onKeyframeMarkerClick(keyframe);
     }
   };
 
@@ -135,7 +141,7 @@ export const KeyframeTimelineOverlay: React.FC<KeyframeTimelineOverlayProps> = (
         return (
           <div
             key={kf.id}
-            onClick={(e) => handleKeyframeClick(e, kf.id)}
+            onClick={(e) => handleKeyframeClick(e, kf)}
             onPointerDown={(e) => handlePointerDown(e, kf.id)}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}

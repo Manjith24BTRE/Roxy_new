@@ -54,3 +54,31 @@ export function generatePostFreezeClipId(sourceClipId: string): string {
   const randomStr = Math.random().toString(36).substring(2, 7);
   return `${sourceClipId}-postfreeze-${timestamp}-${randomStr}`;
 }
+
+/**
+ * Finds the video clip that is directly under the playhead at the given time.
+ * Only considers video-track clips (not audio, text, effect, or detached audio).
+ * Returns the clip or null if no video clip is found at that position.
+ */
+export function findClipAtPlayhead(clips: TimelineClipRef[], playheadTime: number): TimelineClipRef | null {
+  if (!clips || clips.length === 0) return null;
+
+  const EPSILON = 0.001;
+
+  for (const clip of clips) {
+    // Skip non-video clips
+    const track = clip.trackId || clip.type || clip.mediaType || 'video';
+    if (track === 'audio' || track === 'music' || track === 'text' || track === 'effect') continue;
+    if (clip.isDetachedAudio) continue;
+
+    const start = clip.timelineStart ?? clip.start ?? 0;
+    const end = start + (clip.duration || 0);
+
+    if (playheadTime >= start - EPSILON && playheadTime <= end + EPSILON) {
+      return clip;
+    }
+  }
+
+  return null;
+}
+

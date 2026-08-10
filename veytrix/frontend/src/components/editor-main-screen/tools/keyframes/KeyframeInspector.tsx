@@ -6,10 +6,6 @@ import {
   Clipboard,
   Sliders,
   Zap,
-  MoveHorizontal,
-  ChevronLeft,
-  ChevronRight,
-  TrendingUp,
   Activity
 } from 'lucide-react';
 import {
@@ -28,7 +24,7 @@ export interface KeyframeInspectorProps {
   keyframes: KeyframePoint[];
   autoKeyframeEnabled: boolean;
   onToggleAutoKeyframe: () => void;
-  onAddOrUpdateKeyframe: (property: KeyframeProperty, value: number, interpolation?: InterpolationType) => void;
+  onAddOrUpdateKeyframe: (property: KeyframeProperty, value: number, interpolation?: InterpolationType, isExplicit?: boolean) => void;
   onDeleteKeyframe: (keyframeId: string) => void;
   onUpdateInterpolation: (keyframeId: string, interpolation: InterpolationType, controlPoints?: { x1: number; y1: number; x2: number; y2: number }) => void;
   onUpdateKeyframeValue: (keyframeId: string, value: number) => void;
@@ -37,6 +33,8 @@ export interface KeyframeInspectorProps {
   onPasteKeyframes: () => void;
   onClearAllKeyframes: () => void;
   hasClipboardData?: boolean;
+  selectedProperty?: KeyframeProperty;
+  onSelectedPropertyChange?: (property: KeyframeProperty) => void;
 }
 
 export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({
@@ -54,23 +52,28 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({
   onCopyKeyframes,
   onPasteKeyframes,
   onClearAllKeyframes,
-  hasClipboardData = false
+  hasClipboardData = false,
+  selectedProperty,
+  onSelectedPropertyChange
 }) => {
-  const [selectedProperty, setSelectedProperty] = React.useState<KeyframeProperty>('scale');
+  const [internalSelectedProperty, setInternalSelectedProperty] = React.useState<KeyframeProperty>('scale');
+
+  const activeProperty = selectedProperty ?? internalSelectedProperty;
+  const setActiveProperty = onSelectedPropertyChange ?? setInternalSelectedProperty;
 
   const sortedKeyframes = React.useMemo(() => {
     return [...keyframes].sort((a, b) => a.time - b.time);
   }, [keyframes]);
 
   const activeKeyframeAtPlayhead = sortedKeyframes.find(
-    (k) => k.property === selectedProperty && Math.abs(k.time - clipRelativeTime) < 0.04
+    (k) => k.property === activeProperty && Math.abs(k.time - clipRelativeTime) < 0.04
   );
 
-  const selectedPropConfig = ALL_KEYFRAME_PROPERTIES.find((p) => p.key === selectedProperty) || ALL_KEYFRAME_PROPERTIES[0];
+  const selectedPropConfig = ALL_KEYFRAME_PROPERTIES.find((p) => p.key === activeProperty) || ALL_KEYFRAME_PROPERTIES[0];
 
   const currentValueAtPlayhead = interpolatePropertyValue(
     keyframes,
-    selectedProperty,
+    activeProperty,
     clipRelativeTime,
     selectedPropConfig.defaultValue
   );
@@ -139,8 +142,8 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({
         </div>
 
         <select
-          value={selectedProperty}
-          onChange={(e) => setSelectedProperty(e.target.value as KeyframeProperty)}
+          value={activeProperty}
+          onChange={(e) => setActiveProperty(e.target.value as KeyframeProperty)}
           className="w-full bg-background border border-border rounded-md px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-sky-500"
         >
           {ALL_KEYFRAME_PROPERTIES.map((prop) => (
@@ -156,14 +159,14 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({
         <span className="font-medium text-xs">{selectedPropConfig.label}</span>
 
         <KeyframeButton
-          property={selectedProperty}
+          property={activeProperty}
           clipRelativeTime={clipRelativeTime}
           keyframes={keyframes}
           onToggleKeyframe={(prop) => {
             if (activeKeyframeAtPlayhead) {
               onDeleteKeyframe(activeKeyframeAtPlayhead.id);
             } else {
-              onAddOrUpdateKeyframe(prop, currentValueAtPlayhead);
+              onAddOrUpdateKeyframe(prop, currentValueAtPlayhead, undefined, true);
             }
           }}
           onNavigateKeyframe={onNavigateKeyframe}
@@ -260,7 +263,7 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({
                 max={selectedPropConfig.max}
                 step={selectedPropConfig.step}
                 value={currentValueAtPlayhead}
-                onChange={(e) => onAddOrUpdateKeyframe(selectedProperty, Number(e.target.value))}
+                onChange={(e) => onAddOrUpdateKeyframe(activeProperty, Number(e.target.value))}
                 className="flex-1 accent-sky-400 h-1 bg-surface-hover rounded-lg cursor-pointer"
               />
               <input
@@ -269,7 +272,7 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({
                 max={selectedPropConfig.max}
                 step={selectedPropConfig.step}
                 value={currentValueAtPlayhead}
-                onChange={(e) => onAddOrUpdateKeyframe(selectedProperty, Number(e.target.value))}
+                onChange={(e) => onAddOrUpdateKeyframe(activeProperty, Number(e.target.value))}
                 className="w-16 bg-background border border-border rounded px-1.5 py-0.5 text-right text-[10px] font-mono text-foreground focus:outline-none"
               />
             </div>
@@ -277,7 +280,7 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({
 
           <button
             type="button"
-            onClick={() => onAddOrUpdateKeyframe(selectedProperty, currentValueAtPlayhead)}
+            onClick={() => onAddOrUpdateKeyframe(activeProperty, currentValueAtPlayhead, undefined, true)}
             className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30 text-xs font-medium transition cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5 text-emerald-400" />
