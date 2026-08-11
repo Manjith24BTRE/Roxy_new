@@ -1484,13 +1484,19 @@ function EditorMainScreenContent() {
         toggleLock(clipId);
         break;
       case 'mute-audio': {
-        const isCurrentlyMuted = isMuted || (clipId ? !!mutedClips[clipId] : false);
+        const targetClipId = clipId || activeSelectedClip?.id;
+        if (!targetClipId) break;
+        const targetClip = timelineClips.find(c => c.id === targetClipId);
+        const isCurrentlyMuted = !!mutedClips[targetClipId] || !!targetClip?.isMuted || !!targetClip?.muted;
         const targetMuteState = !isCurrentlyMuted;
-        toggleMute();
-        if (clipId) {
-          setMutedClips({ ...mutedClips, [clipId]: targetMuteState });
-        }
-        showToast(`${targetMuteState ? 'Muted' : 'Unmuted'} audio${clip ? ` (${clip.name})` : ''}`);
+
+        setMutedClips({ ...mutedClips, [targetClipId]: targetMuteState });
+        setTimelineClips((prev) =>
+          prev.map((c) =>
+            c.id === targetClipId ? { ...c, isMuted: targetMuteState, muted: targetMuteState } : c
+          )
+        );
+        showToast(`${targetMuteState ? 'Muted' : 'Unmuted'} audio${targetClip ? ` (${targetClip.name})` : ''}`);
         break;
       }
       case 'reverse':
@@ -1501,7 +1507,7 @@ function EditorMainScreenContent() {
         break;
       case 'add-transition':
         setEffectsSubTab('transitions');
-        setActiveTab('effects');
+        setActiveTab('transitions');
         showToast(`Select a transition to apply to ${clip.name}`);
         break;
       case 'rename':
@@ -3375,13 +3381,20 @@ function EditorMainScreenContent() {
             <div
               className="relative w-full rounded-xl border border-border-strong bg-black overflow-hidden shadow-2xl flex flex-col justify-between p-2 group transition-all duration-300 mx-auto"
               style={{
-                aspectRatio: aspectRatio,
+                aspectRatio: aspectRatio === 'fit'
+                  ? (() => {
+                      const firstMedia = mediaFiles.find(m => m.id === timelineClips[0]?.mediaId || m.id === timelineClips[0]?.id) as any;
+                      return firstMedia?.width && firstMedia?.height ? `${firstMedia.width}/${firstMedia.height}` : '16/9';
+                    })()
+                  : aspectRatio,
                 maxWidth: aspectRatio === '16/9' ? '896px' :
-                  aspectRatio === '9/16' ? '260px' :
-                    aspectRatio === '1/1' ? '448px' :
-                      aspectRatio === '4/3' ? '672px' :
-                        aspectRatio === '21/9' ? '1024px' :
-                          '896px'
+                  aspectRatio === '9/16' ? '320px' :
+                    aspectRatio === '1/1' ? '460px' :
+                      aspectRatio === '4/5' ? '400px' :
+                        aspectRatio === '4/3' ? '640px' :
+                          aspectRatio === '21/9' ? '1024px' :
+                            '896px',
+                maxHeight: '100%',
               }}
             >
 
@@ -3871,8 +3884,15 @@ function EditorMainScreenContent() {
                         let canvasAspect = 16 / 9;
                         if (aspectRatio === '9/16') canvasAspect = 9 / 16;
                         else if (aspectRatio === '1/1') canvasAspect = 1.0;
+                        else if (aspectRatio === '4/5') canvasAspect = 4 / 5;
                         else if (aspectRatio === '4/3') canvasAspect = 4 / 3;
                         else if (aspectRatio === '21/9') canvasAspect = 21 / 9;
+                        else if (aspectRatio === 'fit') {
+                          const clipMedia = mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id) as any;
+                          if (clipMedia && clipMedia.width && clipMedia.height) {
+                            canvasAspect = clipMedia.width / clipMedia.height;
+                          }
+                        }
 
                         const clipMedia = mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id) as any;
                         const mediaWidth = clipMedia?.width || 1920;
@@ -3916,7 +3936,7 @@ function EditorMainScreenContent() {
                           >
                             {isImageOrFreeze ? (
                               <img
-                                src={clip.url || clip.thumbnails?.[0]}
+                                src={clip.url || clip.media_url || clip.src || clip.thumbnails?.[0] || (mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id)?.url) || (mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id)?.thumbnails?.[0]) || ''}
                                 alt={clip.name}
                                 className="h-full w-full object-cover pointer-events-none transition-all duration-150 absolute inset-0"
                                 style={{
@@ -3936,7 +3956,7 @@ function EditorMainScreenContent() {
                                     el.volume = isVideoMuted ? 0 : Math.min(1, Math.max(0, volume * (clip.volume ?? 1) * (hasKeyframeForProperty(clip.keyframes, 'volume') ? interpolatePropertyValue(clip.keyframes, 'volume', clipRelTime, 1) : 1)));
                                   }
                                 }}
-                                src={clip.url}
+                                src={clip.url || clip.media_url || clip.src || (mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id)?.url) || ''}
                                 preload="auto"
                                 className="h-full w-full object-cover pointer-events-none transition-all duration-150 absolute inset-0"
                                 style={{
@@ -5055,14 +5075,34 @@ function EditorMainScreenContent() {
                                 )}
 
                                 <div className="h-full flex-1 flex overflow-hidden opacity-90 px-2 pointer-events-none">
-                                  {Array.from({ length: numThumbnails }).map((_, idx) => (
-                                    <img
-                                      key={idx}
-                                      src={clip.thumbnails[idx % clip.thumbnails.length] || clip.thumbnails[0]}
-                                      alt=""
-                                      className="h-full w-12 object-cover flex-shrink-0 border-r border-black/40"
-                                    />
-                                  ))}
+                                  {(() => {
+                                    const parentMedia = mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id);
+                                    const clipThumbs = (Array.isArray(clip.thumbnails) && clip.thumbnails.length > 0)
+                                      ? clip.thumbnails
+                                      : (parentMedia && Array.isArray(parentMedia.thumbnails) && parentMedia.thumbnails.length > 0)
+                                        ? parentMedia.thumbnails
+                                        : [];
+                                    const fallbackSrc = clip.url || clip.media_url || clip.src || parentMedia?.url;
+
+                                    return Array.from({ length: numThumbnails }).map((_, idx) => {
+                                      const currentSrc = clipThumbs.length > 0
+                                        ? clipThumbs[idx % clipThumbs.length]
+                                        : fallbackSrc;
+
+                                      return currentSrc ? (
+                                        <img
+                                          key={idx}
+                                          src={currentSrc}
+                                          alt=""
+                                          className="h-full w-12 object-cover flex-shrink-0 border-r border-black/40"
+                                        />
+                                      ) : (
+                                        <div key={idx} className="h-full w-12 bg-sky-950/60 flex items-center justify-center flex-shrink-0 border-r border-black/40">
+                                          <Film className="h-3 w-3 text-sky-400/60" />
+                                        </div>
+                                      );
+                                    });
+                                  })()}
                                 </div>
 
                                 <span className={`px-2 font-mono text-[9px] text-foreground font-semibold truncate py-0.5 rounded-l absolute right-2 bottom-1 pointer-events-none flex items-center gap-1 ${clip.isFreezeFrame ? 'bg-cyan-950/90' : 'bg-black/80'}`}>
@@ -5089,7 +5129,7 @@ function EditorMainScreenContent() {
                                     setSelectedTransitionIndex(idx);
                                     setActiveTransitionId(transitionId);
                                     setEffectsSubTab('transitions');
-                                    setActiveTab('effects');
+                                    setActiveTab('transitions');
                                     showToast('Select a transition to apply between clips');
                                   }}
                                   className={`h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 border transition-all duration-200 shadow-lg z-40 absolute ${transitionId
@@ -5421,6 +5461,7 @@ function EditorMainScreenContent() {
           }
 
           return {
+            aspectRatio: aspectRatio,
             clips: [...formattedClips, ...textClips],
             tracks: tracksList,
             duration: getProjectTotalDuration(timelineClips),

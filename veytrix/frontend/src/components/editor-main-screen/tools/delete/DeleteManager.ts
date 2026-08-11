@@ -22,9 +22,6 @@ export class DeleteManager {
                            (c.mediaId === deletedClip.mediaId && Math.abs((c.timelineStart ?? c.start ?? 0) - (deletedClip.timelineStart ?? deletedClip.start ?? 0)) < 0.5);
           if (isLinked) return false;
         }
-      } else {
-        const isLinkedVideo = c.id === deletedClip.sourceVideoId;
-        if (isLinkedVideo) return false;
       }
 
       return true;
