@@ -1492,18 +1492,19 @@ function EditorMainScreenContent() {
         break;
       case 'mute-audio': {
         const targetClipId = clipId || activeSelectedClip?.id;
-        if (!targetClipId) break;
-        const targetClip = timelineClips.find(c => c.id === targetClipId);
-        const isCurrentlyMuted = !!mutedClips[targetClipId] || !!targetClip?.isMuted || !!targetClip?.muted;
+        const isCurrentlyMuted = isMuted || (targetClipId ? (!!mutedClips[targetClipId] || !!timelineClips.find(c => c.id === targetClipId)?.isMuted) : false);
         const targetMuteState = !isCurrentlyMuted;
 
-        setMutedClips({ ...mutedClips, [targetClipId]: targetMuteState });
-        setTimelineClips((prev) =>
-          prev.map((c) =>
-            c.id === targetClipId ? { ...c, isMuted: targetMuteState, muted: targetMuteState } : c
-          )
-        );
-        showToast(`${targetMuteState ? 'Muted' : 'Unmuted'} audio${targetClip ? ` (${targetClip.name})` : ''}`);
+        toggleMute();
+
+        if (targetClipId) {
+          setMutedClips((prev) => ({ ...prev, [targetClipId]: targetMuteState }));
+          setTimelineClips((prev) =>
+            prev.map((c) =>
+              c.id === targetClipId ? { ...c, isMuted: targetMuteState, muted: targetMuteState } : c
+            )
+          );
+        }
         break;
       }
       case 'reverse':
@@ -2505,8 +2506,14 @@ function EditorMainScreenContent() {
   }, [timelineClips]);
 
   const toggleMute = () => {
-    setIsMutedState((prev) => {
+    setIsMuted((prev) => {
       const next = !prev;
+      if (!next) {
+        setMutedClips({});
+        setTimelineClips((clips) =>
+          clips.map((c) => ({ ...c, isMuted: false, muted: false }))
+        );
+      }
       showToast(next ? 'Audio track muted' : 'Audio track unmuted');
       return next;
     });
@@ -4646,11 +4653,20 @@ function EditorMainScreenContent() {
                       return (
                         <div className="flex flex-row items-center bg-surface transition-all duration-200" style={{ height: `${audioRowHeightPx}px` }}>
                           <div
-                            className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
+                            className={`w-40 h-full flex-shrink-0 flex items-center justify-center gap-1.5 border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold transition ${isMuted ? 'text-red-400 bg-red-500/10' : 'text-foreground bg-background'
+                              }`}
                             onClick={(e) => { e.stopPropagation(); setActiveTab('audio'); }}
+                            title="Open Music Adjustments"
                           >
-                            <span className="text-sm">🎵</span>
-                            <span className="text-[10px] font-medium tracking-wide">Audio Track</span>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+                              className="p-1 rounded hover:bg-surface-hover/80 transition flex items-center justify-center"
+                              title={isMuted ? 'Unmute' : 'Mute'}
+                            >
+                              {isMuted ? <VolumeX className="h-3.5 w-3.5 text-red-400" /> : <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />}
+                            </button>
+                            <span className="text-[10px] font-medium tracking-wide">{isMuted ? 'Music (Muted)' : 'Music'}</span>
                           </div>
                           <div className="relative flex-1 h-full border-b border-border px-0 flex items-center">
                             {allAudioClips.map((clip) => {
@@ -5164,12 +5180,20 @@ function EditorMainScreenContent() {
                     {/* Row 5: Audio Track */}
                     <div className="flex flex-row h-8 items-center bg-surface">
                       <div
-                        className={`w-40 h-full flex-shrink-0 flex items-center justify-center border-r border-border border-t border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5 transition ${isMuted ? 'text-red-400 bg-red-500/10' : 'text-foreground bg-background'
+                        className={`w-40 h-full flex-shrink-0 flex items-center justify-center gap-1.5 border-r border-border border-t border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold transition ${isMuted ? 'text-red-400 bg-red-500/10' : 'text-foreground bg-background'
                           }`}
-                        onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+                        onClick={(e) => { e.stopPropagation(); setActiveTab('audio'); }}
+                        title="Open Music Adjustments"
                       >
-                        {isMuted ? <VolumeX className="h-3.5 w-3.5 text-red-400" /> : <Volume2 className="h-3.5 w-3.5" />}
-                        <span className="text-[10px] font-medium tracking-wide">{isMuted ? 'Audio (Muted)' : 'Audio Track'}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+                          className="p-1 rounded hover:bg-surface-hover/80 transition flex items-center justify-center"
+                          title={isMuted ? 'Unmute' : 'Mute'}
+                        >
+                          {isMuted ? <VolumeX className="h-3.5 w-3.5 text-red-400" /> : <Volume2 className="h-3.5 w-3.5" />}
+                        </button>
+                        <span className="text-[10px] font-medium tracking-wide">{isMuted ? 'Music (Muted)' : 'Music'}</span>
                       </div>
                       <div className="relative flex-1 h-full border-t border-border bg-surface/50">
                         <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />

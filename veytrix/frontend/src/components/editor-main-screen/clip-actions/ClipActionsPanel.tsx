@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Scissors, Copy, Trash2, Key, CornerDownRight, 
-  RotateCcw, VolumeX, Link2Off, Snowflake, Replace, Lock, Unlock, 
+  RotateCcw, VolumeX, Volume2, Link2Off, Snowflake, Replace, Lock, Unlock, 
   ChevronRight, Clipboard, Edit3, Gauge, Layers, Image as ImageIcon
 } from 'lucide-react';
 
@@ -43,7 +43,7 @@ export function ClipActionsPanel({
     { id: 'cover', label: 'Cover', icon: ImageIcon, disabled: !hasVideo || isReversing, locked: false },
     { id: 'reverse', label: isReversing ? 'Reversing...' : 'Reverse', icon: RotateCcw, disabled: !hasClip || (clip?.trackId !== 'video' && clip?.trackId !== 'overlay') || isReversing, locked: isLocked },
     { id: 'freeze-frame', label: 'Freeze', icon: Snowflake, disabled: !hasClip || (clip?.trackId !== 'video' && clip?.trackId !== 'overlay') || isReversing, locked: isLocked },
-    { id: 'mute-audio', label: isMuted ? 'Unmute' : 'Mute', icon: VolumeX, disabled: !hasClip || !isAudioEnabled || isReversing, active: isMuted, locked: isLocked },
+    { id: 'mute-audio', label: isMuted ? 'Unmute' : 'Mute', icon: isMuted ? VolumeX : Volume2, disabled: !hasClip || !isAudioEnabled || isReversing, active: isMuted, locked: isLocked },
     { id: 'extract-audio', label: 'Extract', icon: Link2Off, disabled: !hasClip || clip?.trackId !== 'video' || isReversing, locked: isLocked },
     { id: 'replace-media', label: 'Replace', icon: Replace, disabled: !hasClip, locked: isLocked },
     { id: 'rename', label: 'Rename', icon: Edit3, disabled: !hasClip, locked: isLocked },
