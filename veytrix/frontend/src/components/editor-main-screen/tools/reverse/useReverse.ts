@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { reverseManager } from './ReverseManager';
 import { ReversibleClip, ReverseResult } from './reverse.types';
 
@@ -12,10 +12,15 @@ export interface UseReverseParams<T extends ReversibleClip = any> {
 
 export function useReverse<T extends ReversibleClip = any>(params: UseReverseParams<T> = {}) {
   const { getSelectedClip, getClips, getMediaSource, onUpdateClips, showToast } = params;
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const toggleReverse = useCallback(
-    (clipId?: string): ReverseResult | null => {
+    async (clipId?: string): Promise<ReverseResult | null> => {
       if (!getClips || !onUpdateClips) return null;
+      if (isProcessing) {
+        if (showToast) showToast('Processing already in progress. Please wait.');
+        return null;
+      }
 
       const clips = getClips();
       let targetId = clipId;
@@ -33,19 +38,24 @@ export function useReverse<T extends ReversibleClip = any>(params: UseReversePar
         return null;
       }
 
-      const mediaSource = getMediaSource ? getMediaSource(targetClipObj) : targetClipObj.url;
-      const result = reverseManager.toggleReverse(clips, targetId, { showToast }, mediaSource);
+      setIsProcessing(true);
+      try {
+        const mediaSource = getMediaSource ? getMediaSource(targetClipObj) : targetClipObj.url;
+        const result = await reverseManager.toggleReverse(clips, targetId, { showToast }, mediaSource);
 
-      if (result.success) {
-        onUpdateClips(result.updatedClips);
+        if (result.success) {
+          onUpdateClips(result.updatedClips);
+        }
+        return result;
+      } finally {
+        setIsProcessing(false);
       }
-
-      return result;
     },
-    [getSelectedClip, getClips, getMediaSource, onUpdateClips, showToast]
+    [getSelectedClip, getClips, getMediaSource, onUpdateClips, showToast, isProcessing]
   );
 
   return {
     toggleReverse,
+    isProcessing,
   };
 }

@@ -1,10 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, Mail, Phone, Globe, Languages, Clock, RotateCcw, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 import { AccountSettingsData } from '../types/settings.types';
+import { Avatar } from '../../profile/components/Avatar';
+import { useProfileAvatar } from '../../profile/hooks/useProfileAvatar';
 
 export function AccountPanel() {
   const { userProfile, isSaving, toast, saveAccount } = useSettings();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { uploadAvatar, removeAvatar, isUploading, error: uploadError } = useProfileAvatar();
 
   const [formData, setFormData] = useState<AccountSettingsData>(() => ({
     displayName: userProfile?.display_name || userProfile?.full_name || 'Mavros Member',
@@ -92,23 +96,65 @@ export function AccountPanel() {
       )}
 
       {/* Profile Picture */}
-      <div className="flex items-center gap-4 p-4 bg-[#E6F2F8]/30 border border-[#1D2B64]/5 rounded-2xl">
-        <div className="h-16 w-16 rounded-full bg-[#1D2B64] flex items-center justify-center text-white text-xl font-bold select-none overflow-hidden">
-          {userProfile?.avatar_url ? (
-            <img src={userProfile.avatar_url} alt="Profile" className="h-full w-full object-cover" />
-          ) : (
-            getInitials(formData.displayName)
+      <div className="flex items-center gap-4 p-4 bg-[#E6F2F8]/30 border border-[#1D2B64]/5 rounded-2xl relative">
+        <input 
+          type="file" 
+          ref={fileInputRef}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              await uploadAvatar(file);
+            }
+          }}
+          accept="image/jpeg, image/png, image/webp"
+          className="hidden"
+        />
+
+        <div className="relative">
+          <Avatar 
+            src={userProfile?.avatar_url} 
+            name={formData.displayName} 
+            size="lg" 
+          />
+          {isUploading && (
+            <div className="absolute inset-0 bg-[#1D2B64]/70 rounded-2xl flex items-center justify-center">
+              <Loader2 size={16} className="animate-spin text-white" />
+            </div>
           )}
         </div>
+
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-bold text-[#1D2B64]">Profile Picture</span>
-          <div className="flex gap-2">
-            <button type="button" className="px-3 py-1.5 rounded-lg bg-[#1D2B64] text-white text-[10px] font-bold hover:bg-[#3B6CE7] transition cursor-pointer">
-              Upload New
-            </button>
-            <button type="button" className="px-3 py-1.5 rounded-lg border border-[#1D2B64]/10 text-[#1D2B64]/60 text-[10px] font-bold hover:bg-white transition cursor-pointer">
-              Remove
-            </button>
+          <div className="flex flex-col gap-1">
+            <div className="flex gap-2">
+              <button 
+                type="button" 
+                disabled={isUploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="px-3 py-1.5 rounded-lg bg-[#1D2B64] text-white text-[10px] font-bold hover:bg-[#3B6CE7] transition cursor-pointer disabled:opacity-50"
+              >
+                Upload New
+              </button>
+              {userProfile?.avatar_url && (
+                <button 
+                  type="button" 
+                  disabled={isUploading}
+                  onClick={async () => {
+                    if (window.confirm('Are you sure you want to remove your profile picture?')) {
+                      await removeAvatar();
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-[#1D2B64]/10 text-[#1D2B64]/60 text-[10px] font-bold hover:bg-white transition cursor-pointer disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            {uploadError && (
+              <span className="text-[9px] text-red-500 font-semibold mt-0.5">
+                ⚠️ {uploadError}
+              </span>
+            )}
           </div>
         </div>
       </div>

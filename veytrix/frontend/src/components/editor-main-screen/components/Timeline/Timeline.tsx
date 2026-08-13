@@ -297,6 +297,10 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
   };
 
   const handleMenuAction = (actionId: string, clipId: string) => {
+    if (actionId === 'cover') {
+      showToast('Set Cover action triggered');
+      return;
+    }
     const targetId = clipId || selectedClipId || (clips.find(c => currentTime >= c.start && currentTime <= c.start + c.duration) || clips[0])?.id;
     const clip = clips.find((c) => c.id === targetId);
     if (!clip) return;
@@ -660,6 +664,8 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
         isLocked={!!(selectedClipId && lockedClips[selectedClipId])}
         isMuted={!!(selectedClipId && mutedClips[selectedClipId])}
         hasClipboardPayload={false}
+        hasVideo={clips.some(c => c.type === 'VIDEO' || c.asset_type === 'VIDEO')}
+        isReversing={false}
         onAction={(actionId) => handleMenuAction(actionId, selectedClipId || '')}
       />
 

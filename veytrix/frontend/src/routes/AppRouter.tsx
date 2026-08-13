@@ -2,6 +2,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { RootLayout } from '../layouts/RootLayout';
 import { ProjectMediaProvider } from '../contexts/ProjectMediaContext';
 import { AuthProvider } from '../context/AuthContext';
+import { ThemeProvider } from '../themes/themeProvider';
 import { LegalModalProvider } from '../components/company/legal/LegalModalProvider';
 import { LandingPage } from '../features/landing/pages/LandingPage';
 import { CompanyPage } from '../pages/company/CompanyPage';
@@ -60,14 +61,16 @@ const router = createBrowserRouter([
 
 export function AppRouter() {
   return (
-    <AuthProvider>
-      <ProjectMediaProvider>
-        <LegalModalProvider>
-          <FooterModalProvider>
-            <RouterProvider router={router} />
-          </FooterModalProvider>
-        </LegalModalProvider>
-      </ProjectMediaProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <ProjectMediaProvider>
+          <LegalModalProvider>
+            <FooterModalProvider>
+              <RouterProvider router={router} />
+            </FooterModalProvider>
+          </LegalModalProvider>
+        </ProjectMediaProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

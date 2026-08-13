@@ -10,7 +10,7 @@ export interface UploadAssetResult {
 
 export async function uploadAsset(
   file: File,
-  assetType: 'VIDEO' | 'IMAGE' | 'AUDIO' = 'VIDEO'
+  assetType: 'VIDEO' | 'IMAGE' | 'AUDIO' | 'THUMBNAIL' = 'VIDEO'
 ): Promise<UploadAssetResult> {
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData?.session?.access_token;

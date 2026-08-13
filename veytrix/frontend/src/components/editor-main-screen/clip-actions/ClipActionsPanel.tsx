@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Scissors, Copy, Trash2, Key, CornerDownRight, 
   RotateCcw, VolumeX, Link2Off, Snowflake, Replace, Lock, Unlock, 
-  ChevronRight, Clipboard, Edit3, Gauge, Layers
+  ChevronRight, Clipboard, Edit3, Gauge, Layers, Image as ImageIcon
 } from 'lucide-react';
 
 export interface ClipActionsPanelProps {
@@ -14,6 +14,8 @@ export interface ClipActionsPanelProps {
   isLocked?: boolean;
   isMuted?: boolean;
   hasClipboardPayload?: boolean;
+  hasVideo?: boolean;
+  isReversing?: boolean;
   onAction: (actionId: string, clipId: string) => void;
 }
 
@@ -22,6 +24,8 @@ export function ClipActionsPanel({
   isLocked = false,
   isMuted = false,
   hasClipboardPayload = false,
+  hasVideo = true,
+  isReversing = false,
   onAction
 }: ClipActionsPanelProps) {
   const hasClip = !!clip;
@@ -29,17 +33,18 @@ export function ClipActionsPanel({
 
   // Action order: Duplicate, Split, Trim, Speed, Transition, Keyframes, Overlap, Reverse, Freeze, Mute, Extract, Replace, Rename, Lock/Unlock, Delete
   const toolbarItems = [
-    { id: 'duplicate', label: 'Duplicate', icon: Copy, disabled: !hasClip, locked: isLocked },
-    { id: 'split', label: 'Split', icon: Scissors, disabled: !hasClip, locked: isLocked },
-    { id: 'trim', label: 'Trim', icon: ChevronRight, disabled: !hasClip, locked: isLocked },
-    { id: 'speed', label: 'Speed', icon: Gauge, disabled: !hasClip, locked: isLocked },
-    { id: 'add-transition', label: 'Transition', icon: CornerDownRight, disabled: !hasClip, locked: isLocked },
-    { id: 'keyframes', label: 'Keyframe', icon: Key, disabled: !hasClip, locked: isLocked },
-    { id: 'overlap', label: clip?.trackId === 'overlay' ? 'Main Video' : 'Overlap', icon: Layers, disabled: !hasClip || clip?.trackId === 'audio' || clip?.trackId === 'music', active: clip?.trackId === 'overlay', locked: isLocked },
-    { id: 'reverse', label: 'Reverse', icon: RotateCcw, disabled: !hasClip || (clip?.trackId !== 'video' && clip?.trackId !== 'overlay'), locked: isLocked },
-    { id: 'freeze-frame', label: 'Freeze', icon: Snowflake, disabled: !hasClip || (clip?.trackId !== 'video' && clip?.trackId !== 'overlay'), locked: isLocked },
-    { id: 'mute-audio', label: isMuted ? 'Unmute' : 'Mute', icon: VolumeX, disabled: !hasClip || !isAudioEnabled, active: isMuted, locked: isLocked },
-    { id: 'extract-audio', label: 'Extract', icon: Link2Off, disabled: !hasClip || clip?.trackId !== 'video', locked: isLocked },
+    { id: 'duplicate', label: 'Duplicate', icon: Copy, disabled: !hasClip || isReversing, locked: isLocked },
+    { id: 'split', label: 'Split', icon: Scissors, disabled: !hasClip || isReversing, locked: isLocked },
+    { id: 'trim', label: 'Trim', icon: ChevronRight, disabled: !hasClip || isReversing, locked: isLocked },
+    { id: 'speed', label: 'Speed', icon: Gauge, disabled: !hasClip || isReversing, locked: isLocked },
+    { id: 'add-transition', label: 'Transition', icon: CornerDownRight, disabled: !hasClip || isReversing, locked: isLocked },
+    { id: 'keyframes', label: 'Keyframe', icon: Key, disabled: !hasClip || isReversing, locked: isLocked },
+    { id: 'overlap', label: clip?.trackId === 'overlay' ? 'Main Video' : 'Overlap', icon: Layers, disabled: !hasClip || clip?.trackId === 'audio' || clip?.trackId === 'music' || isReversing, active: clip?.trackId === 'overlay', locked: isLocked },
+    { id: 'cover', label: 'Cover', icon: ImageIcon, disabled: !hasVideo || isReversing, locked: false },
+    { id: 'reverse', label: isReversing ? 'Reversing...' : 'Reverse', icon: RotateCcw, disabled: !hasClip || (clip?.trackId !== 'video' && clip?.trackId !== 'overlay') || isReversing, locked: isLocked },
+    { id: 'freeze-frame', label: 'Freeze', icon: Snowflake, disabled: !hasClip || (clip?.trackId !== 'video' && clip?.trackId !== 'overlay') || isReversing, locked: isLocked },
+    { id: 'mute-audio', label: isMuted ? 'Unmute' : 'Mute', icon: VolumeX, disabled: !hasClip || !isAudioEnabled || isReversing, active: isMuted, locked: isLocked },
+    { id: 'extract-audio', label: 'Extract', icon: Link2Off, disabled: !hasClip || clip?.trackId !== 'video' || isReversing, locked: isLocked },
     { id: 'replace-media', label: 'Replace', icon: Replace, disabled: !hasClip, locked: isLocked },
     { id: 'rename', label: 'Rename', icon: Edit3, disabled: !hasClip, locked: isLocked },
     isLocked 
@@ -82,7 +87,7 @@ export function ClipActionsPanel({
                 key={item.id}
                 type="button"
                 disabled={item.disabled}
-                onClick={() => clip && onAction(item.id, clip.id)}
+                onClick={() => onAction(item.id, clip?.id || '')}
                 title={item.locked ? 'Clip is locked' : item.label}
                 className={btnClass}
               >

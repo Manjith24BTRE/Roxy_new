@@ -4,7 +4,7 @@ export function BackgroundEffects() {
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden select-none z-0">
       {/* Soft Base Background */}
-      <div className="absolute inset-0 bg-[#FFFFFF]" />
+      <div className="absolute inset-0 bg-background" />
 
       {/* Grid Pattern */}
       <div 

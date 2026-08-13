@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, LogOut, User } from 'lucide-react';
 import { VeytrixLogo } from '../components/VeytrixLogo';
 import { useAuth } from '../context/AuthContext';
+import { Avatar } from '../features/profile/components/Avatar';
 
 const NAV = [
   { to: '/', label: 'Product' },
@@ -20,7 +21,7 @@ export function SiteHeader() {
 
   const displayName = userProfile?.display_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || 'Creator';
   const email = user?.email || '';
-  const avatarUrl = userProfile?.avatar_url || user?.user_metadata?.avatar_url || user?.user_metadata?.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0ea5e9&color=fff`;
+  const avatarUrl = userProfile?.avatar_url || user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
 
   useEffect(() => {
     const handleScroll = () => {
@@ -97,10 +98,11 @@ export function SiteHeader() {
                   onClick={() => setShowUserMenu((v) => !v)}
                   className="flex items-center gap-2.5 rounded-full bg-white px-2 py-1 border border-[#1D2B64]/5 hover:border-[#3B6CE7]/20 shadow-sm transition-all"
                 >
-                  <img
-                    src={avatarUrl}
-                    alt={displayName}
-                    className="h-8 w-8 rounded-full border border-[#3B6CE7]/10 object-cover"
+                  <Avatar 
+                    src={avatarUrl} 
+                    name={displayName} 
+                    size="sm"
+                    className="rounded-full border border-[#3B6CE7]/10"
                   />
                 </button>
 
@@ -199,10 +201,11 @@ export function SiteHeader() {
             {isSignedIn ? (
               <>
                 <div className="flex items-center gap-3 px-4 py-2">
-                  <img
-                    src={avatarUrl}
-                    alt={displayName}
-                    className="h-10 w-10 rounded-full border border-[#3B6CE7]/10 object-cover"
+                  <Avatar 
+                    src={avatarUrl} 
+                    name={displayName} 
+                    size="md"
+                    className="rounded-full border border-[#3B6CE7]/10"
                   />
                   <div>
                     <div className="text-sm font-semibold text-[#1D2B64]">{displayName}</div>

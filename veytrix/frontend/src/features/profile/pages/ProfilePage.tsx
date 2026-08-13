@@ -1,9 +1,16 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { useAuth } from '../../../context/AuthContext';
-import { User as UserIcon, Mail, ShieldCheck, Calendar } from 'lucide-react';
+import { User as UserIcon, Mail, ShieldCheck, Calendar, Camera, Trash2, Loader2, Check, X } from 'lucide-react';
+import { Avatar } from '../components/Avatar';
+import { useProfileAvatar } from '../hooks/useProfileAvatar';
 
 export function ProfilePage() {
   const { user, userProfile } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { uploadAvatar, removeAvatar, isUploading, error: uploadError } = useProfileAvatar();
+  
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const name = userProfile?.display_name || user?.user_metadata?.full_name || user?.user_metadata?.name || 'Creator';
   const email = user?.email || 'No email provided';
@@ -11,10 +18,43 @@ export function ProfilePage() {
   const provider = user?.app_metadata?.provider || (user?.app_metadata?.providers?.[0] || 'email');
   const createdAt = user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A';
 
-  const getInitials = (n?: string, e?: string) => {
-    if (n && n.trim()) return n.substring(0, 2).toUpperCase();
-    if (e && e.trim()) return e.substring(0, 2).toUpperCase();
-    return 'VX';
+  const handleAvatarClick = () => {
+    if (isUploading) return;
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+    }
+  };
+
+  const handleConfirmUpload = async () => {
+    if (selectedFile) {
+      await uploadAvatar(selectedFile);
+      handleCancelPreview();
+    }
+  };
+
+  const handleCancelPreview = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(null);
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemovePhoto = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to remove your profile picture?')) {
+      await removeAvatar();
+    }
   };
 
   return (
@@ -22,13 +62,79 @@ export function ProfilePage() {
       <h1 className="text-2xl md:text-[32px] font-display font-bold text-foreground mb-8">User Profile</h1>
 
       <div className="glass rounded-3xl p-6 md:p-10 shadow-elegant border border-border flex flex-col md:flex-row items-start gap-8">
-        <div className="flex-shrink-0">
-          {avatarUrl ? (
-            <img src={avatarUrl} alt="Avatar" className="w-24 h-24 rounded-2xl object-cover border border-border shadow-sm" />
-          ) : (
-            <div className="w-24 h-24 rounded-2xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center text-2xl font-bold font-mono">
-              {getInitials(name, email)}
+        <div className="flex flex-col items-center gap-4 flex-shrink-0">
+          <div 
+            onClick={handleAvatarClick}
+            className="group relative cursor-pointer select-none overflow-hidden rounded-[24px] border border-border/60 shadow-sm"
+          >
+            {/* Real Avatar or Fallback Preview */}
+            <Avatar 
+              src={previewUrl || avatarUrl} 
+              name={name} 
+              size="xl" 
+            />
+
+            {/* Hover overlay for Uploading / Camera Action */}
+            <div className="absolute inset-0 bg-[#1D2B64]/65 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity duration-200 gap-1 rounded-[24px]">
+              <Camera size={20} className="text-white" />
+              <span className="text-[10px] font-bold uppercase tracking-wider">Change</span>
             </div>
+
+            {/* Loading Overlay */}
+            {isUploading && (
+              <div className="absolute inset-0 bg-[#1D2B64]/80 flex flex-col items-center justify-center text-white gap-1 rounded-[24px]">
+                <Loader2 size={22} className="animate-spin text-white" />
+                <span className="text-[9px] font-bold uppercase tracking-wider">Uploading</span>
+              </div>
+            )}
+          </div>
+
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileChange}
+            accept="image/jpeg, image/png, image/webp" 
+            className="hidden" 
+          />
+
+          {/* Action Buttons for Confirming Previews or Removing Current Image */}
+          {previewUrl ? (
+            <div className="flex items-center gap-2 animate-in fade-in duration-200">
+              <button
+                type="button"
+                onClick={handleConfirmUpload}
+                className="p-1.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition shadow-sm cursor-pointer"
+                title="Confirm Upload"
+              >
+                <Check size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelPreview}
+                className="p-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 transition shadow-sm cursor-pointer"
+                title="Cancel"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            avatarUrl && (
+              <button
+                type="button"
+                onClick={handleRemovePhoto}
+                disabled={isUploading}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-red-500/10 hover:bg-red-500/5 text-red-500 hover:text-red-600 text-[10px] font-bold transition cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 size={12} />
+                <span>Remove Photo</span>
+              </button>
+            )
+          )}
+
+          {uploadError && (
+            <span className="text-[9px] text-red-500 font-semibold max-w-[120px] text-center mt-1">
+              ⚠️ {uploadError}
+            </span>
           )}
         </div>
 

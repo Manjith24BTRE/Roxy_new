@@ -101,8 +101,214 @@
 }
 
 .dark {
-  /* No dark mode configured for this design system per requirements, but keeping scope valid */
   color-scheme: dark;
+  --background: #0b1226;
+  --background-subtle: #101a35;
+  --foreground: #ffffff;
+  
+  --surface: #121e3a;
+  --surface-hover: #162443;
+
+  --card: #121e3a;
+  --card-foreground: #ffffff;
+  
+  --popover: #101a35;
+  --popover-foreground: #ffffff;
+
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-foreground: #ffffff;
+
+  --secondary: #1d4ed8;
+  --secondary-foreground: #93c5fd;
+
+  --accent: #121e3a;
+  --accent-foreground: #93c5fd;
+
+  --muted: #101a35;
+  --muted-foreground: rgba(255, 255, 255, 0.72);
+
+  --border: rgba(147, 197, 253, 0.18);
+  --border-strong: #93c5fd;
+  --input: #101a35;
+  --ring: #2563eb;
+
+  --gradient-primary: linear-gradient(135deg, #2563eb, #93c5fd);
+  --shadow-elegant: 0 4px 12px -2px rgba(0, 0, 0, 0.5);
+  
+  --brand-navy: #ffffff;
+  --brand-blue: #2563eb;
+  --brand-sky: #93c5fd;
+  --brand-ice: #101a35;
+}
+
+/* Global Veytrix Dark Theme overrides for standard light background utilities */
+.dark html,
+.dark body {
+  background-color: var(--background) !important;
+  color: var(--foreground) !important;
+}
+
+.dark main {
+  background-color: var(--background) !important;
+}
+
+.dark .bg-white,
+.dark [class*="bg-white"],
+.dark [class*="bg-[#FFFFFF]"],
+.dark [class*="bg-[#ffffff]"] {
+  background-color: var(--surface) !important;
+}
+
+.dark [class*="bg-[#FAFAFC]"],
+.dark [class*="bg-[#F8FAFF]"],
+.dark [class*="bg-[#F9FBFC]"],
+.dark [class*="bg-[#F8FBFD]"],
+.dark [class*="bg-[#F4F8FA]"],
+.dark .bg-slate-50,
+.dark .bg-slate-100,
+.dark .bg-gray-50,
+.dark .bg-gray-100,
+.dark .bg-zinc-50,
+.dark .bg-zinc-100,
+.dark .bg-neutral-50 {
+  background-color: var(--background-subtle) !important;
+}
+
+/* Overrides for Veytrix light blue brand backgrounds */
+.dark [class*="bg-[#E6F2F8]"] {
+  background-color: var(--background-subtle) !important;
+}
+.dark [class*="bg-[#E6F2F8]/"] {
+  background-color: rgba(16, 26, 53, 0.3) !important;
+}
+
+/* Modals & Dialogs (ensure Portals or any absolute components are dark) */
+.dark [role="dialog"],
+.dark .modal,
+.dark [class*="modal"],
+.dark [class*="fixed"] [class*="bg-white"],
+.dark [class*="absolute"] [class*="bg-white"] {
+  background-color: var(--surface) !important;
+  color: var(--foreground) !important;
+  border-color: var(--border) !important;
+}
+
+/* Inputs, Textareas, Selects */
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: var(--background-subtle) !important;
+  color: var(--foreground) !important;
+  border-color: var(--border) !important;
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: var(--muted-foreground) !important;
+  opacity: 0.7 !important;
+}
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus {
+  border-color: var(--ring) !important;
+}
+.dark select option {
+  background-color: var(--background-subtle) !important;
+  color: var(--foreground) !important;
+}
+
+/* Borders */
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-gray-300,
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-300,
+.dark [class*="border-[#1D2B64]/5"],
+.dark [class*="border-[#1D2B64]/10"],
+.dark [class*="border-[#E6F2F8]"],
+.dark [class*="border-border"] {
+  border-color: var(--border) !important;
+}
+
+/* Text overrides */
+.dark [class*="text-[#1D2B64]"] {
+  color: #ffffff !important;
+}
+.dark [class*="text-[#1D2B64]/"] {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+.dark [class*="text-[#3B6CE7]"] {
+  color: #93c5fd !important;
+}
+.dark [class*="text-[#3B6CE7]/"] {
+  color: #93c5fd !important;
+}
+
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700,
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-gray-700 {
+  color: #ffffff !important;
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400,
+.dark .text-gray-600,
+.dark .text-gray-500,
+.dark .text-gray-400 {
+  color: #93c5fd !important;
+}
+
+/* Buttons and Hovers */
+.dark [class*="bg-[#1D2B64]"] {
+  background-color: #2563eb !important;
+}
+.dark [class*="bg-[#1D2B64]/"] {
+  background-color: rgba(37, 99, 235, 0.2) !important;
+}
+.dark [class*="bg-[#1D2B64]"]:hover {
+  background-color: #1d4ed8 !important;
+}
+.dark [class*="bg-[#3B6CE7]"] {
+  background-color: #2563eb !important;
+}
+.dark [class*="bg-[#3B6CE7]/"] {
+  background-color: rgba(37, 99, 235, 0.2) !important;
+}
+.dark [class*="bg-[#3B6CE7]"]:hover {
+  background-color: #1d4ed8 !important;
+}
+
+.dark tr:hover,
+.dark li:hover,
+.dark [class*="hover:bg-slate-50"]:hover,
+.dark [class*="hover:bg-gray-50"]:hover,
+.dark [class*="hover:bg-white"]:hover,
+.dark [class*="hover:bg-[#E6F2F8]"]:hover,
+.dark [class*="hover:bg-[#F8FBFD]"]:hover,
+.dark [class*="hover:bg-[#FAFAFC]"]:hover,
+.dark [class*="hover:bg-[#F4F8FA]"]:hover {
+  background-color: var(--surface-hover) !important;
+}
+
+/* Landing Page Grid Overrides */
+.dark [class*="bg-[linear-gradient(to_right,#1D2B64"] {
+  background-image: linear-gradient(to right, rgba(147, 197, 253, 0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(147, 197, 253, 0.05) 1px, transparent 1px) !important;
+}
+
+/* Secondary/Outline CTA Button Overrides */
+.dark button[class*="border-[#1D2B64]/10"] {
+  border-color: #93c5fd !important;
+  color: #ffffff !important;
+}
+.dark button[class*="border-[#1D2B64]/10"]:hover {
+  background-color: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+  color: #ffffff !important;
 }
 
 @layer base {

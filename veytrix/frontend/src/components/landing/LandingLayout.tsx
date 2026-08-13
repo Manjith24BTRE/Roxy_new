@@ -36,7 +36,7 @@ export function LandingLayout({ children }: LandingLayoutProps) {
   }, []);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-white text-[#1D2B64] font-sans selection:bg-[#8CC8E8]/50 selection:text-[#1D2B64]">
+    <div className="relative min-h-screen overflow-hidden bg-background text-foreground font-sans selection:bg-[#8CC8E8]/50 selection:text-[#1D2B64]">
       {/* Global CSS Inject to ensure reveal-on-scroll is registered and fully visible by default */}
       <style dangerouslySetInnerHTML={{__html: `
         .reveal-on-scroll {

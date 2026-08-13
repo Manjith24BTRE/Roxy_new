@@ -19,6 +19,7 @@ export interface ProjectSavePayload {
   pxPerSec?: number;
   zoomLevel?: number;
   mediaFiles?: any[];
+  thumbnailUrl?: string;
 }
 
 export interface ProjectSaveOptions {

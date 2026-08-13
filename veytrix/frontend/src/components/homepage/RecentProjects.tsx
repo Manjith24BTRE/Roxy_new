@@ -46,9 +46,18 @@ export function RecentProjects() {
                 className="group flex items-center justify-between p-3 rounded-xl bg-[#FAFAFC] hover:bg-[#F4F8FA] border border-[#1D2B64]/5 hover:border-[#3B6CE7]/30 transition-all cursor-pointer select-none"
               >
                 <div className="flex items-center gap-3 overflow-hidden">
-                  <div className="p-2 rounded-lg bg-[#E6F2F8] text-[#3B6CE7] flex-shrink-0">
-                    <Film size={16} />
-                  </div>
+                  {p.thumbnailUrl ? (
+                    <img 
+                      src={p.thumbnailUrl} 
+                      alt="" 
+                      className="w-10 h-7 rounded object-cover flex-shrink-0 border border-[#1D2B64]/5"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="p-2 rounded-lg bg-[#E6F2F8] text-[#3B6CE7] flex-shrink-0">
+                      <Film size={16} />
+                    </div>
+                  )}
                   <div className="truncate">
                     <h4 className="text-xs font-bold text-[#1D2B64] group-hover:text-[#3B6CE7] transition-colors truncate">
                       {p.name || 'Untitled Project'}

@@ -25,7 +25,7 @@ function SectionLoader() {
 export function LandingPage() {
   return (
     <LandingLayout>
-      <main className="relative flex flex-col min-h-screen bg-white">
+      <main className="relative flex flex-col min-h-screen bg-background">
         {/* Hero with interactive workspace preview included */}
         <Hero />
         

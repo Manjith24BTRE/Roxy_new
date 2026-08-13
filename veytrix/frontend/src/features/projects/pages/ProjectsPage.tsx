@@ -70,10 +70,22 @@ export function ProjectsPage() {
                 className="group relative bg-white border border-[#1D2B64]/10 hover:border-[#3B6CE7]/40 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between"
               >
                 <div>
+                  <div className="w-full aspect-video rounded-xl overflow-hidden mb-4 border border-[#1D2B64]/5 relative bg-slate-900/[0.03]">
+                    {p.thumbnailUrl ? (
+                      <img 
+                        src={p.thumbnailUrl} 
+                        alt={p.name || 'Untitled Project'} 
+                        className="w-full h-full object-cover transition-transform group-hover:scale-[1.03] duration-300"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-[#E6F2F8] text-[#3B6CE7]">
+                        <Film size={28} />
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex items-center justify-between mb-3">
-                    <div className="p-2.5 rounded-xl bg-[#E6F2F8] text-[#3B6CE7]">
-                      <Film size={18} />
-                    </div>
                     <span className="text-[10px] font-mono font-bold text-[#1D2B64]/40 uppercase tracking-wider flex items-center gap-1">
                       <Clock size={11} />
                       {p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : 'Recent'}

@@ -101,6 +101,7 @@ export class SyncService {
         user_id: user.id,
         title: payload.name || 'Untitled Project',
         timeline_json: payload,
+        thumbnail_url: payload.thumbnailUrl || null,
         updated_at: new Date(payload.updatedAt || Date.now()).toISOString(),
       };
 
@@ -149,6 +150,7 @@ export class SyncService {
           id: row.id || payload.id,
           name: row.title || payload.name || 'Untitled Project',
           updatedAt: new Date(row.updated_at).getTime(),
+          thumbnailUrl: row.thumbnail_url || payload.thumbnailUrl,
           syncStatus: 'synced',
         };
       });

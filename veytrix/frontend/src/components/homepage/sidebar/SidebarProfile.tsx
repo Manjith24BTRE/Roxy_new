@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
 import { MoreHorizontal } from 'lucide-react';
 import { ProfileMenu } from './ProfileMenu';
+import { Avatar } from '../../../features/profile/components/Avatar';
 
 interface SidebarProfileProps {
   collapsed: boolean;
@@ -14,11 +15,7 @@ export function SidebarProfile({ collapsed }: SidebarProfileProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const getInitials = (name?: string, email?: string) => {
-    if (name && name.trim()) return name.substring(0, 2).toUpperCase();
-    if (email && email.trim()) return email.substring(0, 2).toUpperCase();
-    return 'VX';
-  };
+
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -62,13 +59,11 @@ export function SidebarProfile({ collapsed }: SidebarProfileProps) {
         aria-expanded={menuOpen}
       >
         <div className="relative flex-shrink-0">
-          {currentUser.avatarUrl ? (
-            <img src={currentUser.avatarUrl} alt={currentUser.displayName} className="w-9 h-9 rounded-lg object-cover border border-[#1D2B64]/10 bg-white" />
-          ) : (
-            <div className="w-9 h-9 rounded-lg bg-[#E6F2F8] border border-[#3B6CE7]/20 text-[#3B6CE7] flex items-center justify-center text-xs font-bold font-mono">
-              {getInitials(currentUser.displayName, currentUser.email)}
-            </div>
-          )}
+          <Avatar 
+            src={currentUser.avatarUrl} 
+            name={currentUser.displayName} 
+            className="w-9 h-9 rounded-lg text-xs" 
+          />
         </div>
         
         {!collapsed && (

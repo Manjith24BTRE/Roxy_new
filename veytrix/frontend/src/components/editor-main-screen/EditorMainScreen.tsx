@@ -11,6 +11,7 @@ import {
 import { VeytrixLogo } from '../VeytrixLogo';
 import { useProjectMedia } from '../../contexts/ProjectMediaContext';
 import { ExportCenter } from './components/ExportCenter/ExportCenter';
+import { CoverThumbnailModal } from './tools/cover/CoverThumbnailModal';
 
 // Quick AI Edit Imports
 import { AspectRatio } from './tools/aspect-ratio/AspectRatio';
@@ -116,6 +117,8 @@ function EditorMainScreenContent() {
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<number | null>(null);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | undefined>(undefined);
+  const [isCoverModalOpen, setIsCoverModalOpen] = useState(false);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -172,7 +175,7 @@ function EditorMainScreenContent() {
   const activeClipLocalTime = activeSelectedClip ? Math.max(0, currentTime - activeSelectedClip.timelineStart) : 0;
 
   // Reverse hook initialization
-  const { toggleReverse } = useReverse({
+  const { toggleReverse, isProcessing: isReversing } = useReverse({
     getSelectedClip: () => activeSelectedClip,
     getClips: () => timelineClips,
     getMediaSource: (clip) => getClipMediaSource(clip),
@@ -1459,7 +1462,11 @@ function EditorMainScreenContent() {
     setActiveMediaId(clip.id);
   };
 
-  const handleMenuAction = (actionId: string, clipId: string) => {
+  const handleMenuAction = async (actionId: string, clipId: string) => {
+    if (actionId === 'cover') {
+      setIsCoverModalOpen(true);
+      return;
+    }
     const clip = timelineClips.find((c) => c.id === clipId);
     if (!clip) return;
 
@@ -1500,7 +1507,7 @@ function EditorMainScreenContent() {
         break;
       }
       case 'reverse':
-        toggleReverse(clipId);
+        await toggleReverse(clipId);
         break;
       case 'trim':
         handleTrimToPlayhead(clipId, 'start');
@@ -2799,6 +2806,7 @@ function EditorMainScreenContent() {
       lockedClips,
       zoomLevel,
       mediaFiles,
+      thumbnailUrl,
     };
   }, [
     urlProjectId,
@@ -2818,6 +2826,7 @@ function EditorMainScreenContent() {
     lockedClips,
     zoomLevel,
     mediaFiles,
+    thumbnailUrl,
   ]);
 
   const { performSave, isSaving } = useProjectSave(getProjectPayload, showToast);
@@ -2856,6 +2865,9 @@ function EditorMainScreenContent() {
       }
       if (payload.aspectRatio) {
         setAspectRatio(payload.aspectRatio);
+      }
+      if (payload.thumbnailUrl) {
+        setThumbnailUrl(payload.thumbnailUrl);
       }
       showToast(`Restored project: ${payload.name || 'Untitled'}`);
     });
@@ -5180,6 +5192,8 @@ function EditorMainScreenContent() {
           isLocked={!!(activeSelectedClip && (lockedClips[activeSelectedClip.id] || activeSelectedClip.isLocked))}
           isMuted={isMuted || !!(activeSelectedClip && (mutedClips[activeSelectedClip.id] || activeSelectedClip.isMuted))}
           hasClipboardPayload={false}
+          hasVideo={timelineClips.some(c => c.asset_type === 'VIDEO' || c.type === 'VIDEO' || !c.asset_type) || (mediaFiles && mediaFiles.some(m => m.type === 'video' || (m as any).asset_type === 'VIDEO'))}
+          isReversing={isReversing}
           onAction={(actionId: string) => handleMenuAction(actionId, activeSelectedClip?.id || '')}
         />
       </footer>
@@ -5476,6 +5490,33 @@ function EditorMainScreenContent() {
             mutedClips: mutedClips,
           };
         })()}
+      />
+
+      {/* COVER / THUMBNAIL MODAL */}
+      <CoverThumbnailModal
+        isOpen={isCoverModalOpen}
+        onClose={() => setIsCoverModalOpen(false)}
+        videoUrl={
+          timelineClips.find((c: any) => c.asset_type === 'VIDEO' || c.type === 'VIDEO' || !c.asset_type)?.url ||
+          mediaFiles?.find((m: any) => m.type === 'video' || m.asset_type === 'VIDEO')?.url
+        }
+        projectId={urlProjectId || projectId || 'default_project'}
+        currentCoverUrl={thumbnailUrl}
+        onCoverSet={async (url) => {
+          setThumbnailUrl(url);
+          const currentPayload = getProjectPayload();
+          const updatedPayload = { ...currentPayload, thumbnailUrl: url };
+          await ProjectDB.saveProject(updatedPayload);
+          showToast('Cover saved to project');
+        }}
+        onCoverRemove={async () => {
+          setThumbnailUrl(undefined);
+          const currentPayload = getProjectPayload();
+          const updatedPayload = { ...currentPayload, thumbnailUrl: undefined };
+          await ProjectDB.saveProject(updatedPayload);
+          showToast('Cover removed from project');
+        }}
+        aspectRatio={aspectRatio}
       />
 
       {/* Save Project Options Modal */}
