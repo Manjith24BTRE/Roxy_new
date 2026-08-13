@@ -11,6 +11,7 @@ from app.services.renderers.category_renderers import (
     CameraRenderer,
     CinematicRenderer,
     EffectRenderer,
+    FadeRenderer,
     FilterRenderer,
     GlitchRenderer,
     LightRenderer,
@@ -41,6 +42,7 @@ class RendererRegistry:
     def _register_default_renderers(self):
         """Registers default core category renderers."""
         default_instances = [
+            FadeRenderer(),
             BlurRenderer(),
             CameraRenderer(),
             GlitchRenderer(),
@@ -53,8 +55,8 @@ class RendererRegistry:
             TextRenderer(),
             AudioRenderer(),
             AIRenderer(),
-            EffectRenderer(),
             BasicRenderer(),
+            EffectRenderer(),
         ]
         for renderer in default_instances:
             self._renderers.append(renderer)

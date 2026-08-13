@@ -443,7 +443,7 @@ class ThreeDRenderer(EffectRenderer):
 
     def can_handle(self, engine_key: str, category: str, asset_type: Optional[AssetType] = None, item_id: str = "") -> bool:
         combined = f"{engine_key} {category} {item_id}".lower()
-        return any(k in combined for k in ["3d", "cube", "vr", "curl", "flip", "perspective"])
+        return any(k in combined for k in ["3d", "cube", "vr", "curl", "3d_flip", "flip3d", "perspective"])
 
     def get_layer_priority(self, item_id: str) -> int:
         return 11
@@ -548,11 +548,11 @@ class BasicRenderer(RenderPlugin):
         raw_op = parameters.get("opacity") if parameters.get("opacity") is not None else metadata.get("defaultOpacity", 100)
         op_val = _safe_float(raw_op, 100.0)
         opacity = op_val / 100.0 if op_val > 1.0 else op_val
-        raw_angle = parameters.get("angle") if parameters.get("angle") is not None else metadata.get("defaultAngle", 0)
+        raw_angle = parameters.get("angle") if parameters.get("angle") is not None else (parameters.get("rotation") if parameters.get("rotation") is not None else metadata.get("defaultAngle", 0))
         angle = _safe_float(raw_angle, 0.0)
         scale = _safe_float(parameters.get("scale"), 1.0)
-        flip_h = bool(parameters.get("flip_h", metadata.get("flip_h", False)))
-        flip_v = bool(parameters.get("flip_v", metadata.get("flip_v", False)))
+        flip_h = bool(parameters.get("flip_h") or parameters.get("flip_x") or metadata.get("flip_h", False))
+        flip_v = bool(parameters.get("flip_v") or parameters.get("flip_y") or metadata.get("flip_v", False))
 
         if flip_h:
             filters.append("hflip")
@@ -570,3 +570,24 @@ class BasicRenderer(RenderPlugin):
             filters.append(f"scale=iw*{scale:.2f}:ih*{scale:.2f}")
 
         return filters if filters else ["null"]
+
+
+class FadeRenderer(EffectRenderer):
+    """Renderer for Fade effects (Fade In, Fade Out)."""
+
+    plugin_type: str = "fade"
+    renderer_id: str = "fade"
+    category: str = "fade"
+
+    def can_handle(self, engine_key: str, category: str, asset_type: Optional[AssetType] = None, item_id: str = "") -> bool:
+        combined = f"{engine_key} {category} {item_id}".lower()
+        return "fade" in combined
+
+    def generate_filters(self, item_id: str, parameters: Dict[str, Any], metadata: Dict[str, Any]) -> List[str]:
+        dur = _safe_float(parameters.get("duration") or parameters.get("fadeIn") or parameters.get("fade_in") or parameters.get("fade"), 1.0)
+        if dur > 10.0:
+            dur = 1.0
+        id_lower = item_id.lower()
+        if "out" in id_lower or parameters.get("type") == "out" or parameters.get("direction") == "out":
+            return [f"fade=t=out:st=0:d={dur:.2f}"]
+        return [f"fade=t=in:st=0:d={dur:.2f}"]

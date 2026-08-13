@@ -407,12 +407,6 @@ class RenderWorker:
         )
 
         try:
-            # Simulated frame progress loop
-            for step in range(1, 101):
-                await asyncio.sleep(0.015)
-                if progress_callback:
-                    progress_callback(step)
-
             from app.services.ffmpeg_service import decode_process_exit_code, run_async_subprocess
             returncode, stdout_bytes, stderr_bytes = await run_async_subprocess(cmd_args)
 

@@ -5299,6 +5299,13 @@ function EditorMainScreenContent() {
                     speed: eff.speed ?? 1,
                     angle: eff.angle ?? 0,
                     blendMode: eff.blendMode ?? 'normal',
+                    duration: eff.duration ?? eff.fadeIn ?? eff.fadeOut ?? eff.fade ?? 1.0,
+                    fadeIn: eff.fadeIn,
+                    fadeOut: eff.fadeOut,
+                    fade: eff.fade,
+                    direction: eff.direction,
+                    type: eff.type,
+                    ...eff,
                   },
                 };
               }

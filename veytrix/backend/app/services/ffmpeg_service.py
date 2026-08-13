@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from app.core.logging import logger
 
 try:
-    import imageio_ffmpeg
+    import imageio_ffmpeg  # type: ignore
     STATIC_FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 except Exception:
     STATIC_FFMPEG_PATH = None
@@ -50,7 +50,7 @@ async def run_async_subprocess(cmd_args: List[str]) -> Tuple[int, bytes, bytes]:
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await process.communicate()
-        return process.returncode, stdout or b"", stderr or b""
+        return (process.returncode if process.returncode is not None else 1), stdout or b"", stderr or b""
     except NotImplementedError:
         if sys.platform == "win32":
             def _run_in_proactor_thread():
@@ -63,7 +63,7 @@ async def run_async_subprocess(cmd_args: List[str]) -> Tuple[int, bytes, bytes]:
                             stderr=asyncio.subprocess.PIPE,
                         )
                         out, err = await p.communicate()
-                        return p.returncode, out or b"", err or b""
+                        return (p.returncode if p.returncode is not None else 1), out or b"", err or b""
                     return proactor_loop.run_until_complete(_inner())
                 finally:
                     proactor_loop.close()
@@ -248,7 +248,7 @@ class FFmpegService:
         loop = asyncio.get_running_loop()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
-            policy = asyncio.get_event_loop_policy()
+            policy = asyncio.get_event_loop_policy()  # type: ignore
         loop_class_name = type(loop).__name__
 
         logger.info(
@@ -452,6 +452,29 @@ class FFmpegService:
                 info["ffprobe_output"] = f"ffprobe execution error: {exc}"
 
         return info
+
+    def has_audio_stream(self, input_path: str) -> bool:
+        """Inspects input media path with ffprobe to determine if an audio stream exists."""
+        if not input_path:
+            return False
+        bin_path = self.get_ffmpeg_binary()
+        ffprobe_bin = bin_path.replace("ffmpeg.exe", "ffprobe.exe").replace("ffmpeg", "ffprobe")
+        if not (shutil.which(ffprobe_bin) or Path(ffprobe_bin).is_file()):
+            return True
+        probe_cmd = [
+            ffprobe_bin,
+            "-v", "error",
+            "-select_streams", "a",
+            "-show_entries", "stream=codec_type",
+            "-of", "default=noprint_wrappers=1",
+            input_path,
+        ]
+        try:
+            res = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+            output = (res.stdout or res.stderr or "").strip()
+            return "codec_type=audio" in output or "audio" in output.lower()
+        except Exception:
+            return True
 
     def _generate_fallback_file(self, output_path: str, duration: float) -> bool:
         """Disabled in production: synthetic fallback video placeholders are not permitted."""

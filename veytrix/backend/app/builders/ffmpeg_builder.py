@@ -9,6 +9,7 @@ from app.models.enums import AssetType, PlanType
 from app.models.render_graph import FFmpegInput, FilterNode, RenderGraphDefinition
 from app.models.timeline import ClipModel, TimelineModel, TrackModel, TrackType
 from app.services.entitlement_service import EntitlementService
+from app.core.config import settings
 from pathlib import Path
 
 class GraphValidator:
@@ -70,13 +71,15 @@ class VideoBuilder:
         filters.append(f"setpts={pts_expr}")
 
         # Freeze frame
-        freeze_duration = float(clip.metadata.get("freeze_duration", clip.metadata.get("freeze_frame_duration", 0.0)))
+        freeze_val = clip.metadata.get("freeze_duration") or clip.metadata.get("freeze_frame_duration") or 0.0
+        freeze_duration = float(freeze_val)
         if clip.metadata.get("freeze_frame", False) or freeze_duration > 0:
             dur = freeze_duration if freeze_duration > 0 else 2.0
             filters.append(f"tpad=stop_mode=clone:stop_duration={dur:.2f}")
 
         # Crop / Sizing mode & Scale
-        sizing_mode = clip.metadata.get("sizing_mode", clip.metadata.get("fit", "fit")).lower()
+        sizing_val = clip.metadata.get("sizing_mode") or clip.metadata.get("fit") or "fit"
+        sizing_mode = str(sizing_val).lower()
         if sizing_mode == "crop" or sizing_mode == "cover":
             filters.append(f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}")
         else:
@@ -104,10 +107,21 @@ class VideoBuilder:
             if op_exprs:
                 expr = ",".join(op_exprs) + f",{clip.opacity:.2f}" + (")" * len(op_exprs))
                 filters.append(f"format=rgba,colorchannelmixer=aa='{expr}'")
-        else:
-            # Opacity
-            if clip.opacity < 1.0 and clip.opacity >= 0.0:
-                filters.append(f"format=rgba,colorchannelmixer=aa={clip.opacity:.2f}")
+        # Opacity
+        if clip.opacity < 1.0 and clip.opacity >= 0.0:
+            filters.append(f"format=rgba,colorchannelmixer=aa={clip.opacity:.2f}")
+
+        # Video Fade In / Fade Out
+        fade_in_val = clip.metadata.get("fade_in") or clip.metadata.get("fadeIn") or clip.metadata.get("fade_in_duration") or 0.0
+        fade_in = float(fade_in_val)
+        if fade_in > 0:
+            filters.append(f"fade=t=in:st=0:d={fade_in:.2f}")
+
+        fade_out_val = clip.metadata.get("fade_out") or clip.metadata.get("fadeOut") or clip.metadata.get("fade_out_duration") or 0.0
+        fade_out = float(fade_out_val)
+        if fade_out > 0 and clip.duration > fade_out:
+            st = max(0.0, clip.duration - fade_out)
+            filters.append(f"fade=t=out:st={st:.2f}:d={fade_out:.2f}")
 
         return filters
 
@@ -152,7 +166,8 @@ class AudioBuilder:
             filters.append("asetpts=PTS-STARTPTS")
 
         # Gain / Volume
-        gain_db = float(clip.metadata.get("gain_db", clip.metadata.get("gain", 0.0)))
+        gain_val = clip.metadata.get("gain_db") or clip.metadata.get("gain") or 0.0
+        gain_db = float(gain_val)
         effective_vol = clip.volume
         if gain_db != 0.0:
             effective_vol *= (10 ** (gain_db / 20.0))
@@ -161,7 +176,8 @@ class AudioBuilder:
             filters.append(f"volume={effective_vol:.2f}")
 
         # Stereo Balance / Pan
-        pan_bal = float(clip.metadata.get("balance", clip.metadata.get("pan", 0.0)))
+        pan_val = clip.metadata.get("balance") or clip.metadata.get("pan") or 0.0
+        pan_bal = float(pan_val)
         if pan_bal != 0.0:
             left_vol = max(0.0, min(1.0, 1.0 - pan_bal))
             right_vol = max(0.0, min(1.0, 1.0 + pan_bal))
@@ -172,13 +188,15 @@ class AudioBuilder:
             filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
 
         # Fade in / out metadata
-        fade_in = float(clip.metadata.get("fade_in", 0.0))
+        fade_in_val = clip.metadata.get("fade_in") or clip.metadata.get("fadeIn") or 0.0
+        fade_in = float(fade_in_val)
         if fade_in > 0:
             filters.append(f"afade=t=in:st=0:d={fade_in:.2f}")
 
-        fade_out = float(clip.metadata.get("fade_out", 0.0))
+        fade_out_val = clip.metadata.get("fade_out") or clip.metadata.get("fadeOut") or 0.0
+        fade_out = float(fade_out_val)
         if fade_out > 0 and clip.duration > fade_out:
-            st = clip.duration - fade_out
+            st = max(0.0, clip.duration - fade_out)
             filters.append(f"afade=t=out:st={st:.2f}:d={fade_out:.2f}")
 
         # Delay offset on timeline
@@ -272,7 +290,18 @@ class EffectBuilder:
         key_lower = engine_key.lower()
 
         # Comprehensive filter mapping for all editor effects
-        if "blur" in eff_lower or "blur" in key_lower:
+        if "fade_out" in eff_lower or "fadeout" in eff_lower or "fade-out" in eff_lower or (eff_lower == "fade" and (params.get("type") == "out" or params.get("direction") == "out")):
+            dur = float(params.get("duration") or params.get("fadeOut") or params.get("fade_out") or params.get("fade") or 1.0)
+            if dur > 10.0:
+                dur = min(2.0, (dur / 100.0) * clip.duration) if clip.duration > 0 else 1.0
+            st = max(0.0, clip.duration - dur)
+            return f"fade=t=out:st={st:.2f}:d={dur:.2f}"
+        elif "fade" in eff_lower or "fade" in key_lower:
+            dur = float(params.get("duration") or params.get("fadeIn") or params.get("fade_in") or params.get("fade") or 1.0)
+            if dur > 10.0:
+                dur = min(2.0, (dur / 100.0) * clip.duration) if clip.duration > 0 else 1.0
+            return f"fade=t=in:st=0:d={dur:.2f}"
+        elif "blur" in eff_lower or "blur" in key_lower:
             radius = params.get("radius", 10)
             return f"boxblur={radius}:{radius}"
         elif "glitch" in eff_lower or "glitch" in key_lower:
@@ -563,8 +592,8 @@ class FFmpegBuilder:
                     continue
 
                 clip_src = (
-                    clip.file_path
-                    or clip.media_url
+                    clip.media_url
+                    or clip.file_path
                     or clip.metadata.get("src")
                     or clip.metadata.get("url")
                     or clip.metadata.get("path")
@@ -576,6 +605,36 @@ class FFmpegBuilder:
                         local_abs = (Path(__file__).resolve().parent.parent.parent / "storage" / rel_path).resolve()
                         if local_abs.is_file():
                             src_str = str(local_abs)
+                    elif "/storage/v1/object/public/" in src_str:
+                        rel_path = src_str.split("/storage/v1/object/public/")[-1]
+                        local_abs = (Path(__file__).resolve().parent.parent.parent / "storage" / rel_path).resolve()
+                        if local_abs.is_file():
+                            src_str = str(local_abs)
+
+                    if "/storage/v1/object/public/" in src_str:
+                        parts = src_str.split("/storage/v1/object/public/")
+                        domain_part = parts[0]
+                        if not domain_part and settings.SUPABASE_URL:
+                            domain_part = settings.SUPABASE_URL.rstrip('/')
+                        prefix = domain_part + "/storage/v1/object/public/"
+                        remainder = parts[1]
+                        known_buckets = ["videos", "assets", "images", "audio", "uploads", "exports", "thumbnails"]
+                        if not any(remainder.startswith(f"{b}/") for b in known_buckets):
+                            b_name = "videos"
+                            if clip.asset_type == AssetType.AUDIO:
+                                b_name = "audio"
+                            elif clip.asset_type == AssetType.IMAGE:
+                                b_name = "images"
+                            elif str(clip.asset_type).upper() in ("ASSET", "ASSETS"):
+                                b_name = "assets"
+                            src_str = f"{prefix}{b_name}/{remainder}"
+                        else:
+                            src_str = f"{prefix}{remainder}"
+                    elif (src_str.startswith("/storage/") or src_str.startswith("/")) and not (len(src_str) > 1 and src_str[1] == ":"):
+                        if settings.SUPABASE_URL:
+                            src_str = f"{settings.SUPABASE_URL.rstrip('/')}{src_str}"
+                        else:
+                            src_str = f"http://127.0.0.1:8000{src_str}"
 
                     input_idx = len(inputs)
                     inputs.append(FFmpegInput(index=input_idx, path=src_str))
@@ -729,10 +788,17 @@ class FFmpegBuilder:
 
         # 4. Audio Inputs or Silent Fallback
         audio_labels = []
-        for idx, clip, _ in media_clips:
+        for idx, clip, src_str in media_clips:
             if not clip.enabled or clip.hidden:
                 continue
             if clip.asset_type in (AssetType.AUDIO, AssetType.VIDEO) and not clip.muted:
+                if clip.asset_type == AssetType.VIDEO:
+                    has_audio_attr = clip.metadata.get("has_audio", clip.metadata.get("hasAudio"))
+                    if has_audio_attr is False:
+                        continue
+                    if has_audio_attr is not True and src_str and not self.ffmpeg_service.has_audio_stream(src_str):
+                        continue
+
                 a_filters = AudioBuilder.build_clip_audio_filters(clip)
                 a_label = f"a_clip_{clip.id.replace('-', '')}"
                 filter_nodes.append(

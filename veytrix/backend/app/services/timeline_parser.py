@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from pydantic import ValidationError
 
+from app.core.config import settings
 from app.core.logging import logger
 from app.models.enums import AssetType
 from app.models.timeline import (
@@ -107,7 +108,8 @@ class TimelineParser:
                 aspect_ratio = str(timeline_json.get("aspect_ratio", default_aspect_ratio))
 
             try:
-                frame_rate = int(timeline_json.get("fps", timeline_json.get("frame_rate", default_fps)))
+                raw_fps = timeline_json.get("fps") or timeline_json.get("frame_rate") or default_fps
+                frame_rate = int(raw_fps)
                 if frame_rate < 15 or frame_rate > 60:
                     frame_rate = default_fps
             except (ValueError, TypeError):
@@ -225,9 +227,9 @@ class TimelineParser:
                 seen_clip_ids.add(clip_id)
 
                 # Timing validation
-                start_time = raw_clip.get("start_time", raw_clip.get("startTime", raw_clip.get("start", 0.0)))
+                raw_start = raw_clip.get("start_time") or raw_clip.get("startTime") or raw_clip.get("start") or 0.0
                 try:
-                    start_time = float(start_time)
+                    start_time = float(raw_start)
                 except (ValueError, TypeError):
                     start_time = 0.0
 
@@ -396,7 +398,10 @@ class TimelineParser:
                 raw_media_url_str = str(raw_media_url) if raw_media_url else None
                 if raw_media_url_str and "/storage/v1/object/public/" in raw_media_url_str:
                     parts = raw_media_url_str.split("/storage/v1/object/public/")
-                    prefix = parts[0] + "/storage/v1/object/public/"
+                    domain_part = parts[0]
+                    if not domain_part and settings.SUPABASE_URL:
+                        domain_part = settings.SUPABASE_URL.rstrip('/')
+                    prefix = domain_part + "/storage/v1/object/public/"
                     remainder = parts[1]
                     known_buckets = ["videos", "assets", "images", "audio", "uploads", "exports", "thumbnails"]
                     if not any(remainder.startswith(f"{b}/") for b in known_buckets):
@@ -408,6 +413,11 @@ class TimelineParser:
                             raw_media_url_str = f"{prefix}images/{remainder}"
                         else:
                             raw_media_url_str = f"{prefix}assets/{remainder}"
+                    else:
+                        raw_media_url_str = f"{prefix}{remainder}"
+                elif raw_media_url_str and raw_media_url_str.startswith("/"):
+                    if settings.SUPABASE_URL:
+                        raw_media_url_str = f"{settings.SUPABASE_URL.rstrip('/')}{raw_media_url_str}"
                 
                 clip_model = ClipModel(
                     id=clip_id,
@@ -419,13 +429,13 @@ class TimelineParser:
                     start_time=start_time,
                     end_time=end_time,
                     duration=clip_dur,
-                    trim_start=float(raw_clip.get("trim_start", raw_clip.get("trimStart", 0.0))),
-                    trim_end=float(raw_clip.get("trim_end", raw_clip.get("trimEnd", 0.0))),
-                    volume=float(raw_clip.get("volume", 1.0)),
-                    playback_speed=float(raw_clip.get("playback_speed", raw_clip.get("speed", 1.0))),
-                    opacity=float(raw_clip.get("opacity", 1.0)),
-                    rotation=float(raw_clip.get("rotation", 0.0)),
-                    scale=float(raw_clip.get("scale", 1.0)),
+                    trim_start=float(raw_clip.get("trim_start") or raw_clip.get("trimStart") or 0.0),
+                    trim_end=float(raw_clip.get("trim_end") or raw_clip.get("trimEnd") or 0.0),
+                    volume=float(raw_clip.get("volume") if raw_clip.get("volume") is not None else 1.0),
+                    playback_speed=float(raw_clip.get("playback_speed") or raw_clip.get("speed") or 1.0),
+                    opacity=float(raw_clip.get("opacity") if raw_clip.get("opacity") is not None else 1.0),
+                    rotation=float(raw_clip.get("rotation") or 0.0),
+                    scale=float(raw_clip.get("scale") or 1.0),
                     position=raw_clip.get("position", {"x": 0.0, "y": 0.0}),
                     layer=int(raw_clip.get("layer", 0)),
                     enabled=bool(raw_clip.get("enabled", True)),
