@@ -1,10 +1,7 @@
-// useSettings.ts
-// Primary hook for managing settings state, loading, saving, toast notifications, and AuthContext sync.
-
 import { useState, useCallback } from 'react';
 import { useAuth } from '../../../context/AuthContext';
-import { fetchAccountSettings, fetchProfileSettings } from '../services/settings.service';
-import { AccountSettingsData, ProfileSettingsData } from '../types/settings.types';
+import { fetchAccountSettings } from '../services/settings.service';
+import { AccountSettingsData } from '../types/settings.types';
 
 export interface ToastState {
   show: boolean;
@@ -57,21 +54,29 @@ export function useSettings() {
     }
   }, [updateUserProfile, showToast]);
 
-  const saveProfile = useCallback(async (data: ProfileSettingsData) => {
+  const saveWorkspace = useCallback(async (settings: { autoSave: boolean; autoRecovery: boolean }) => {
     setIsSaving(true);
     try {
       await updateUserProfile({
-        bio: data.bio,
-        occupation: data.occupation,
-        company: data.company,
-        website: data.website,
-        portfolio: data.portfolio,
-        social_links: data.socialLinks,
-        socialLinks: data.socialLinks,
+        workspace_settings: settings,
       });
-      showToast('Public profile saved successfully!', 'success');
+      showToast('Workspace settings saved successfully!', 'success');
     } catch (err: any) {
-      showToast(err?.message || 'Error saving public profile.', 'error');
+      showToast(err?.message || 'Error saving workspace settings.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [updateUserProfile, showToast]);
+
+  const saveNotifications = useCallback(async (settings: { desktop: boolean; email: boolean; updates: boolean; completion: boolean; marketing: boolean }) => {
+    setIsSaving(true);
+    try {
+      await updateUserProfile({
+        notification_settings: settings,
+      });
+      showToast('Notification preferences saved successfully!', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Error saving notification preferences.', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -85,9 +90,9 @@ export function useSettings() {
     showToast,
     refreshSettings,
     saveAccount,
-    saveProfile,
+    saveWorkspace,
+    saveNotifications,
     fetchAccountSettings,
-    fetchProfileSettings,
   };
 }
 

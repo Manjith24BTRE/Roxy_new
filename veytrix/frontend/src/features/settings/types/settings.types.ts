@@ -1,5 +1,5 @@
 // settings.types.ts
-// Strict interfaces for Settings feature (Phase 1A: Account & Profile Settings)
+// Strict interfaces for Settings feature (Phase 1A: Account Settings)
 
 export interface AccountSettingsData {
   displayName: string;
@@ -10,19 +10,6 @@ export interface AccountSettingsData {
   language: string;
   timezone: string;
   avatarUrl?: string;
-}
-
-export interface ProfileSettingsData {
-  bio: string;
-  occupation: string;
-  company: string;
-  website: string;
-  portfolio: string;
-  socialLinks: {
-    linkedin: string;
-    instagram: string;
-    twitter: string;
-  };
 }
 
 export interface SettingsSaveResult {

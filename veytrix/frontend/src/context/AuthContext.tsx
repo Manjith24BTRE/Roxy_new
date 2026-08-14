@@ -21,6 +21,8 @@ export interface UserProfileData {
   portfolio?: string | null;
   social_links?: Record<string, string> | null;
   socialLinks?: Record<string, string> | null;
+  workspace_settings?: { autoSave: boolean; autoRecovery: boolean } | null;
+  notification_settings?: { desktop: boolean; email: boolean; updates: boolean; completion: boolean; marketing: boolean } | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -115,21 +117,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const syncProfile = useCallback(async (): Promise<UserProfileData | null> => {
     try {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      const token = currentSession?.access_token || null;
-      if (token && token === lastSyncTokenRef.current && userProfile) {
-        return userProfile;
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
+        setUserProfile(null);
+        return null;
       }
-      lastSyncTokenRef.current = token;
 
-      const res = await apiRequest<{ success: boolean; profile?: UserProfileData; user?: UserProfileData }>('/auth/me');
-      const profileData = res?.profile || res?.user || null;
-      if (profileData) {
-        setUserProfile(prev => prev ? { ...profileData, ...prev } : profileData);
-        return profileData;
+      // Fetch profile from db
+      let dbProfile: any = null;
+      const { data: dbProfileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
+
+      if (dbProfileData) {
+        dbProfile = dbProfileData;
+      } else {
+        // If not found, create minimal profile record
+        const newProfile = {
+          user_id: currentUser.id,
+          display_name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || 'Mavros Member',
+          avatar_url: currentUser.user_metadata?.avatar_url || null,
+        };
+        const { data: insertedData } = await supabase
+          .from('profiles')
+          .insert(newProfile)
+          .select()
+          .maybeSingle();
+        if (insertedData) {
+          dbProfile = insertedData;
+        } else {
+          dbProfile = newProfile;
+        }
       }
+
+      const meta = currentUser.user_metadata || {};
+      const profileData: UserProfileData = {
+        id: currentUser.id,
+        email: currentUser.email || null,
+        display_name: dbProfile.display_name || meta.full_name || meta.name || 'Mavros Member',
+        avatar_url: dbProfile.avatar_url || meta.avatar_url || null,
+        username: meta.username || null,
+        phone: meta.phone || null,
+        country: meta.country || null,
+        language: meta.language || 'English (US)',
+        timezone: meta.timezone || 'UTC+5:30 (IST)',
+        bio: meta.bio || null,
+        occupation: meta.occupation || null,
+        company: meta.company || null,
+        website: meta.website || null,
+        portfolio: meta.portfolio || null,
+        social_links: meta.social_links || {},
+        socialLinks: meta.social_links || {},
+        workspace_settings: meta.workspace_settings || { autoSave: true, autoRecovery: true },
+        notification_settings: meta.notification_settings || { desktop: true, email: true, updates: true, completion: true, marketing: false },
+        created_at: dbProfile.created_at || currentUser.created_at || null,
+        updated_at: dbProfile.updated_at || null,
+      };
+
+      setUserProfile(profileData);
+      return profileData;
     } catch (err) {
-      console.warn('Backend profile sync notice:', err);
+      console.warn('Supabase profile sync notice:', err);
     }
     return userProfile;
   }, [userProfile, setUserProfile]);
@@ -263,37 +313,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateUserProfile = useCallback(async (data: Partial<UserProfileData>): Promise<UserProfileData | null> => {
-    let updatedProfile: UserProfileData | null = null;
-    try {
-      const res = await apiRequest<{ success: boolean; profile?: UserProfileData; user?: UserProfileData }>('/auth/me/profile', {
-        method: 'PUT',
-        body: JSON.stringify(data),
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (!currentUser) throw new Error('Not authenticated');
+
+    // 1. Update public profiles table for display_name and avatar_url if provided
+    const dbPayload: any = {};
+    if (data.display_name !== undefined) dbPayload.display_name = data.display_name;
+    if (data.avatar_url !== undefined) dbPayload.avatar_url = data.avatar_url;
+
+    if (Object.keys(dbPayload).length > 0) {
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update(dbPayload)
+        .eq('user_id', currentUser.id);
+      if (dbError) throw dbError;
+    }
+
+    // 2. Update user_metadata for settings fields
+    const metaPayload: any = {};
+    if (data.display_name !== undefined) {
+      metaPayload.full_name = data.display_name;
+      metaPayload.name = data.display_name;
+    }
+    if (data.avatar_url !== undefined) metaPayload.avatar_url = data.avatar_url;
+    if (data.username !== undefined) metaPayload.username = data.username;
+    if (data.phone !== undefined) metaPayload.phone = data.phone;
+    if (data.country !== undefined) metaPayload.country = data.country;
+    if (data.language !== undefined) metaPayload.language = data.language;
+    if (data.timezone !== undefined) metaPayload.timezone = data.timezone;
+    if (data.bio !== undefined) metaPayload.bio = data.bio;
+    if (data.occupation !== undefined) metaPayload.occupation = data.occupation;
+    if (data.company !== undefined) metaPayload.company = data.company;
+    if (data.website !== undefined) metaPayload.website = data.website;
+    if (data.portfolio !== undefined) metaPayload.portfolio = data.portfolio;
+    if (data.social_links !== undefined) metaPayload.social_links = data.social_links;
+    if (data.socialLinks !== undefined) metaPayload.social_links = data.socialLinks;
+    if (data.workspace_settings !== undefined) metaPayload.workspace_settings = data.workspace_settings;
+    if (data.notification_settings !== undefined) metaPayload.notification_settings = data.notification_settings;
+
+    if (Object.keys(metaPayload).length > 0) {
+      const { error: authError } = await supabase.auth.updateUser({
+        data: metaPayload,
       });
-
-      const updated = res?.profile || res?.user || null;
-      if (updated) {
-        updatedProfile = updated;
-      }
-    } catch (err) {
-      console.warn('Backend profile update notice:', err);
+      if (authError) throw authError;
     }
 
-    if (!updatedProfile) {
-      updatedProfile = {
-        id: userProfile?.id || '00000000-0000-0000-0000-000000000001',
-        email: userProfile?.email || 'member@mavros.in',
-        display_name: data.display_name || userProfile?.display_name || 'Mavros Member',
-        avatar_url: data.avatar_url || userProfile?.avatar_url || null,
-        created_at: userProfile?.created_at || new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        ...userProfile,
-        ...data,
-      };
-    }
+    const nextProfile: UserProfileData = {
+      ...userProfile,
+      ...data,
+      id: currentUser.id,
+      email: currentUser.email || null,
+      created_at: userProfile?.created_at || currentUser.created_at || null,
+      updated_at: new Date().toISOString(),
+    } as UserProfileData;
 
-    setUserProfile(updatedProfile);
-    return updatedProfile;
-  }, [userProfile]);
+    setUserProfile(nextProfile);
+    return nextProfile;
+  }, [userProfile, setUserProfile]);
 
   return (
     <AuthContext.Provider

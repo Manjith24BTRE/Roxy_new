@@ -1,20 +1,15 @@
 import React from 'react';
 import { 
   User, 
-  FileText, 
   FolderKanban, 
   Eye, 
   Bell, 
-  Shield, 
   Lock, 
   Database, 
   Keyboard, 
-  Accessibility, 
-  Link, 
   CreditCard, 
   Download, 
-  Info, 
-  Sliders 
+  Info
 } from 'lucide-react';
 
 export interface CategoryItem {
@@ -31,20 +26,15 @@ interface SettingsSidebarProps {
 export function SettingsSidebar({ activeCategory, onSelectCategory }: SettingsSidebarProps) {
   const categories: CategoryItem[] = [
     { id: 'account', name: 'Account', icon: <User size={16} /> },
-    { id: 'profile', name: 'Profile', icon: <FileText size={16} /> },
     { id: 'workspace', name: 'Workspace', icon: <FolderKanban size={16} /> },
     { id: 'appearance', name: 'Appearance', icon: <Eye size={16} /> },
     { id: 'notifications', name: 'Notifications', icon: <Bell size={16} /> },
-    { id: 'privacy', name: 'Privacy', icon: <Shield size={16} /> },
     { id: 'security', name: 'Security', icon: <Lock size={16} /> },
     { id: 'storage', name: 'Storage', icon: <Database size={16} /> },
     { id: 'shortcuts', name: 'Keyboard Shortcuts', icon: <Keyboard size={16} /> },
-    { id: 'accessibility', name: 'Accessibility', icon: <Accessibility size={16} /> },
-    { id: 'connected', name: 'Connected Apps', icon: <Link size={16} /> },
     { id: 'billing', name: 'Billing & Credits', icon: <CreditCard size={16} /> },
     { id: 'export', name: 'Export Preferences', icon: <Download size={16} /> },
-    { id: 'about', name: 'About VEYTRIX', icon: <Info size={16} /> },
-    { id: 'advanced', name: 'Advanced', icon: <Sliders size={16} /> }
+    { id: 'about', name: 'About VEYTRIX', icon: <Info size={16} /> }
   ];
 
   return (

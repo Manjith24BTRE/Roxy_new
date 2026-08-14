@@ -31,15 +31,14 @@ export function useProfileAvatar() {
     setError(null);
 
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
+      const fileExt = file.name.split('.').pop() || 'png';
+      const filePath = `${user.id}/avatar.${fileExt}`;
 
       // Upload image to Supabase Storage 'avatars' bucket
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(filePath, file, {
-          cacheControl: '3600',
+          cacheControl: '0', // No cache to allow immediate updates
           upsert: true,
         });
 
@@ -52,12 +51,15 @@ export function useProfileAvatar() {
         .from('avatars')
         .getPublicUrl(filePath);
 
+      // Add cache-busting query parameter
+      const cacheBustUrl = `${publicUrl}?t=${Date.now()}`;
+
       // Update user profile record
       await updateUserProfile({
-        avatar_url: publicUrl,
+        avatar_url: cacheBustUrl,
       });
 
-      return publicUrl;
+      return cacheBustUrl;
     } catch (err: any) {
       console.error('Failed to upload avatar:', err);
       setError(err.message || 'An error occurred during avatar upload.');
@@ -77,7 +79,7 @@ export function useProfileAvatar() {
       if (userProfile?.avatar_url) {
         const urlParts = userProfile.avatar_url.split('/avatars/');
         if (urlParts.length > 1) {
-          const filePath = decodeURIComponent(urlParts[1]);
+          const filePath = decodeURIComponent(urlParts[1].split('?')[0]); // Strip query params
           await supabase.storage.from('avatars').remove([filePath]).catch((e) => {
             console.warn('Could not delete old avatar file:', e);
           });

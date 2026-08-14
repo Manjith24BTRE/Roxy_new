@@ -146,11 +146,6 @@ class ReversedAudioEngine {
 
       this.bufferCache.set(clipId, reversedBuffer);
 
-      // Also generate and cache a WAV Blob URL for HTML5 & export pipelines
-      const blob = audioBufferToWavBlob(reversedBuffer);
-      const blobUrl = URL.createObjectURL(blob);
-      this.blobUrlCache.set(clipId, blobUrl);
-
       return reversedBuffer;
     } catch (err) {
       console.warn('Could not decode or reverse audio buffer for clip:', clipId, err);

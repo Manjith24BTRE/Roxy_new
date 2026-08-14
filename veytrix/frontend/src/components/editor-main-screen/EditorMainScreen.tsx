@@ -1998,7 +1998,8 @@ function EditorMainScreenContent() {
                   if (nextVideo) {
                     const nextTarget = timelineTimeToSourceTime(nextClip, nextClip.timelineStart);
                     nextVideo.currentTime = nextTarget;
-                    if (!nextClip.isReversed && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
+                    if (!nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
+                      if (nextClip.isReversed) nextVideo.muted = true;
                       nextVideo.play().catch(() => { });
                     }
                   }
@@ -2025,8 +2026,9 @@ function EditorMainScreenContent() {
                   const v = videoRefs.current[c.id];
                   if (v) {
                     if (activeIds.has(c.id)) {
-                      if (v.paused && !v.seeking && !c.isReversed && !c.isFreezeFrame && c.type !== 'image' && c.type !== 'freeze') {
+                      if (v.paused && !v.seeking && !c.isFreezeFrame && c.type !== 'image' && c.type !== 'freeze') {
                         v.currentTime = timelineTimeToSourceTime(c, curTime);
+                        if (c.isReversed) v.muted = true;
                         v.play().catch(() => {});
                       }
                     } else {
@@ -2050,8 +2052,9 @@ function EditorMainScreenContent() {
                     if (v && c.type !== 'image' && c.type !== 'freeze' && !c.isFreezeFrame) {
                       const isActive = absoluteTime >= c.timelineStart && absoluteTime < c.timelineStart + c.duration;
                       if (isActive) {
-                        if (v.paused && !v.seeking && !c.isReversed) {
+                        if (v.paused && !v.seeking) {
                           v.currentTime = timelineTimeToSourceTime(c, absoluteTime);
+                          if (c.isReversed) v.muted = true;
                           v.play().catch(() => {});
                         } else if (!v.seeking && !v.paused) {
                           const expectedLocalTime = timelineTimeToSourceTime(c, absoluteTime);
@@ -2096,7 +2099,7 @@ function EditorMainScreenContent() {
                     }
 
                     // Pre-warm next video element 0.4s (400ms) in advance
-                    if (timeUntilEnd <= 0.4 && !nextClip.isReversed && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
+                    if (timeUntilEnd <= 0.4 && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
                       preWarmingClipIdRef.current = nextClip.id;
                       if (nextVideo.paused) {
                         nextVideo.muted = true; // Mute audio during pre-warm so sound doesn't overlap early
@@ -2114,7 +2117,8 @@ function EditorMainScreenContent() {
                       const isNextVideoMuted = isMuted || !!mutedClips[nextClip.id] || !!nextClip.isMuted || !!nextClip.isAudioDetached || !!nextClip.audioDetached || nextClip.embeddedAudioEnabled === false;
                       nextVideo.muted = isNextVideoMuted;
                       nextVideo.volume = isNextVideoMuted ? 0 : Math.min(1, Math.max(0, volume * (nextClip.volume ?? 1)));
-                      if (nextVideo.paused && !nextClip.isReversed && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
+                      if (nextVideo.paused && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
+                        if (nextClip.isReversed) nextVideo.muted = true;
                         nextVideo.play().catch(() => {});
                       }
                     }
@@ -2195,7 +2199,8 @@ function EditorMainScreenContent() {
             const targetLocalTime = timelineTimeToSourceTime(c, currentTime);
             v.currentTime = targetLocalTime;
             if (c.isReversed) {
-              v.pause();
+              v.muted = true;
+              v.play().catch(() => { });
               const relTime = Math.max(0, currentTime - c.timelineStart);
               const clipVol = isMuted || mutedClips[c.id] ? 0 : volume;
               const mediaSource = getClipMediaSource(c);
@@ -2271,7 +2276,8 @@ function EditorMainScreenContent() {
           }
           if (isPlaying) {
             if (c.isReversed) {
-              v.pause();
+              v.muted = true;
+              v.play().catch(() => { });
               const relTime = Math.max(0, clampedTime - c.timelineStart);
               const clipVol = isMuted || mutedClips[c.id] ? 0 : volume;
               const mediaSource = getClipMediaSource(c);
