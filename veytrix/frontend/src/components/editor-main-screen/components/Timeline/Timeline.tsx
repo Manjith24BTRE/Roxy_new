@@ -4,7 +4,6 @@ import {
   ZoomOut, Lock, Unlock, Eye, EyeOff, Volume2, VolumeX, Bookmark
 } from 'lucide-react';
 import { ClipActionsPanel } from '../../clip-actions/ClipActionsPanel';
-import { ClipTrimHandles } from '../../tools/trim';
 import { useDuplicate } from '../../tools/duplicate';
 import { useRename, RenameDialog } from '../../tools/rename';
 import { useReverse } from '../../tools/reverse';
@@ -629,20 +628,6 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
                               {(clip as any).isReversed && <RotateCcw className="h-2.5 w-2.5 text-sky-400 flex-shrink-0" />}
                               {clip.name} {(clip as any).isReversed && <span className="text-[8px] font-mono text-sky-400 font-bold uppercase">(REV)</span>}
                             </span>
-                            {isSelected && !clipIsLocked && (
-                              <ClipTrimHandles
-                                clipId={clip.id}
-                                timelineStart={clip.start}
-                                sourceStart={0}
-                                duration={clip.duration}
-                                pixelsPerSecond={scaleFactor}
-                                isLocked={clipIsLocked}
-                                onTrimUpdate={(newTimelineStart: number, newSourceStart: number, newDuration: number) => {
-                                  handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration);
-                                }}
-                                onTrimEnd={handleTrimEnd}
-                              />
-                            )}
                           </div>
                         );
                       })}

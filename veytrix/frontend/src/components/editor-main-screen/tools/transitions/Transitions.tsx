@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Star, Sliders, LayoutGrid, List, RotateCcw, Clock, Move, Eye } from 'lucide-react';
+import { Search, Star, Sliders, LayoutGrid, List, RotateCcw, Clock, Move, Eye, Sparkles } from 'lucide-react';
 import { TransitionItem } from './Transitions.types';
 import { SAMPLE_TRANSITIONS_NEW } from './Transitions.data';
 import { TransitionThumbnail } from './TransitionThumbnail';
+import { TransitionGalleryModal } from './TransitionGalleryModal';
 
 interface TransitionsProps {
   activeTransitionId: string | null;
@@ -36,6 +37,7 @@ export function Transitions({
   const [internalQuery, setInternalQuery] = useState(searchQuery);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isGridView, setIsGridView] = useState<boolean>(true);
+  const [isGalleryOpen, setIsGalleryOpen] = useState<boolean>(false);
   
   // Storage states
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -143,7 +145,7 @@ export function Transitions({
 
   // Virtual Scroll Parameters
   const itemsPerRow = isGridView ? 2 : 1;
-  const rowHeight = isGridView ? 104 : 80;
+  const rowHeight = isGridView ? 140 : 80;
   const bufferRows = 3;
 
   const totalRows = Math.ceil(filtered.length / itemsPerRow);
@@ -280,6 +282,7 @@ export function Transitions({
           />
         </div>
 
+
         {/* Compare Bypass Toggle */}
         <button
           type="button"
@@ -397,45 +400,39 @@ export function Transitions({
                           draggable
                           onDragStart={(e) => handleDragStart(e, t.id)}
                           onClick={() => onSelectTransition(isSelected ? null : t.id)}
-                          className={`rounded-xl border flex flex-col justify-between transition-all duration-200 bg-[#0b101c]/60 cursor-pointer group relative overflow-hidden ${
-                            isGridView ? 'p-2 h-[96px]' : 'p-2.5 flex-row items-center gap-3 h-[72px]'
+                          className={`rounded-xl border flex flex-col justify-start transition-all duration-200 bg-[#0b101c]/60 cursor-pointer group relative overflow-hidden ${
+                            isGridView ? 'p-2 min-h-[135px] gap-1.5' : 'p-2.5 flex-row items-center gap-3 h-[76px]'
                           } ${
                             isSelected
                               ? 'border-sky-500/50 shadow-[0_0_12px_rgba(14,165,233,0.15)] bg-sky-500/[0.04]'
                               : 'border-white/5 hover:border-white/15'
                           }`}
                         >
-                          
-                          {/* Drag Handle Indicator */}
-                          <div className="absolute top-1 right-8 p-1 opacity-0 group-hover:opacity-100 transition-opacity z-20 text-slate-500 hover:text-slate-300">
-                            <Move className="h-3 w-3 cursor-grab" />
-                          </div>
-
-                          {/* Aspect-Ratio Preview container */}
-                          <div className={`relative aspect-video rounded-lg overflow-hidden bg-slate-950 border border-white/10 flex items-center justify-center flex-shrink-0 ${
-                            isGridView ? 'w-full mb-1.5' : 'w-20 h-full'
+                          {/* 16:9 Pure Animated Video Preview (No icons, text, or shapes inside) */}
+                          <div className={`relative aspect-video rounded-lg overflow-hidden bg-slate-950 flex-shrink-0 ${
+                            isGridView ? 'w-full' : 'w-24 h-full'
                           }`}>
-                            <TransitionThumbnail transition={t} />
+                            <TransitionThumbnail transition={t} showDetailsBelow={false} />
 
-                            {/* Favorite star */}
+                            {/* Subtle Favorite star button */}
                             <button
                               type="button"
                               onClick={(e) => toggleFavorite(t.id, e)}
-                              className="absolute top-1 left-1 p-0.5 rounded bg-slate-950/60 hover:bg-slate-950 border border-white/5 text-slate-400 hover:text-yellow-400 cursor-pointer transition z-20"
+                              className="absolute top-1 left-1 p-0.5 rounded bg-slate-950/70 hover:bg-slate-950 border border-white/10 text-slate-400 hover:text-yellow-400 cursor-pointer transition z-20"
                             >
-                              <Star className={`h-2.5 w-2.5 ${isFav ? 'fill-yellow-400 text-yellow-400' : 'text-slate-500'}`} />
+                              <Star className={`h-2.5 w-2.5 ${isFav ? 'fill-yellow-400 text-yellow-400' : 'text-slate-400'}`} />
                             </button>
                           </div>
 
-                          {/* Metadata Texts */}
-                          <div className="min-w-0 flex-1 flex flex-col justify-center">
+                          {/* Metadata Text OUTSIDE / BELOW Preview Only */}
+                          <div className="min-w-0 flex-1 flex flex-col justify-center px-0.5">
                             <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-bold text-slate-200 block truncate leading-tight">{t.name}</span>
+                              <span className="text-[10px] font-semibold text-slate-100 block truncate leading-tight group-hover:text-sky-300 transition">{t.name}</span>
                               {!isGridView && (
                                 <span className="text-[7px] px-1 bg-slate-800 text-slate-400 font-mono rounded select-none uppercase">{t.category}</span>
                               )}
                             </div>
-                            <p className="text-[8px] text-slate-500 line-clamp-1 mt-0.5 leading-normal italic">{t.description}</p>
+                            <p className="text-[8.5px] text-slate-400 line-clamp-1 mt-0.5 leading-normal">{t.description}</p>
                           </div>
 
                         </div>
@@ -583,6 +580,8 @@ export function Transitions({
 
         </div>
       )}
+
+
 
     </div>
   );

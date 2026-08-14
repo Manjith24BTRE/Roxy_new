@@ -1,27 +1,24 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 export interface TrimClipSnapshot {
   id: string;
-  mediaId?: string;
-  name: string;
   timelineStart: number;
   startOffset: number;
   duration: number;
-  baseDuration?: number;
-  playbackRate?: number;
+  keyframes?: any[];
 }
 
 export interface UseTrimModeOptions {
   timelineClips: any[];
   mediaFiles: any[];
-  setTimelineClips: (updater: (prev: any[]) => any[]) => void;
+  setTimelineClips: React.Dispatch<React.SetStateAction<any[]>>;
   recalculateSequence: (clips: any[]) => any[];
   getProjectTotalDuration: (clips: any[]) => number;
-  setDuration: (dur: number) => void;
+  setDuration: (duration: number) => void;
   handleSeek: (time: number, force?: boolean) => void;
-  setZoomLevel: (zoom: number) => void;
-  beginTransaction: (label: string, state: any) => void;
-  commitTransaction: (state: any) => void;
+  setZoomLevel?: React.Dispatch<React.SetStateAction<number>>;
+  beginTransaction: (description: string, initialState: any) => void;
+  commitTransaction: (finalState: any) => void;
   getProjectState: () => any;
   showToast: (msg: string) => void;
 }
@@ -43,40 +40,34 @@ export function useTrimMode({
   const [isTrimModeActive, setIsTrimModeActive] = useState(false);
   const [trimmingClipId, setTrimmingClipId] = useState<string | null>(null);
   const initialSnapshotRef = useRef<TrimClipSnapshot | null>(null);
-  const initialZoomLevelRef = useRef<number>(120);
 
   // Enter Trim Mode for a targeted clip
   const enterTrimMode = useCallback(
-    (clipId: string, currentZoom: number = 120) => {
-      const clip = timelineClips.find((c) => c.id === clipId);
+    (clipId: string, currentZoom?: number) => {
+      const clip = timelineClips.find((c) => c.id === clipId || c.mediaId === clipId);
       if (!clip) {
         showToast('Select a valid clip to trim');
         return;
       }
 
-      initialZoomLevelRef.current = currentZoom;
+      // Save initial snapshot for Cancel/Revert capability
       initialSnapshotRef.current = {
         id: clip.id,
-        mediaId: clip.mediaId,
-        name: clip.name,
         timelineStart: clip.timelineStart ?? clip.start ?? 0,
         startOffset: clip.startOffset ?? 0,
         duration: clip.duration,
-        baseDuration: clip.baseDuration ?? clip.duration,
-        playbackRate: clip.playbackRate ?? 1,
+        keyframes: clip.keyframes ? JSON.parse(JSON.stringify(clip.keyframes)) : [],
       };
 
       setTrimmingClipId(clip.id);
       setIsTrimModeActive(true);
 
-      // Auto-zoom timeline for frame-accurate editing
-      setZoomLevel(Math.max(160, currentZoom * 1.3));
-
       // Seek playhead to clip start
-      handleSeek(clip.timelineStart ?? clip.start ?? 0);
+      handleSeek(clip.timelineStart ?? clip.start ?? 0, true);
+
       showToast(`Entered Trim Mode for "${clip.name}"`);
     },
-    [timelineClips, setZoomLevel, handleSeek, showToast]
+    [timelineClips, handleSeek, showToast]
   );
 
   // Apply (Commit) Trim Changes
@@ -94,73 +85,62 @@ export function useTrimMode({
       showToast(`Applied trim for "${currentClip.name}"`);
     }
 
-    // Restore user's previous timeline zoom
-    setZoomLevel(initialZoomLevelRef.current);
+    initialSnapshotRef.current = null;
+    setTrimmingClipId(null);
+    setIsTrimModeActive(false);
+  }, [trimmingClipId, timelineClips, beginTransaction, commitTransaction, getProjectState, showToast]);
+
+  // Cancel Trim Changes & Revert to Initial Snapshot
+  const cancelTrim = useCallback(() => {
+    if (!trimmingClipId || !initialSnapshotRef.current) {
+      setIsTrimModeActive(false);
+      setTrimmingClipId(null);
+      return;
+    }
+
+    const snap = initialSnapshotRef.current;
+    setTimelineClips((prev) => {
+      const updated = prev.map((c) => {
+        if (c.id === snap.id) {
+          return {
+            ...c,
+            timelineStart: snap.timelineStart,
+            start: snap.timelineStart,
+            startOffset: snap.startOffset,
+            duration: snap.duration,
+            keyframes: snap.keyframes || [],
+          };
+        }
+        return c;
+      });
+      const recalculated = recalculateSequence(updated);
+      setDuration(getProjectTotalDuration(recalculated));
+      return recalculated;
+    });
+
+    showToast('Trim changes discarded');
+
     initialSnapshotRef.current = null;
     setTrimmingClipId(null);
     setIsTrimModeActive(false);
   }, [
     trimmingClipId,
-    timelineClips,
-    beginTransaction,
-    commitTransaction,
-    getProjectState,
-    setZoomLevel,
-    showToast,
-  ]);
-
-  // Cancel Trim Changes & Revert to Initial Snapshot
-  const cancelTrim = useCallback(() => {
-    if (initialSnapshotRef.current) {
-      const snap = initialSnapshotRef.current;
-      setTimelineClips((prev) => {
-        const updated = prev.map((c) => {
-          if (c.id === snap.id) {
-            return {
-              ...c,
-              timelineStart: snap.timelineStart,
-              start: snap.timelineStart,
-              startOffset: snap.startOffset,
-              duration: snap.duration,
-              baseDuration: snap.baseDuration,
-            };
-          }
-          return c;
-        });
-        const recalculated = recalculateSequence(updated);
-        const newTotalDur = getProjectTotalDuration(recalculated);
-        setDuration(newTotalDur);
-        return recalculated;
-      });
-
-      handleSeek(snap.timelineStart);
-      showToast('Trim changes discarded');
-    }
-
-    setZoomLevel(initialZoomLevelRef.current);
-    initialSnapshotRef.current = null;
-    setTrimmingClipId(null);
-    setIsTrimModeActive(false);
-  }, [
-    initialSnapshotRef,
     setTimelineClips,
     recalculateSequence,
     getProjectTotalDuration,
     setDuration,
-    handleSeek,
-    setZoomLevel,
     showToast,
   ]);
 
-  // Reset Clip to Full Source Duration
+  // Reset Trim to full source length
   const resetTrim = useCallback(() => {
     if (!trimmingClipId) return;
 
     const clip = timelineClips.find((c) => c.id === trimmingClipId);
     if (!clip) return;
 
-    const mediaAsset = mediaFiles.find((m) => m.id === clip.mediaId || m.id === clip.id);
-    const maxSourceDuration = mediaAsset?.duration || clip.baseDuration || clip.duration || 10;
+    const media = mediaFiles.find((m) => m.id === clip.mediaId);
+    const maxDur = media?.duration || clip.duration || 10;
 
     setTimelineClips((prev) => {
       const updated = prev.map((c) => {
@@ -168,20 +148,17 @@ export function useTrimMode({
           return {
             ...c,
             startOffset: 0,
-            duration: maxSourceDuration,
-            baseDuration: maxSourceDuration,
+            duration: maxDur,
           };
         }
         return c;
       });
       const recalculated = recalculateSequence(updated);
-      const newTotalDur = getProjectTotalDuration(recalculated);
-      setDuration(newTotalDur);
+      setDuration(getProjectTotalDuration(recalculated));
       return recalculated;
     });
 
-    handleSeek(clip.timelineStart ?? 0);
-    showToast('Reset clip to full source duration');
+    showToast(`Reset "${clip.name}" to full duration`);
   }, [
     trimmingClipId,
     timelineClips,
@@ -190,20 +167,17 @@ export function useTrimMode({
     recalculateSequence,
     getProjectTotalDuration,
     setDuration,
-    handleSeek,
     showToast,
   ]);
 
-  // Handle Keyboard Shortcuts (Enter -> Apply, Esc -> Cancel)
+  // Keyboard shortcut listener (Escape to cancel, Enter to apply)
   useEffect(() => {
     if (!isTrimModeActive) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Enter') {
-        e.preventDefault();
         applyTrim();
       } else if (e.key === 'Escape') {
-        e.preventDefault();
         cancelTrim();
       }
     };
