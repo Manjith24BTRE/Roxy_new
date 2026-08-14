@@ -6,7 +6,12 @@ import { syncService } from '../../../services/sync.service';
 export function WorkspacePanel() {
   const { userProfile, isSaving, toast, saveWorkspace } = useSettings();
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    workspaceName: string;
+    autoSave: boolean;
+    autoRecovery: boolean;
+  }>({
+    workspaceName: userProfile?.display_name ? `${userProfile.display_name}'s Workspace` : 'Personal Workspace',
     autoSave: true,
     autoRecovery: true
   });
@@ -15,12 +20,11 @@ export function WorkspacePanel() {
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
 
   useEffect(() => {
-    if (userProfile?.workspace_settings) {
-      setFormData({
-        autoSave: userProfile.workspace_settings.autoSave ?? true,
-        autoRecovery: userProfile.workspace_settings.autoRecovery ?? true
-      });
-    }
+    setFormData({
+      workspaceName: userProfile?.display_name ? `${userProfile.display_name}'s Workspace` : 'Personal Workspace',
+      autoSave: userProfile?.workspace_settings?.autoSave ?? true,
+      autoRecovery: userProfile?.workspace_settings?.autoRecovery ?? true
+    });
   }, [userProfile]);
 
   useEffect(() => {
@@ -77,6 +81,7 @@ export function WorkspacePanel() {
 
   const handleReset = () => {
     setFormData({
+      workspaceName: userProfile?.display_name ? `${userProfile.display_name}'s Workspace` : 'Personal Workspace',
       autoSave: true,
       autoRecovery: true
     });
@@ -103,6 +108,19 @@ export function WorkspacePanel() {
       )}
 
       <div className="flex flex-col gap-4">
+        {/* Workspace Name Input */}
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-bold text-[#1D2B64]/60 uppercase tracking-wider">Workspace Name</label>
+          <input
+            type="text"
+            name="workspaceName"
+            value={formData.workspaceName || ''}
+            onChange={(e) => setFormData(prev => ({ ...prev, workspaceName: e.target.value }))}
+            placeholder="e.g. Creative Studio Workspace"
+            className="w-full bg-[#FAFAFC] border border-[#1D2B64]/10 rounded-xl px-3 py-2.5 text-xs text-[#1D2B64] focus:outline-none focus:border-[#3B6CE7]"
+          />
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
           <label className="flex items-center gap-3 p-3 bg-[#FAFAFC] border border-[#1D2B64]/5 rounded-xl cursor-pointer">
             <input
@@ -131,6 +149,28 @@ export function WorkspacePanel() {
               <span className="text-[9px] text-[#1D2B64]/50 font-medium">Recover backup after crash</span>
             </div>
           </label>
+        </div>
+
+        {/* Team Members List */}
+        <div className="mt-2 flex flex-col gap-2">
+          <div className="flex justify-between items-center border-b border-[#1D2B64]/5 pb-1">
+            <h4 className="text-xs font-bold text-[#1D2B64]">Team Members & Roles</h4>
+            <span className="text-[10px] text-[#3B6CE7] font-semibold bg-[#E6F2F8] px-2 py-0.5 rounded-full">1 Active Member</span>
+          </div>
+          <div className="flex justify-between items-center p-3 bg-[#FAFAFC] border border-[#1D2B64]/5 rounded-xl text-xs text-[#1D2B64]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-[#1D2B64] text-white font-bold flex items-center justify-center text-[10px]">
+                {userProfile?.display_name ? userProfile.display_name.substring(0, 2).toUpperCase() : 'ME'}
+              </div>
+              <div className="flex flex-col">
+                <span className="font-bold text-[#1D2B64]">{userProfile?.display_name || userProfile?.full_name || 'You'}</span>
+                <span className="text-[9px] text-[#1D2B64]/40">{userProfile?.email || 'owner@workspace'}</span>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md uppercase tracking-wider">
+              Owner
+            </span>
+          </div>
         </div>
 
         <div className="mt-4 flex flex-col gap-2">

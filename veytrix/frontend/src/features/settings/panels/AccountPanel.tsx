@@ -192,6 +192,18 @@ export function AccountPanel() {
         </div>
 
         <div className="flex flex-col gap-1 md:col-span-2">
+          <label className="text-[10px] font-bold text-[#1D2B64]/60 uppercase tracking-wider">Bio</label>
+          <textarea
+            name="bio"
+            value={formData.bio || ''}
+            onChange={handleChange as any}
+            placeholder="Tell us a little bit about yourself..."
+            rows={2}
+            className="w-full bg-[#FAFAFC] border border-[#1D2B64]/10 rounded-xl px-3 py-2 text-xs text-[#1D2B64] focus:outline-none focus:border-[#3B6CE7] resize-none"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1 md:col-span-2">
           <label className="text-[10px] font-bold text-[#1D2B64]/60 uppercase tracking-wider">Email Address</label>
           <div className="relative">
             <Mail size={14} className="absolute left-3 top-3 text-[#1D2B64]/40" />
