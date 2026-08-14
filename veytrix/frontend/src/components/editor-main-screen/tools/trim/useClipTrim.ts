@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 
 export type TrimEdge = 'start' | 'end';
 
@@ -38,55 +38,38 @@ export function useClipTrim({
   onTrimEnd,
 }: UseClipTrimOptions) {
   const snapshotRef = useRef<TrimSnapshot | null>(null);
+  const latestClientXRef = useRef<number>(0);
+  const rafIdRef = useRef<number | null>(null);
 
-  const handlePointerDown = useCallback(
-    (
-      e: React.PointerEvent,
-      edge: TrimEdge,
-      currentTimelineStart: number,
-      currentSourceStart: number,
-      currentDuration: number,
-      maxSourceDuration: number = Infinity
-    ) => {
-      e.preventDefault();
-      e.stopPropagation();
+  const onTrimUpdateRef = useRef(onTrimUpdate);
+  const onTrimEndRef = useRef(onTrimEnd);
 
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  useEffect(() => {
+    onTrimUpdateRef.current = onTrimUpdate;
+    onTrimEndRef.current = onTrimEnd;
+  });
 
-      snapshotRef.current = {
-        activeEdge: edge,
-        originalPointerX: e.clientX,
-        originalSourceStart: currentSourceStart,
-        originalTimelineStart: currentTimelineStart,
-        originalDuration: currentDuration,
-        minDuration: minClipDuration,
-        maxSourceDuration,
-        playbackRate,
-      };
-    },
-    [minClipDuration, playbackRate]
-  );
-
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
+  const processTrimMove = useCallback(
+    (clientX: number) => {
       if (!snapshotRef.current) return;
-      e.stopPropagation();
 
       const snap = snapshotRef.current;
-      const deltaPx = e.clientX - snap.originalPointerX;
-      const deltaTime = deltaPx / Math.max(1, pixelsPerSecond);
+      const deltaPx = clientX - snap.originalPointerX;
+      const pps = Math.max(1, pixelsPerSecond);
+      const deltaTime = deltaPx / pps;
 
       let newSourceStart = snap.originalSourceStart;
       let newTimelineStart = snap.originalTimelineStart;
       let newDuration = snap.originalDuration;
-
-      const rate = snap.playbackRate;
+      const rate = snap.playbackRate || 1;
       let activeEdgeTime = newTimelineStart;
 
       if (snap.activeEdge === 'start') {
-        // Left Handle: Trim clip start
+        // Left Handle: Trim clip start / in-point
         const maxDeltaTime = snap.originalDuration - snap.minDuration;
-        const minDeltaTime = -snap.originalSourceStart / rate;
+        const minDeltaTimeFromSource = -snap.originalSourceStart / rate;
+        const minDeltaTimeFromTimeline = -snap.originalTimelineStart;
+        const minDeltaTime = Math.max(minDeltaTimeFromSource, minDeltaTimeFromTimeline);
 
         let clampedDelta = Math.max(minDeltaTime, Math.min(deltaTime, maxDeltaTime));
         let candidateTimelineStart = snap.originalTimelineStart + clampedDelta;
@@ -108,15 +91,19 @@ export function useClipTrim({
         }
 
         newSourceStart = Math.max(0, snap.originalSourceStart + clampedDelta * rate);
-        newTimelineStart = snap.originalTimelineStart + clampedDelta;
+        newTimelineStart = Math.max(0, snap.originalTimelineStart + clampedDelta);
         newDuration = Math.max(snap.minDuration, snap.originalDuration - clampedDelta);
         activeEdgeTime = newTimelineStart;
       } else {
-        // Right Handle: Trim clip end
+        // Right Handle: Trim clip end / out-point
         const minDeltaTime = -(snap.originalDuration - snap.minDuration);
         const maxDeltaTime =
-          (snap.maxSourceDuration - (snap.originalSourceStart + snap.originalDuration * rate)) /
-          rate;
+          snap.maxSourceDuration !== Infinity
+            ? Math.max(
+                0,
+                (snap.maxSourceDuration - (snap.originalSourceStart + snap.originalDuration * rate)) / rate
+              )
+            : Infinity;
 
         let clampedDelta = Math.max(minDeltaTime, Math.min(deltaTime, maxDeltaTime));
         let candidateEndTime = snap.originalTimelineStart + snap.originalDuration + clampedDelta;
@@ -138,28 +125,84 @@ export function useClipTrim({
         }
 
         newDuration = Math.max(snap.minDuration, snap.originalDuration + clampedDelta);
+        newTimelineStart = snap.originalTimelineStart;
+        newSourceStart = snap.originalSourceStart;
         activeEdgeTime = snap.originalTimelineStart + newDuration;
       }
 
-      onTrimUpdate(newTimelineStart, newSourceStart, newDuration, activeEdgeTime);
+      onTrimUpdateRef.current(newTimelineStart, newSourceStart, newDuration, activeEdgeTime);
     },
-    [pixelsPerSecond, playheadTime, adjacentSnapPoints, onTrimUpdate]
+    [pixelsPerSecond, playheadTime, adjacentSnapPoints]
+  );
+
+  const handlePointerDown = useCallback(
+    (
+      e: React.PointerEvent,
+      edge: TrimEdge,
+      currentTimelineStart: number,
+      currentSourceStart: number,
+      currentDuration: number,
+      maxSourceDuration: number = Infinity
+    ) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      try {
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      } catch {}
+
+      snapshotRef.current = {
+        activeEdge: edge,
+        originalPointerX: e.clientX,
+        originalSourceStart: currentSourceStart,
+        originalTimelineStart: currentTimelineStart,
+        originalDuration: currentDuration,
+        minDuration: minClipDuration,
+        maxSourceDuration,
+        playbackRate,
+      };
+      latestClientXRef.current = e.clientX;
+    },
+    [minClipDuration, playbackRate]
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!snapshotRef.current) return;
+      e.stopPropagation();
+
+      latestClientXRef.current = e.clientX;
+
+      if (rafIdRef.current === null) {
+        rafIdRef.current = requestAnimationFrame(() => {
+          rafIdRef.current = null;
+          processTrimMove(latestClientXRef.current);
+        });
+      }
+    },
+    [processTrimMove]
   );
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent) => {
       if (snapshotRef.current) {
         e.stopPropagation();
+        if (rafIdRef.current !== null) {
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = null;
+        }
+        processTrimMove(e.clientX);
+
         try {
           (e.target as HTMLElement).releasePointerCapture(e.pointerId);
         } catch {}
         snapshotRef.current = null;
-        if (onTrimEnd) {
-          onTrimEnd();
+        if (onTrimEndRef.current) {
+          onTrimEndRef.current();
         }
       }
     },
-    [onTrimEnd]
+    [processTrimMove]
   );
 
   return {

@@ -50,6 +50,7 @@ import {
   KeyframeProperty,
   InterpolationType
 } from './tools/keyframes';
+
 import { ClipTrimHandles, TrimToolbar, useTrimMode } from './tools/trim';
 import { ClipActionsPanel } from './clip-actions/ClipActionsPanel';
 import { EditorHistoryProvider, useEditorHistory, ProjectState } from './history';
@@ -792,119 +793,7 @@ function EditorMainScreenContent() {
     }
   };
 
-  const handleTrimUpdate = (
-    clipId: string,
-    newTimelineStart: number,
-    newSourceStart: number,
-    newDuration: number,
-    activeEdgeTime?: number
-  ) => {
-    // During drag: update sourceStart and duration for target clip and any linked audio/video clips.
-    setTimelineClips((prev) => {
-      const targetClip = prev.find(c => c.id === clipId);
-      if (!targetClip) return prev;
 
-      const isTargetVideo = targetClip.trackId !== 'audio' && targetClip.trackId !== 'music' && targetClip.type !== 'audio' && !targetClip.isDetachedAudio;
-      const validDuration = Math.max(0.5, newDuration);
-
-      const updated = prev.map((c) => {
-        if (c.id === clipId) {
-          const delta = newTimelineStart - c.timelineStart;
-          let kfs = c.keyframes || [];
-          if (delta !== 0) {
-            kfs = kfs.map((k: any) => ({ ...k, time: k.time - delta }));
-          }
-          kfs = KeyframeManager.trimClipKeyframes(kfs, validDuration);
-          return {
-            ...c,
-            timelineStart: newTimelineStart,
-            start: newTimelineStart,
-            startOffset: newSourceStart,
-            duration: validDuration,
-            keyframes: kfs
-          };
-        }
-
-        // If target is video, synchronize any linked/detached audio clips
-        if (isTargetVideo) {
-          const isAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
-          if (isAudio) {
-            const isLinked = c.sourceVideoId === clipId ||
-                             c.id === `detached-audio-${clipId}` ||
-                             (c.mediaId === targetClip.mediaId && Math.abs((c.timelineStart ?? c.start ?? 0) - (targetClip.timelineStart ?? targetClip.start ?? 0)) < 0.5);
-            if (isLinked) {
-              const delta = newTimelineStart - c.timelineStart;
-              let kfs = c.keyframes || [];
-              if (delta !== 0) {
-                kfs = kfs.map((k: any) => ({ ...k, time: k.time - delta }));
-              }
-              kfs = KeyframeManager.trimClipKeyframes(kfs, validDuration);
-              return {
-                ...c,
-                timelineStart: newTimelineStart,
-                start: newTimelineStart,
-                startOffset: newSourceStart,
-                duration: validDuration,
-                keyframes: kfs
-              };
-            }
-          }
-        }
-
-        // If target is audio, synchronize any linked video clip
-        if (!isTargetVideo) {
-          const isVideo = c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio;
-          if (isVideo) {
-            const isLinked = c.id === targetClip.sourceVideoId ||
-                             (c.mediaId === targetClip.mediaId && Math.abs((c.timelineStart ?? c.start ?? 0) - (targetClip.timelineStart ?? targetClip.start ?? 0)) < 0.5);
-            if (isLinked) {
-              const delta = newTimelineStart - c.timelineStart;
-              let kfs = c.keyframes || [];
-              if (delta !== 0) {
-                kfs = kfs.map((k: any) => ({ ...k, time: k.time - delta }));
-              }
-              kfs = KeyframeManager.trimClipKeyframes(kfs, validDuration);
-              return {
-                ...c,
-                timelineStart: newTimelineStart,
-                start: newTimelineStart,
-                startOffset: newSourceStart,
-                duration: validDuration,
-                keyframes: kfs
-              };
-            }
-          }
-        }
-
-        return c;
-      });
-
-      const recalculated = recalculateSequence(updated);
-      const newTotalDur = getProjectTotalDuration(recalculated);
-      setDuration(newTotalDur);
-      return recalculated;
-    });
-
-    if (activeEdgeTime !== undefined) {
-      handleSeek(activeEdgeTime);
-    }
-  };
-
-  const handleTrimCommit = () => {
-    // On pointer up: ensure sequential reflow is committed and show toast.
-    setTimelineClipsState((prev) => {
-      const recalculated = recalculateSequence(prev);
-      const newTotalDur = getProjectTotalDuration(recalculated);
-      setDuration(newTotalDur);
-      if (currentTime > newTotalDur) {
-        handleSeek(Math.max(0, newTotalDur));
-      }
-      return recalculated;
-    });
-    const endState = getProjectState();
-    commitTransaction(endState);
-    showToast('Trimmed clip');
-  };
 
   const isLoadedRef = useRef(false);
 
@@ -1510,9 +1399,17 @@ function EditorMainScreenContent() {
       case 'reverse':
         await toggleReverse(clipId);
         break;
-      case 'trim':
-        handleTrimToPlayhead(clipId, 'start');
+      case 'trim': {
+        const targetId = clipId || clip?.id || activeSelectedClipId || activeMediaId;
+        if (isTrimModeActive && trimmingClipId === targetId) {
+          applyTrim();
+        } else if (targetId) {
+          enterTrimMode(targetId, zoomLevel);
+        } else {
+          showToast('Select a clip to enter Trim Mode');
+        }
         break;
+      }
       case 'add-transition':
         setEffectsSubTab('transitions');
         setActiveTab('transitions');
@@ -2308,6 +2205,150 @@ function EditorMainScreenContent() {
     }
   };
 
+  const trimUpdateRafRef = useRef<number | null>(null);
+
+  const handleTrimUpdate = useCallback(
+    (
+      clipId: string,
+      newTimelineStart: number,
+      newSourceStart: number,
+      newDuration: number,
+      activeEdgeTime?: number
+    ) => {
+      // During drag: update sourceStart and duration for target clip and any linked audio/video clips.
+      setTimelineClips((prev) => {
+        const targetClip = prev.find(c => c.id === clipId);
+        if (!targetClip) return prev;
+
+        const isTargetVideo = targetClip.trackId !== 'audio' && targetClip.trackId !== 'music' && targetClip.type !== 'audio' && !targetClip.isDetachedAudio;
+        const validDuration = Math.max(0.5, newDuration);
+
+        const updated = prev.map((c) => {
+          if (c.id === clipId) {
+            const delta = newTimelineStart - c.timelineStart;
+            let kfs = c.keyframes || [];
+            if (delta !== 0) {
+              kfs = kfs.map((k: any) => ({ ...k, time: k.time - delta }));
+            }
+            kfs = KeyframeManager.trimClipKeyframes(kfs, validDuration);
+            return {
+              ...c,
+              timelineStart: newTimelineStart,
+              start: newTimelineStart,
+              startOffset: newSourceStart,
+              duration: validDuration,
+              keyframes: kfs
+            };
+          }
+
+          // If target is video, synchronize any linked/detached audio clips
+          if (isTargetVideo) {
+            const isAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
+            if (isAudio) {
+              const isLinked = c.sourceVideoId === clipId ||
+                               c.id === `detached-audio-${clipId}` ||
+                               (c.mediaId === targetClip.mediaId && Math.abs((c.timelineStart ?? c.start ?? 0) - (targetClip.timelineStart ?? targetClip.start ?? 0)) < 0.5);
+              if (isLinked) {
+                const delta = newTimelineStart - c.timelineStart;
+                let kfs = c.keyframes || [];
+                if (delta !== 0) {
+                  kfs = kfs.map((k: any) => ({ ...k, time: k.time - delta }));
+                }
+                kfs = KeyframeManager.trimClipKeyframes(kfs, validDuration);
+                return {
+                  ...c,
+                  timelineStart: newTimelineStart,
+                  start: newTimelineStart,
+                  startOffset: newSourceStart,
+                  duration: validDuration,
+                  keyframes: kfs
+                };
+              }
+            }
+          }
+
+          // If target is audio, synchronize any linked video clip
+          if (!isTargetVideo) {
+            const isVideo = c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio;
+            if (isVideo) {
+              const isLinked = c.id === targetClip.sourceVideoId ||
+                               (c.mediaId === targetClip.mediaId && Math.abs((c.timelineStart ?? c.start ?? 0) - (targetClip.timelineStart ?? targetClip.start ?? 0)) < 0.5);
+              if (isLinked) {
+                const delta = newTimelineStart - c.timelineStart;
+                let kfs = c.keyframes || [];
+                if (delta !== 0) {
+                  kfs = kfs.map((k: any) => ({ ...k, time: k.time - delta }));
+                }
+                kfs = KeyframeManager.trimClipKeyframes(kfs, validDuration);
+                return {
+                  ...c,
+                  timelineStart: newTimelineStart,
+                  start: newTimelineStart,
+                  startOffset: newSourceStart,
+                  duration: validDuration,
+                  keyframes: kfs
+                };
+              }
+            }
+          }
+
+          return c;
+        });
+
+        const recalculated = recalculateSequence(updated);
+        const newTotalDur = getProjectTotalDuration(recalculated);
+        setDuration(newTotalDur);
+        return recalculated;
+      });
+
+      if (activeEdgeTime !== undefined) {
+        if (trimUpdateRafRef.current !== null) {
+          cancelAnimationFrame(trimUpdateRafRef.current);
+        }
+        trimUpdateRafRef.current = requestAnimationFrame(() => {
+          trimUpdateRafRef.current = null;
+          setCurrentTime(activeEdgeTime);
+
+          const v = videoRefs.current[clipId];
+          if (v && !v.seeking) {
+            const targetClip = timelineClips.find((c) => c.id === clipId);
+            const rate = targetClip?.playbackRate || 1;
+            const localTime = Math.max(
+              newSourceStart,
+              newSourceStart + (activeEdgeTime - newTimelineStart) * rate
+            );
+            try {
+              if ('fastSeek' in v && typeof (v as any).fastSeek === 'function') {
+                (v as any).fastSeek(localTime);
+              } else {
+                v.currentTime = localTime;
+              }
+            } catch {}
+          }
+        });
+      }
+    },
+    [setTimelineClips, recalculateSequence, setDuration, timelineClips]
+  );
+
+  const handleTrimCommit = useCallback(() => {
+    if (trimUpdateRafRef.current !== null) {
+      cancelAnimationFrame(trimUpdateRafRef.current);
+      trimUpdateRafRef.current = null;
+    }
+    setTimelineClipsState((prev) => {
+      const recalculated = recalculateSequence(prev);
+      const newTotalDur = getProjectTotalDuration(recalculated);
+      setDuration(newTotalDur);
+      if (currentTime > newTotalDur) {
+        handleSeek(Math.max(0, newTotalDur));
+      }
+      return recalculated;
+    });
+    const endState = getProjectState();
+    commitTransaction(endState);
+  }, [commitTransaction, getProjectState, recalculateSequence, setDuration, currentTime, handleSeek]);
+
   // Keyboard navigation shortcuts: Space (Play/Pause), Left Arrow (Rewind 1s), Right Arrow (Forward 1s)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -2778,6 +2819,8 @@ function EditorMainScreenContent() {
     }
   };
 
+
+
   const formatTimecode = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
@@ -2915,8 +2958,6 @@ function EditorMainScreenContent() {
 
   const trimmingClip = isTrimModeActive ? timelineClips.find(c => c.id === trimmingClipId) : null;
 
-
-
   return (
     <div className="veytrix-editor h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden font-sans select-none">
       {/* ---------------- TOP BAR ---------------- */}
@@ -2974,10 +3015,14 @@ function EditorMainScreenContent() {
       {/* Production Trim Mode HUD Banner */}
       {isTrimModeActive && trimmingClip && (
         <TrimToolbar
+          clipId={trimmingClip.id}
           clipName={trimmingClip.name}
           timelineStart={trimmingClip.timelineStart ?? 0}
           duration={trimmingClip.duration}
           startOffset={trimmingClip.startOffset ?? 0}
+          maxSourceDuration={mediaFiles.find(m => m.id === trimmingClip.mediaId)?.duration || trimmingClip.duration || 60}
+          playbackRate={trimmingClip.playbackRate || 1}
+          onTrimUpdate={(id, newStart, newSource, newDur) => handleTrimUpdate(id, newStart, newSource, newDur)}
           onApply={applyTrim}
           onCancel={cancelTrim}
           onReset={resetTrim}
@@ -3994,100 +4039,7 @@ function EditorMainScreenContent() {
                                 onEnded={() => handleClipEnded(clip.id)}
                               />
                             )}
-                            {isSelected && (
-                              <div className="absolute inset-0 border-2 border-sky-400 pointer-events-none select-none z-30">
-                                {/* Floating toolbar */}
-                                <div className="absolute top-[-35px] left-1/2 -translate-x-1/2 flex items-center gap-1 bg-black/95 border border-white/10 rounded-md p-1 pointer-events-auto shadow-xl z-50">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setIsCropModeActive(!isCropModeActive);
-                                    }}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
-                                      isCropModeActive 
-                                        ? 'bg-sky-500 text-white' 
-                                        : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
-                                    }`}
-                                  >
-                                    ✂️ {isCropModeActive ? 'Done Crop' : 'Crop'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteClip(clip.id);
-                                    }}
-                                    className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/25 hover:bg-red-500 text-red-200 hover:text-white transition cursor-pointer"
-                                  >
-                                    🗑️ Delete
-                                  </button>
-                                </div>
 
-                                {/* Corner resize handles */}
-                                <div
-                                  onMouseDown={(e) => {
-                                    e.stopPropagation();
-                                    beginTransaction('Transform/Crop clip', getProjectState());
-                                    setIsResizingCanvas('se');
-                                    setDragStart({ x: e.clientX, y: e.clientY });
-                                  }}
-                                  className={`absolute bottom-[-5px] right-[-5px] w-3 h-3 border border-white rounded-full pointer-events-auto shadow-sm cursor-se-resize ${
-                                    isCropModeActive ? 'bg-amber-500' : 'bg-sky-400'
-                                  }`}
-                                />
-                                <div
-                                  onMouseDown={(e) => {
-                                    e.stopPropagation();
-                                    beginTransaction('Transform/Crop clip', getProjectState());
-                                    setIsResizingCanvas('sw');
-                                    setDragStart({ x: e.clientX, y: e.clientY });
-                                  }}
-                                  className={`absolute bottom-[-5px] left-[-5px] w-3 h-3 border border-white rounded-full pointer-events-auto shadow-sm cursor-sw-resize ${
-                                    isCropModeActive ? 'bg-amber-500' : 'bg-sky-400'
-                                  }`}
-                                />
-                                <div
-                                  onMouseDown={(e) => {
-                                    e.stopPropagation();
-                                    beginTransaction('Transform/Crop clip', getProjectState());
-                                    setIsResizingCanvas('ne');
-                                    setDragStart({ x: e.clientX, y: e.clientY });
-                                  }}
-                                  className={`absolute top-[-5px] right-[-5px] w-3 h-3 border border-white rounded-full pointer-events-auto shadow-sm cursor-ne-resize ${
-                                    isCropModeActive ? 'bg-amber-500' : 'bg-sky-400'
-                                  }`}
-                                />
-                                <div
-                                  onMouseDown={(e) => {
-                                    e.stopPropagation();
-                                    beginTransaction('Transform/Crop clip', getProjectState());
-                                    setIsResizingCanvas('nw');
-                                    setDragStart({ x: e.clientX, y: e.clientY });
-                                  }}
-                                  className={`absolute top-[-5px] left-[-5px] w-3 h-3 border border-white rounded-full pointer-events-auto shadow-sm cursor-nw-resize ${
-                                    isCropModeActive ? 'bg-amber-500' : 'bg-sky-400'
-                                  }`}
-                                />
-
-                                {/* Top rotation handle */}
-                                {!isCropModeActive && (
-                                  <div className="absolute top-[-20px] left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none">
-                                    <div
-                                      onMouseDown={(e) => {
-                                        e.stopPropagation();
-                                        beginTransaction('Rotate clip', getProjectState());
-                                        setIsRotatingCanvas(true);
-                                        setDragStart({ x: e.clientX, y: e.clientY });
-                                      }}
-                                      className="w-3.5 h-3.5 bg-sky-400 border border-white rounded-full cursor-alias pointer-events-auto hover:bg-sky-300 transition-colors shadow-md"
-                                      title="Rotate"
-                                    />
-                                    <div className="w-0.5 h-5 bg-sky-400" />
-                                  </div>
-                                )}
-                              </div>
-                            )}
                             {pipelineState.overlays.map((ov, idx) => (
                               <div
                                 key={ov.id || idx}
@@ -4448,26 +4400,30 @@ function EditorMainScreenContent() {
             </button>
             <div className="h-3.5 w-px bg-surface/10 mx-1" />
 
-            {/* Production Trim Mode Toggle Button */}
+            {/* Trim Mode Toggle Button */}
             <button
               type="button"
               onClick={() => {
-                const targetId = activeSelectedClipId || activeMediaId || (activeSelectedClip?.id);
+                const targetId = activeSelectedClipId || activeMediaId || (activeSelectedClip?.id) || timelineClips[0]?.id;
                 if (targetId) {
-                  enterTrimMode(targetId, zoomLevel);
+                  if (isTrimModeActive && trimmingClipId === targetId) {
+                    applyTrim();
+                  } else {
+                    enterTrimMode(targetId, zoomLevel);
+                  }
                 } else {
                   showToast('Select a clip to enter Trim Mode');
                 }
               }}
-              className={`px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition ${
+              className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1.5 cursor-pointer transition ${
                 isTrimModeActive
-                  ? 'bg-sky-500 text-slate-950 shadow-md'
-                  : 'bg-surface-hover hover:bg-surface-hover/80 text-foreground'
+                  ? 'bg-sky-500 text-slate-950 shadow-md ring-2 ring-sky-400/60 font-extrabold'
+                  : 'bg-surface-hover hover:bg-surface-hover/80 text-foreground border border-white/10'
               }`}
-              title="Enter Frame-Accurate Trim Mode (Ctrl+T)"
+              title="Click to enter Trim Mode and show handles for selected clip"
             >
               <Sliders className="h-3.5 w-3.5" />
-              <span>Trim</span>
+              <span>{isTrimModeActive ? 'Done Trim' : 'Trim'}</span>
             </button>
             <div className="h-3.5 w-px bg-surface/10 mx-1" />
           </div>
@@ -4706,7 +4662,7 @@ function EditorMainScreenContent() {
                                   style={{ left: `${clipLeftPx}px`, width: `${clipWidthPx}px`, top: `${topPx}px` }}
                                   title={`${clip.name} (${formatTimecode(clip.duration)})`}
                                 >
-                                  {(isTrimModeActive ? trimmingClipId === clip.id : isSelected) && !isLocked && (
+                                  {(isTrimModeActive && trimmingClipId === clip.id) && !isLocked && (
                                     <ClipTrimHandles
                                       clipId={clip.id}
                                       timelineStart={startSec}
@@ -4952,7 +4908,7 @@ function EditorMainScreenContent() {
                                     style={{ left: `${clipLeftPx}px`, width: `${clipWidthPx}px`, top: '4px' }}
                                     title={`${clip.name} (${formatTimecode(clip.duration)})`}
                                   >
-                                    {(isTrimModeActive ? trimmingClipId === clip.id : isSelected) && !isLocked && (
+                                    {(isTrimModeActive && trimmingClipId === clip.id) && !isLocked && (
                                       <ClipTrimHandles
                                         clipId={clip.id}
                                         timelineStart={startSec}
@@ -5039,8 +4995,7 @@ function EditorMainScreenContent() {
                                   } ${isLocked ? 'opacity-70 border-dashed border-amber-500/30' : ''}`}
                                 style={{ left: `${clipLeftPx}px`, width: `${clipComputedWidth}px` }}
                               >
-                                {/* Left Trim handle bar */}
-                                {(isTrimModeActive ? trimmingClipId === clip.id : isSelected) && !isLocked && (
+                                {(isTrimModeActive && trimmingClipId === clip.id) && !isLocked && (
                                   <ClipTrimHandles
                                     clipId={clip.id}
                                     timelineStart={clip.timelineStart}
