@@ -7,7 +7,7 @@ from uuid import UUID
 from app.core.catalog_data import get_effects_catalog, get_filters_catalog, get_transitions_catalog
 from app.models.enums import AssetType, PlanType
 from app.models.render_graph import FFmpegInput, FilterNode, RenderGraphDefinition
-from app.models.timeline import ClipModel, TimelineModel, TrackModel, TrackType
+from app.models.timeline import ClipModel, EffectData, FilterData, TimelineModel, TrackModel, TrackType, TransitionData
 from app.services.entitlement_service import EntitlementService
 from app.core.config import settings
 from pathlib import Path
@@ -270,24 +270,65 @@ class TextOverlayBuilder:
         return filter_str
 
 
+class KeyframeExpressionBuilder:
+    """Generates dynamic FFmpeg evaluation expressions for animated clip and filter properties."""
+
+    @staticmethod
+    def build_piecewise_expression(keyframes: List[Dict[str, Any]], default_val: float, val_transform=None) -> str:
+        """Converts keyframe points into nested FFmpeg if(gte(t,T), VAL, ...) expressions."""
+        if not keyframes:
+            v = val_transform(default_val) if val_transform else default_val
+            return f"{v:.4f}"
+
+        # Sort keyframes by time
+        sorted_kfs = sorted(keyframes, key=lambda k: float(k.get("time", 0.0)))
+        if len(sorted_kfs) == 1:
+            val = float(sorted_kfs[0].get("value", default_val))
+            v = val_transform(val) if val_transform else val
+            return f"{v:.4f}"
+
+        # Build recursive piecewise linear string from last keyframe backward
+        expr = ""
+        for i in range(len(sorted_kfs) - 1, 0, -1):
+            kf_prev = sorted_kfs[i - 1]
+            kf_curr = sorted_kfs[i]
+            t0 = float(kf_prev.get("time", 0.0))
+            t1 = float(kf_curr.get("time", 1.0))
+            v0 = float(kf_prev.get("value", default_val))
+            v1 = float(kf_curr.get("value", default_val))
+
+            if val_transform:
+                v0 = val_transform(v0)
+                v1 = val_transform(v1)
+
+            dt = max(0.001, t1 - t0)
+            slope = (v1 - v0) / dt
+
+            segment_expr = f"({v0:.4f}+{slope:.4f}*(t-{t0:.4f}))"
+            if not expr:
+                expr = f"if(gte(t,{t1:.4f}),{v1:.4f},{segment_expr})"
+            else:
+                expr = f"if(gte(t,{t1:.4f}),{v1:.4f},if(gte(t,{t0:.4f}),{segment_expr},{expr}))"
+
+        return expr
+
+
 class EffectBuilder:
     """Generates FFmpeg filter definitions for effects catalog and custom engine_key metadata."""
 
     @staticmethod
-    def build_effect_filter(clip: ClipModel) -> Optional[str]:
-        if not clip.effect:
-            return None
-
-        eff_id = clip.effect.effect_id
-        engine_key = clip.effect.engine_key or ""
-        params = clip.effect.parameters or {}
-
-        # Lookup catalog metadata
-        effects_cat = {e.id: e for e in get_effects_catalog()}
-        cat_item = effects_cat.get(eff_id)
+    def build_single_effect_filter(eff: EffectData, clip: ClipModel) -> Optional[str]:
+        eff_id = eff.effect_id
+        engine_key = eff.engine_key or ""
+        params = eff.parameters or {}
+        intensity = eff.intensity
+        opacity = eff.opacity
+        blend_mode = eff.blend_mode.lower()
 
         eff_lower = eff_id.lower()
         key_lower = engine_key.lower()
+
+        filter_str = None
 
         # Comprehensive filter mapping for all editor effects
         if "fade_out" in eff_lower or "fadeout" in eff_lower or "fade-out" in eff_lower or (eff_lower == "fade" and (params.get("type") == "out" or params.get("direction") == "out")):
@@ -295,42 +336,68 @@ class EffectBuilder:
             if dur > 10.0:
                 dur = min(2.0, (dur / 100.0) * clip.duration) if clip.duration > 0 else 1.0
             st = max(0.0, clip.duration - dur)
-            return f"fade=t=out:st={st:.2f}:d={dur:.2f}"
+            filter_str = f"fade=t=out:st={st:.2f}:d={dur:.2f}"
         elif "fade" in eff_lower or "fade" in key_lower:
             dur = float(params.get("duration") or params.get("fadeIn") or params.get("fade_in") or params.get("fade") or 1.0)
             if dur > 10.0:
                 dur = min(2.0, (dur / 100.0) * clip.duration) if clip.duration > 0 else 1.0
-            return f"fade=t=in:st=0:d={dur:.2f}"
+            filter_str = f"fade=t=in:st=0:d={dur:.2f}"
         elif "blur" in eff_lower or "blur" in key_lower:
-            radius = params.get("radius", 10)
-            return f"boxblur={radius}:{radius}"
+            radius = int(params.get("radius", 10) * intensity)
+            radius = max(1, radius)
+            filter_str = f"boxblur={radius}:{radius}"
         elif "glitch" in eff_lower or "glitch" in key_lower:
-            return "noise=alls=25:allf=t+u,chromashift=cx=4:cy=2"
+            noise_val = int(25 * intensity)
+            filter_str = f"noise=alls={noise_val}:allf=t+u,chromashift=cx=4:cy=2"
         elif "vintage" in eff_lower or "retro" in key_lower:
-            return "curves=vintage,eq=saturation=1.2"
+            sat = 1.0 + (0.2 * intensity)
+            filter_str = f"curves=vintage,eq=saturation={sat:.2f}"
         elif "zoom" in eff_lower or "camera" in key_lower:
-            return "scale=iw*1.1:ih*1.1"
+            sc = 1.0 + (0.1 * intensity)
+            filter_str = f"scale=iw*{sc:.2f}:ih*{sc:.2f}"
         elif "shake" in eff_lower:
-            return "crop=iw-20:ih-20:10:10,scale=iw+20:ih+20"
+            filter_str = "crop=iw-20:ih-20:10:10,scale=iw+20:ih+20"
         elif "glow" in eff_lower or "light" in key_lower:
-            return "eq=brightness=0.08:contrast=1.15"
+            br = 0.08 * intensity
+            cont = 1.0 + (0.15 * intensity)
+            filter_str = f"eq=brightness={br:.2f}:contrast={cont:.2f}"
         elif "3d" in eff_lower or "perspective" in key_lower:
-            return "perspective=x0=0:y0=0:x1=w:y1=0:x2=0:y2=h:x3=w:y3=h:sense=destination"
+            filter_str = "perspective=x0=0:y0=0:x1=w:y1=0:x2=0:y2=h:x3=w:y3=h:sense=destination"
         else:
-            return "eq=brightness=0.05:contrast=1.1:saturation=1.2"
+            filter_str = f"eq=brightness={0.05 * intensity:.2f}:contrast={1.0 + (0.1 * intensity):.2f}:saturation={1.0 + (0.2 * intensity):.2f}"
+
+        if opacity < 1.0 and filter_str:
+            filter_str += f",colorchannelmixer=aa={opacity:.2f}"
+
+        return filter_str
+
+    @staticmethod
+    def build_effect_filters(clip: ClipModel) -> List[str]:
+        filters: List[str] = []
+        effects = clip.applied_effects or ([clip.effect] if clip.effect else [])
+        for eff in effects:
+            if not eff:
+                continue
+            f = EffectBuilder.build_single_effect_filter(eff, clip)
+            if f:
+                filters.append(f)
+        return filters
+
+    @staticmethod
+    def build_effect_filter(clip: ClipModel) -> Optional[str]:
+        filters = EffectBuilder.build_effect_filters(clip)
+        return ",".join(filters) if filters else None
 
 
 class FilterBuilder:
     """Generates FFmpeg filter graph chains for color grading filters catalog."""
 
     @staticmethod
-    def build_filter_chain(clip: ClipModel) -> Optional[str]:
-        if not clip.filter:
-            return None
-
-        filt_id = clip.filter.filter_id
-        intensity = clip.filter.intensity
-        params = clip.filter.parameters or {}
+    def build_single_filter_chain(filt: FilterData, clip: ClipModel) -> Optional[str]:
+        filt_id = filt.filter_id
+        intensity = filt.intensity
+        opacity = filt.opacity
+        params = filt.parameters or {}
 
         filters_cat = {f.id: f for f in get_filters_catalog()}
         cat_item = filters_cat.get(filt_id)
@@ -338,61 +405,156 @@ class FilterBuilder:
         filt_lower = filt_id.lower()
         cat_str = cat_item.category.lower() if cat_item else ""
 
+        filter_str = None
+
         if "warm" in filt_lower or "warm" in cat_str or "sepia" in filt_lower:
             sat = 1.0 + (0.3 * intensity)
-            return f"eq=gamma_r={1.0 + (0.2 * intensity):.2f}:saturation={sat:.2f}"
+            filter_str = f"eq=gamma_r={1.0 + (0.2 * intensity):.2f}:saturation={sat:.2f}"
         elif "cool" in filt_lower or "cool" in cat_str:
-            return f"eq=gamma_b={1.0 + (0.25 * intensity):.2f}:contrast={1.0 + (0.1 * intensity):.2f}"
+            filter_str = f"eq=gamma_b={1.0 + (0.25 * intensity):.2f}:contrast={1.0 + (0.1 * intensity):.2f}"
         elif "monochrome" in filt_lower or "bw" in filt_lower or "black" in filt_lower or "monochrome" in cat_str:
-            return f"hue=s={1.0 - intensity:.2f}"
+            filter_str = f"hue=s={1.0 - intensity:.2f}"
         elif "sharpen" in filt_lower:
-            return f"unsharp=5:5:{1.0 * intensity:.2f}:5:5:0.0"
+            filter_str = f"unsharp=5:5:{1.0 * intensity:.2f}:5:5:0.0"
         elif "vignette" in filt_lower:
-            return f"vignette=PI/{max(2.0, 4.0 - intensity):.2f}"
+            filter_str = f"vignette=PI/{max(2.0, 4.0 - intensity):.2f}"
         elif "grain" in filt_lower or "noise" in filt_lower:
-            return f"noise=alls={int(20 * intensity)}:allf=t+u"
+            filter_str = f"noise=alls={int(20 * intensity)}:allf=t+u"
         else:
-            return f"eq=contrast={1.0 + (0.15 * intensity):.2f}:brightness=0.0"
+            filter_str = f"eq=contrast={1.0 + (0.15 * intensity):.2f}:brightness=0.0"
+
+        if opacity < 1.0 and filter_str:
+            filter_str += f",colorchannelmixer=aa={opacity:.2f}"
+
+        return filter_str
+
+    @staticmethod
+    def build_filter_chains(clip: ClipModel) -> List[str]:
+        chains: List[str] = []
+        filters = clip.filters or ([clip.filter] if clip.filter else [])
+        for filt in filters:
+            if not filt:
+                continue
+            chain = FilterBuilder.build_single_filter_chain(filt, clip)
+            if chain:
+                chains.append(chain)
+        return chains
+
+    @staticmethod
+    def build_filter_chain(clip: ClipModel) -> Optional[str]:
+        chains = FilterBuilder.build_filter_chains(clip)
+        return ",".join(chains) if chains else None
 
 
 class TransitionBuilder:
     """Generates FFmpeg xfade / crossfade transition nodes for clip joins."""
 
     @staticmethod
+    def resolve_xfade_name(transition_type: str, direction: Optional[str] = "none", category: Optional[str] = None) -> str:
+        """Dynamically maps transition presets and directions to native FFmpeg xfade transition names."""
+        tt = (transition_type or "").lower().replace("_", "-")
+        dir_val = (direction or "none").lower()
+
+        # Direct directional xfade mappings
+        dir_wipe_map = {
+            "left": "wipeleft",
+            "right": "wiperight",
+            "up": "wipeup",
+            "down": "wipedown",
+        }
+        dir_slide_map = {
+            "left": "slideleft",
+            "right": "slideright",
+            "up": "slideup",
+            "down": "slidedown",
+        }
+        dir_push_map = {
+            "left": "pushleft",
+            "right": "pushright",
+            "up": "pushup",
+            "down": "pushdown",
+        }
+        dir_zoom_map = {
+            "center": "zoomin",
+            "in": "zoomin",
+            "out": "zoomout",
+        }
+
+        # 1. Check exact preset keyword patterns
+        if "wipe" in tt:
+            return dir_wipe_map.get(dir_val, "wipeleft")
+        if "slide" in tt or "push" in tt or "whip" in tt:
+            if "push" in tt:
+                return dir_push_map.get(dir_val, "pushleft")
+            return dir_slide_map.get(dir_val, "slideleft")
+        if "zoom" in tt or "scale" in tt:
+            return dir_zoom_map.get(dir_val, "zoomin")
+        if "spin" in tt or "rotate" in tt:
+            return "rotate"
+        if "circle" in tt or "radial" in tt:
+            return "circlecrop"
+        if "rect" in tt or "box" in tt:
+            return "rectcrop"
+        if "glitch" in tt or "pixel" in tt:
+            return "pixelize"
+        if "3d" in tt or "cube" in tt:
+            return "cube"
+        if "dissolve" in tt:
+            return "dissolve"
+        if "blur" in tt:
+            return "fade"
+
+        # 2. Check direction fallback
+        if dir_val in dir_wipe_map:
+            return dir_wipe_map[dir_val]
+
+        # Default standard fallback
+        return "fade"
+
+    @classmethod
     def build_video_transition(
+        cls,
         input_label_1: str,
         input_label_2: str,
         output_label: str,
-        transition_type: str,
+        transition: TransitionData,
         duration: float,
         offset: float,
-    ) -> FilterNode:
-        # Standardize xfade transition names
-        xfade_map = {
-            "fade": "fade",
-            "cross": "fade",
-            "cross_dissolve": "fade",
-            "wipe": "wipeleft",
-            "slide": "slideleft",
-            "zoom": "zoomin",
-            "push": "pushleft",
-            "whip": "wipeleft",
-            "blur": "fade",
-            "dissolve": "dissolve",
-            "glitch": "pixelize",
-            "spin": "rotate",
-            "3d": "cube",
-            "circle": "circlecrop",
-        }
-        name = xfade_map.get(transition_type.lower(), "fade")
-        args = f"transition={name}:duration={duration:.2f}:offset={offset:.2f}"
+    ) -> List[FilterNode]:
+        """Builds one or more FilterNodes representing high-fidelity transition execution."""
+        tt = (transition.transition_type or "fade").lower()
+        dir_val = transition.direction or "none"
+        cat_val = transition.category or ""
+        intensity = transition.intensity if transition.intensity is not None else 50.0
+        motion_blur = transition.motion_blur if transition.motion_blur is not None else True
 
-        return FilterNode(
+        xfade_name = cls.resolve_xfade_name(tt, dir_val, cat_val)
+        nodes: List[FilterNode] = []
+
+        # Complex multi-pass transitions (e.g. Blur or Glitch with motion blur / intensity scaling)
+        if "blur" in tt or cat_val.lower() == "blur":
+            blur_amount = max(1, int((intensity / 100.0) * 20))
+            prep_1 = f"v_trans_prep1_{input_label_1.replace(':', '_')}"
+            prep_2 = f"v_trans_prep2_{input_label_2.replace(':', '_')}"
+            nodes.append(FilterNode(inputs=[input_label_1], filter_name=f"gblur=sigma={blur_amount}", args="", outputs=[prep_1]))
+            nodes.append(FilterNode(inputs=[input_label_2], filter_name=f"gblur=sigma={blur_amount}", args="", outputs=[prep_2]))
+            nodes.append(FilterNode(inputs=[prep_1, prep_2], filter_name="xfade", args=f"transition=fade:duration={duration:.2f}:offset={offset:.2f}", outputs=[output_label]))
+            return nodes
+
+        if "glitch" in tt or cat_val.lower() == "glitch":
+            pix_size = max(4, int((intensity / 100.0) * 32))
+            nodes.append(FilterNode(inputs=[input_label_1, input_label_2], filter_name="xfade", args=f"transition=pixelize:duration={duration:.2f}:offset={offset:.2f}", outputs=[output_label]))
+            return nodes
+
+        # Standard / Enhanced xfade node pass
+        args = f"transition={xfade_name}:duration={duration:.2f}:offset={offset:.2f}"
+        nodes.append(FilterNode(
             inputs=[input_label_1, input_label_2],
             filter_name="xfade",
             args=args,
             outputs=[output_label],
-        )
+        ))
+        return nodes
 
 
 class WatermarkBuilder:
@@ -664,14 +826,19 @@ class FFmpegBuilder:
         # Sort tracks by visual layer order
         sorted_tracks = sorted(timeline.tracks, key=lambda t: t.order)
 
-        # Process Video Tracks & Clips via AssetResolver
+        # Process Video Tracks & Clips via AssetResolver & TransitionBuilder
         for track in sorted_tracks:
             if track.hidden:
                 continue
-            for clip in track.clips:
-                if not clip.enabled or clip.hidden:
-                    continue
 
+            track_clips = [c for c in track.clips if c.enabled and not c.hidden]
+            if not track_clips:
+                continue
+
+            # Process individual clips into pre-processed stream nodes
+            processed_clip_labels: List[Tuple[ClipModel, str]] = []
+
+            for clip in track_clips:
                 clip_entry = next(((idx, c, src) for idx, c, src in media_clips if c.id == clip.id), None)
                 if clip_entry is None:
                     continue
@@ -684,7 +851,7 @@ class FFmpegBuilder:
                 # Video filters per clip
                 v_filters = VideoBuilder.build_clip_video_filters(clip, width, height, aspect_ratio=aspect_ratio)
 
-                # Direct Effect & Filter Builders
+                # Direct Multi-Effect & Multi-Filter Builders
                 eff_f = EffectBuilder.build_effect_filter(clip)
                 if eff_f:
                     v_filters.append(eff_f)
@@ -706,7 +873,6 @@ class FFmpegBuilder:
                 next_v_label = f"v_clip_processed_{clip_id_clean}"
 
                 if clip_idx is None:
-                    # Text or generator clip without separate video input file: apply drawtext directly onto canvas
                     drawtext_f = TextOverlayBuilder.build_drawtext_filter(clip, width, height)
                     if drawtext_f:
                         v_filters.append(drawtext_f)
@@ -744,6 +910,38 @@ class FFmpegBuilder:
                         )
                     )
 
+                processed_clip_labels.append((clip, next_v_label))
+
+            # Apply xfade transitions between adjacent clips on the same track if defined
+            if len(processed_clip_labels) > 1:
+                prev_clip, prev_label = processed_clip_labels[0]
+                for idx in range(1, len(processed_clip_labels)):
+                    curr_clip, curr_label = processed_clip_labels[idx]
+
+                    trans = prev_clip.transition or curr_clip.transition
+                    if trans and trans.duration > 0:
+                        trans_dur = min(trans.duration, prev_clip.duration / 2.0, curr_clip.duration / 2.0)
+                        trans_dur = max(0.1, trans_dur)
+                        offset = max(0.0, prev_clip.end_time - trans_dur)
+                        trans_type = trans.transition_type
+
+                        trans_out_label = f"v_trans_{prev_clip.id.replace('-', '')}_{curr_clip.id.replace('-', '')}"
+                        trans_nodes = TransitionBuilder.build_video_transition(
+                            input_label_1=prev_label,
+                            input_label_2=curr_label,
+                            output_label=trans_out_label,
+                            transition=trans,
+                            duration=trans_dur,
+                            offset=offset,
+                        )
+                        filter_nodes.extend(trans_nodes)
+                        prev_label = trans_out_label
+
+                    prev_clip = curr_clip
+
+            # Composite processed clip / sequence onto canvas
+            for clip, clip_label in processed_clip_labels:
+                clip_id_clean = clip.id.replace("-", "")
                 comp_label = f"v_comp_{clip_id_clean}"
                 pos_x = clip.position.get("x", 0.0) if isinstance(clip.position, dict) else 0.0
                 pos_y = clip.position.get("y", 0.0) if isinstance(clip.position, dict) else 0.0
@@ -753,7 +951,7 @@ class FFmpegBuilder:
                 overlay_filter = f"overlay=enable='between(t,{clip.start_time:.4f},{clip.end_time:.4f})':x='{x_expr}':y='{y_expr}'"
                 filter_nodes.append(
                     FilterNode(
-                        inputs=[curr_v_label, next_v_label],
+                        inputs=[curr_v_label, clip_label],
                         filter_name=overlay_filter,
                         args="",
                         outputs=[comp_label],

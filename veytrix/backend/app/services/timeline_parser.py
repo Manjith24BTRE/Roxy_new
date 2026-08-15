@@ -325,9 +325,12 @@ class TimelineParser:
                 # Sub-model extraction
                 # 1. Transitions
                 transition_obj: Optional[TransitionData] = None
-                raw_trans = raw_clip.get("transition")
+                raw_trans = raw_clip.get("transition") or raw_clip.get("appliedTransition")
+                if isinstance(raw_trans, str):
+                    raw_trans = {"transition_type": raw_trans, "duration": 0.5, "direction": "none"}
+                
                 if isinstance(raw_trans, dict):
-                    trans_type = str(raw_trans.get("transition_type", raw_trans.get("type", "fade")))
+                    trans_type = str(raw_trans.get("transition_type", raw_trans.get("type", raw_trans.get("name", "fade"))))
                     try:
                         trans_dur = float(raw_trans.get("duration", 0.5))
                         if trans_dur < 0:
@@ -344,39 +347,112 @@ class TimelineParser:
                     except (ValueError, TypeError):
                         trans_dur = 0.5
 
+                    speed_val = 1.0
+                    try:
+                        if "speed" in raw_trans:
+                            speed_val = float(raw_trans.get("speed", 1.0))
+                    except (ValueError, TypeError):
+                        speed_val = 1.0
+
+                    intensity_val = 50.0
+                    try:
+                        if "intensity" in raw_trans:
+                            intensity_val = float(raw_trans.get("intensity", 50.0))
+                    except (ValueError, TypeError):
+                        intensity_val = 50.0
+
+                    motion_blur_val = True
+                    if "motion_blur" in raw_trans:
+                        motion_blur_val = bool(raw_trans.get("motion_blur"))
+                    elif "motionBlur" in raw_trans:
+                        motion_blur_val = bool(raw_trans.get("motionBlur"))
+
+                    raw_cat = raw_trans.get("category")
+                    cat_val = str(raw_cat) if raw_cat is not None else None
+                    raw_params = raw_trans.get("parameters")
+                    params_val = raw_params if isinstance(raw_params, dict) else {}
+
                     transition_obj = TransitionData(
                         transition_type=trans_type,
                         duration=trans_dur,
-                        direction=str(raw_trans.get("direction", "in")),
-                        parameters=raw_trans.get("parameters", {}),
+                        direction=str(raw_trans.get("direction", "none")),
+                        speed=speed_val,
+                        intensity=intensity_val,
+                        easing=str(raw_trans.get("easing", "ease-in-out")),
+                        motion_blur=motion_blur_val,
+                        category=cat_val,
+                        parameters=params_val,
                     )
 
-                # 2. Effects
-                effect_obj: Optional[EffectData] = None
-                raw_eff = raw_clip.get("effect")
-                if isinstance(raw_eff, dict):
-                    eff_id = str(raw_eff.get("effect_id", raw_eff.get("id", "effect-1")))
-                    effect_obj = EffectData(
-                        effect_id=eff_id,
-                        engine_key=raw_eff.get("engine_key", raw_eff.get("engineKey")),
-                        parameters=raw_eff.get("parameters", {}),
-                    )
+                # 2. Effects List Parsing (with backward compatibility for single 'effect' key)
+                effects_list: List[EffectData] = []
+                raw_effects = raw_clip.get("applied_effects") or raw_clip.get("appliedEffects") or []
+                if not isinstance(raw_effects, list):
+                    raw_effects = []
+                if not raw_effects and raw_clip.get("effect") and isinstance(raw_clip.get("effect"), dict):
+                    raw_effects = [raw_clip.get("effect")]
 
-                # 3. Filters
-                filter_obj: Optional[FilterData] = None
-                raw_filt = raw_clip.get("filter")
-                if isinstance(raw_filt, dict):
-                    filt_id = str(raw_filt.get("filter_id", raw_filt.get("id", "filter-1")))
-                    try:
-                        intensity = float(raw_filt.get("intensity", 1.0))
-                    except (ValueError, TypeError):
-                        intensity = 1.0
+                for eff_item in raw_effects:
+                    if isinstance(eff_item, dict):
+                        eff_id = str(eff_item.get("effect_id", eff_item.get("id", eff_item.get("presetId", "effect-1"))))
+                        eng_key = eff_item.get("engine_key", eff_item.get("engineKey", eff_item.get("presetId")))
+                        try:
+                            eff_int = float(eff_item.get("intensity", 1.0))
+                        except (ValueError, TypeError):
+                            eff_int = 1.0
+                        try:
+                            eff_op = float(eff_item.get("opacity", 1.0))
+                        except (ValueError, TypeError):
+                            eff_op = 1.0
+                        b_mode = str(eff_item.get("blend_mode", eff_item.get("blendMode", "normal")))
+                        kfs = eff_item.get("keyframes", []) if isinstance(eff_item.get("keyframes"), list) else []
 
-                    filter_obj = FilterData(
-                        filter_id=filt_id,
-                        intensity=max(0.0, min(1.0, intensity)),
-                        parameters=raw_filt.get("parameters", {}),
-                    )
+                        effects_list.append(
+                            EffectData(
+                                effect_id=eff_id,
+                                engine_key=str(eng_key) if eng_key else None,
+                                intensity=max(0.0, min(1.0, eff_int)),
+                                opacity=max(0.0, min(1.0, eff_op)),
+                                blend_mode=b_mode,
+                                parameters=eff_item.get("parameters", eff_item),
+                                keyframes=kfs,
+                            )
+                        )
+
+                # 3. Filters List Parsing (with backward compatibility for single 'filter' key)
+                filters_list: List[FilterData] = []
+                raw_filters = raw_clip.get("filters") or raw_clip.get("appliedFilters") or []
+                if not isinstance(raw_filters, list):
+                    raw_filters = []
+                if not raw_filters and raw_clip.get("filter") and isinstance(raw_clip.get("filter"), dict):
+                    raw_filters = [raw_clip.get("filter")]
+
+                for filt_item in raw_filters:
+                    if isinstance(filt_item, dict):
+                        filt_id = str(filt_item.get("filter_id", filt_item.get("id", filt_item.get("filterId", "filter-1"))))
+                        try:
+                            intensity = float(filt_item.get("intensity", 1.0))
+                            if intensity > 1.0:
+                                intensity = intensity / 100.0
+                        except (ValueError, TypeError):
+                            intensity = 1.0
+                        try:
+                            filt_op = float(filt_item.get("opacity", 1.0))
+                        except (ValueError, TypeError):
+                            filt_op = 1.0
+                        b_mode = str(filt_item.get("blend_mode", filt_item.get("blendMode", "normal")))
+                        kfs = filt_item.get("keyframes", []) if isinstance(filt_item.get("keyframes"), list) else []
+
+                        filters_list.append(
+                            FilterData(
+                                filter_id=filt_id,
+                                intensity=max(0.0, min(1.0, intensity)),
+                                opacity=max(0.0, min(1.0, filt_op)),
+                                blend_mode=b_mode,
+                                parameters=filt_item.get("parameters", filt_item),
+                                keyframes=kfs,
+                            )
+                        )
 
                 # 4. Text
                 text_obj: Optional[TextData] = None
@@ -418,7 +494,11 @@ class TimelineParser:
                 elif raw_media_url_str and raw_media_url_str.startswith("/"):
                     if settings.SUPABASE_URL:
                         raw_media_url_str = f"{settings.SUPABASE_URL.rstrip('/')}{raw_media_url_str}"
-                
+
+                clip_keyframes = raw_clip.get("keyframes", [])
+                if not isinstance(clip_keyframes, list):
+                    clip_keyframes = []
+
                 clip_model = ClipModel(
                     id=clip_id,
                     track_id=track_id,
@@ -443,9 +523,10 @@ class TimelineParser:
                     muted=bool(raw_clip.get("muted", False)),
                     hidden=bool(raw_clip.get("hidden", False)),
                     transition=transition_obj,
-                    effect=effect_obj,
-                    filter=filter_obj,
+                    filters=filters_list,
+                    applied_effects=effects_list,
                     text=text_obj,
+                    keyframes=clip_keyframes,
                     metadata=raw_clip.get("metadata", {}),
                 )
                 normalized_clips.append(clip_model)

@@ -5,9 +5,11 @@ import { SAMPLE_TRANSITIONS_NEW } from './Transitions.data';
 import { TransitionThumbnail } from './TransitionThumbnail';
 import { TransitionGalleryModal } from './TransitionGalleryModal';
 
+import { AppliedTransitionConfig } from './Transitions.types';
+
 interface TransitionsProps {
   activeTransitionId: string | null;
-  onSelectTransition: (id: string | null) => void;
+  onSelectTransition: (config: string | AppliedTransitionConfig | null) => void;
   searchQuery?: string;
   showBeforeOnly?: boolean;
   onShowBeforeOnlyChange?: (showBefore: boolean) => void;
@@ -42,6 +44,28 @@ export function Transitions({
   // Storage states
   const [favorites, setFavorites] = useState<string[]>([]);
   const [recentTransitions, setRecentTransitions] = useState<string[]>([]);
+
+  // Helper to emit transition payload
+  const emitTransitionUpdate = (id: string, overrides: Partial<AppliedTransitionConfig> = {}) => {
+    const activeItem = SAMPLE_TRANSITIONS_NEW.find(t => t.id === id);
+    const config: AppliedTransitionConfig = {
+      id,
+      transition_type: id,
+      type: id,
+      name: activeItem?.name || id,
+      duration: overrides.duration ?? duration,
+      direction: overrides.direction ?? direction,
+      speed: overrides.speed ?? speed,
+      intensity: overrides.intensity ?? intensity,
+      easing: overrides.easing ?? easing,
+      motionBlur: overrides.motionBlur ?? motionBlur,
+      category: activeItem?.category || 'basic',
+      parameters: {
+        ...(activeItem ? { ...activeItem } : {})
+      }
+    };
+    onSelectTransition(config);
+  };
 
   // Selected parameters panel state
   const [duration, setDuration] = useState<number>(0.8);
@@ -399,7 +423,13 @@ export function Transitions({
                           key={t.id}
                           draggable
                           onDragStart={(e) => handleDragStart(e, t.id)}
-                          onClick={() => onSelectTransition(isSelected ? null : t.id)}
+                          onClick={() => {
+                            if (isSelected) {
+                              onSelectTransition(null);
+                            } else {
+                              emitTransitionUpdate(t.id);
+                            }
+                          }}
                           className={`rounded-xl border flex flex-col justify-start transition-all duration-200 bg-[#0b101c]/60 cursor-pointer group relative overflow-hidden ${
                             isGridView ? 'p-2 min-h-[135px] gap-1.5' : 'p-2.5 flex-row items-center gap-3 h-[76px]'
                           } ${
@@ -428,11 +458,11 @@ export function Transitions({
                           <div className="min-w-0 flex-1 flex flex-col justify-center px-0.5">
                             <div className="flex items-center justify-between">
                               <span className="text-[10px] font-semibold text-slate-100 block truncate leading-tight group-hover:text-sky-300 transition">{t.name}</span>
-                              {!isGridView && (
-                                <span className="text-[7px] px-1 bg-slate-800 text-slate-400 font-mono rounded select-none uppercase">{t.category}</span>
-                              )}
                             </div>
-                            <p className="text-[8.5px] text-slate-400 line-clamp-1 mt-0.5 leading-normal">{t.description}</p>
+                            <div className="flex items-center justify-between mt-1 text-[8px] text-slate-400">
+                              <span className="capitalize">{t.category}</span>
+                              <span className="font-mono text-sky-400">{t.defaultDuration}s</span>
+                            </div>
                           </div>
 
                         </div>
@@ -462,12 +492,19 @@ export function Transitions({
               onClick={() => {
                 const activeItem = SAMPLE_TRANSITIONS_NEW.find(t => t.id === activeTransitionId);
                 if (activeItem) {
-                  setDuration(activeItem.defaultDuration);
-                  setSpeed(activeItem.speed ?? 1.0);
-                  setIntensity(activeItem.intensity ?? 50);
-                  setDirection(activeItem.direction ?? 'none');
-                  setEasing(activeItem.easing ?? 'ease-in-out');
-                  setMotionBlur(activeItem.motionBlur ?? true);
+                  const d = activeItem.defaultDuration;
+                  const s = activeItem.speed ?? 1.0;
+                  const i = activeItem.intensity ?? 50;
+                  const dir = activeItem.direction ?? 'none';
+                  const e = activeItem.easing ?? 'ease-in-out';
+                  const mb = activeItem.motionBlur ?? true;
+                  setDuration(d);
+                  setSpeed(s);
+                  setIntensity(i);
+                  setDirection(dir);
+                  setEasing(e);
+                  setMotionBlur(mb);
+                  emitTransitionUpdate(activeTransitionId, { duration: d, speed: s, intensity: i, direction: dir, easing: e, motionBlur: mb });
                 }
               }}
               className="text-slate-500 hover:text-slate-300 transition flex items-center gap-0.5 text-[8px] uppercase font-bold cursor-pointer"
@@ -491,7 +528,11 @@ export function Transitions({
                 max="3.0"
                 step="0.1"
                 value={duration}
-                onChange={(e) => setDuration(Number(e.target.value))}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setDuration(val);
+                  emitTransitionUpdate(activeTransitionId, { duration: val });
+                }}
                 className="w-full accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
               />
             </div>
@@ -508,7 +549,11 @@ export function Transitions({
                 max="2.0"
                 step="0.1"
                 value={speed}
-                onChange={(e) => setSpeed(Number(e.target.value))}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setSpeed(val);
+                  emitTransitionUpdate(activeTransitionId, { speed: val });
+                }}
                 className="w-full accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
               />
             </div>
@@ -524,7 +569,11 @@ export function Transitions({
                 min="0"
                 max="100"
                 value={intensity}
-                onChange={(e) => setIntensity(Number(e.target.value))}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setIntensity(val);
+                  emitTransitionUpdate(activeTransitionId, { intensity: val });
+                }}
                 className="w-full accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
               />
             </div>
@@ -534,7 +583,11 @@ export function Transitions({
               <span className="text-[9px] text-slate-400 block">Easing Curve</span>
               <select
                 value={easing}
-                onChange={(e: any) => setEasing(e.target.value)}
+                onChange={(e: any) => {
+                  const val = e.target.value;
+                  setEasing(val);
+                  emitTransitionUpdate(activeTransitionId, { easing: val });
+                }}
                 className="w-full bg-[#060910] border border-white/10 rounded px-1.5 py-0.5 text-[9px] text-slate-300 focus:outline-none focus:border-sky-500/50"
               >
                 <option value="linear">Linear</option>
@@ -551,7 +604,11 @@ export function Transitions({
               <span className="text-[9px] text-slate-400 block">Direction</span>
               <select
                 value={direction}
-                onChange={(e: any) => setDirection(e.target.value)}
+                onChange={(e: any) => {
+                  const val = e.target.value;
+                  setDirection(val);
+                  emitTransitionUpdate(activeTransitionId, { direction: val });
+                }}
                 className="w-full bg-[#060910] border border-white/10 rounded px-1.5 py-0.5 text-[9px] text-slate-300 focus:outline-none focus:border-sky-500/50"
               >
                 <option value="none">None</option>
@@ -571,7 +628,11 @@ export function Transitions({
               <input
                 type="checkbox"
                 checked={motionBlur}
-                onChange={(e) => setMotionBlur(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setMotionBlur(val);
+                  emitTransitionUpdate(activeTransitionId, { motionBlur: val });
+                }}
                 className="rounded border-white/15 bg-slate-950 accent-sky-400 cursor-pointer h-3.5 w-3.5"
               />
             </div>

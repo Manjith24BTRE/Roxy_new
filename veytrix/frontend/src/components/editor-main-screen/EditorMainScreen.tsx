@@ -393,7 +393,8 @@ function EditorMainScreenContent() {
     showToast(trackId === 'overlay' ? 'Clip moved to Overlay Track' : 'Clip moved to Main Video Track');
   };
 
-  const handleSelectTransition = (transitionId: string | null) => {
+  const handleSelectTransition = (transitionInput: string | any | null) => {
+    const transitionId = typeof transitionInput === 'string' ? transitionInput : (transitionInput?.id || null);
     setActiveTransitionId(transitionId);
     let targetIndex = selectedTransitionIndex;
 
@@ -420,7 +421,7 @@ function EditorMainScreenContent() {
           if (idx === targetIndex) {
             return {
               ...clip,
-              appliedTransition: transitionId
+              appliedTransition: transitionInput
             };
           }
           return clip;
@@ -5284,65 +5285,98 @@ function EditorMainScreenContent() {
             const posXVal = c.posX ?? (c.position && typeof c.position === 'object' ? c.position.x : 0);
             const posYVal = c.posY ?? (c.position && typeof c.position === 'object' ? c.position.y : 0);
 
-            let primaryEffect = c.effect || null;
-            if (!primaryEffect && Array.isArray(c.appliedEffects) && c.appliedEffects.length > 0) {
-              const eff = c.appliedEffects[0];
-              if (eff) {
-                primaryEffect = {
-                  effect_id: eff.presetId || eff.id || eff.name || 'blur',
-                  id: eff.presetId || eff.id || eff.name || 'blur',
-                  engine_key: eff.category || eff.engineKey || eff.presetId || 'blur',
-                  parameters: {
-                    intensity: eff.intensity ?? 50,
-                    opacity: eff.opacity ?? 1,
-                    speed: eff.speed ?? 1,
-                    angle: eff.angle ?? 0,
-                    blendMode: eff.blendMode ?? 'normal',
-                    duration: eff.duration ?? eff.fadeIn ?? eff.fadeOut ?? eff.fade ?? 1.0,
-                    fadeIn: eff.fadeIn,
-                    fadeOut: eff.fadeOut,
-                    fade: eff.fade,
-                    direction: eff.direction,
-                    type: eff.type,
-                    ...eff,
-                  },
-                };
-              }
-            }
-
-            let primaryFilter = c.filter || null;
-            if (!primaryFilter && Array.isArray(c.filters) && c.filters.length > 0) {
-              const filt = c.filters[0];
-              if (filt) {
-                const rawFiltInt = typeof filt.intensity === 'number' ? filt.intensity : 0.8;
-                primaryFilter = {
-                  filter_id: filt.id || filt.filterId || 'warm',
-                  id: filt.id || filt.filterId || 'warm',
-                  intensity: rawFiltInt > 1 ? rawFiltInt / 100 : rawFiltInt,
-                  parameters: {},
-                };
-              }
-            } else if (!primaryFilter && c.appliedFilter) {
-              const filt = c.appliedFilter;
-              const rawFiltInt = typeof filt.intensity === 'number' ? filt.intensity : 0.8;
-              primaryFilter = {
-                filter_id: filt.id || filt.filterId || 'warm',
-                id: filt.id || filt.filterId || 'warm',
-                intensity: rawFiltInt > 1 ? rawFiltInt / 100 : rawFiltInt,
-                parameters: {},
+            // Serialize full list of effects with parameters, opacity, blendMode & keyframes
+            const rawEffList = Array.isArray(c.appliedEffects) && c.appliedEffects.length > 0 
+              ? c.appliedEffects 
+              : (c.effect ? [c.effect] : []);
+            
+            const formattedEffects = rawEffList.map((eff: any) => {
+              const effId = eff.presetId || eff.id || eff.effect_id || eff.name || 'blur';
+              const engKey = eff.category || eff.engineKey || eff.engine_key || effId;
+              const rawEffInt = typeof eff.intensity === 'number' ? eff.intensity : 1.0;
+              const normEffInt = rawEffInt > 1 ? rawEffInt / 100 : rawEffInt;
+              const rawEffOp = typeof eff.opacity === 'number' ? eff.opacity : 1.0;
+              const normEffOp = rawEffOp > 1 ? rawEffOp / 100 : rawEffOp;
+              
+              return {
+                effect_id: effId,
+                id: effId,
+                engine_key: engKey,
+                intensity: normEffInt,
+                opacity: normEffOp,
+                blend_mode: eff.blendMode || eff.blend_mode || 'normal',
+                blendMode: eff.blendMode || eff.blend_mode || 'normal',
+                parameters: {
+                  ...eff,
+                  intensity: normEffInt,
+                  opacity: normEffOp,
+                  speed: eff.speed ?? 1,
+                  angle: eff.angle ?? 0,
+                  blendMode: eff.blendMode ?? 'normal',
+                },
+                keyframes: Array.isArray(eff.keyframes) ? eff.keyframes : [],
               };
-            }
+            });
+
+            const primaryEffect = formattedEffects[0] || null;
+
+            // Serialize full list of filters with intensity, opacity, blendMode & keyframes
+            const rawFiltList = Array.isArray(c.filters) && c.filters.length > 0 
+              ? c.filters 
+              : (c.appliedFilter ? [c.appliedFilter] : (c.filter ? [c.filter] : []));
+
+            const formattedFilters = rawFiltList.map((filt: any) => {
+              const filtId = filt.id || filt.filterId || filt.filter_id || 'warm';
+              const rawFiltInt = typeof filt.intensity === 'number' ? filt.intensity : 0.8;
+              const normFiltInt = rawFiltInt > 1 ? rawFiltInt / 100 : rawFiltInt;
+              const rawFiltOp = typeof filt.opacity === 'number' ? filt.opacity : 1.0;
+              const normFiltOp = rawFiltOp > 1 ? rawFiltOp / 100 : rawFiltOp;
+
+              return {
+                filter_id: filtId,
+                id: filtId,
+                intensity: normFiltInt,
+                opacity: normFiltOp,
+                blend_mode: filt.blendMode || filt.blend_mode || 'normal',
+                blendMode: filt.blendMode || filt.blend_mode || 'normal',
+                parameters: {
+                  ...filt,
+                  intensity: normFiltInt,
+                  opacity: normFiltOp,
+                },
+                keyframes: Array.isArray(filt.keyframes) ? filt.keyframes : [],
+              };
+            });
+
+            const primaryFilter = formattedFilters[0] || null;
 
             let primaryTransition = c.transition || null;
             if (!primaryTransition && c.appliedTransition) {
               const trans = c.appliedTransition;
-              primaryTransition = {
-                transition_type: trans.type || trans.transition_type || trans.name || 'fade',
-                type: trans.type || trans.transition_type || trans.name || 'fade',
-                duration: typeof trans.duration === 'number' ? trans.duration : 0.5,
-                direction: trans.direction || 'in',
-                parameters: {},
-              };
+              if (typeof trans === 'string') {
+                primaryTransition = {
+                  transition_type: trans,
+                  type: trans,
+                  duration: 0.5,
+                  direction: 'none',
+                  parameters: {},
+                };
+              } else if (typeof trans === 'object') {
+                const transId = trans.id || trans.transition_type || trans.type || trans.name || 'fade';
+                primaryTransition = {
+                  transition_type: transId,
+                  type: transId,
+                  name: trans.name || transId,
+                  duration: typeof trans.duration === 'number' ? trans.duration : 0.5,
+                  direction: trans.direction || 'none',
+                  speed: typeof trans.speed === 'number' ? trans.speed : 1.0,
+                  intensity: typeof trans.intensity === 'number' ? trans.intensity : 50,
+                  easing: trans.easing || 'ease-in-out',
+                  motion_blur: typeof trans.motionBlur === 'boolean' ? trans.motionBlur : (trans.motion_blur ?? true),
+                  category: trans.category || 'basic',
+                  parameters: trans.parameters || {},
+                };
+              }
             }
 
             const rawAssetType = (c.type || c.assetType || (c.isDetachedAudio ? 'AUDIO' : 'VIDEO')).toString().toUpperCase();
@@ -5379,9 +5413,11 @@ function EditorMainScreenContent() {
               effect: primaryEffect,
               filter: primaryFilter,
               transition: primaryTransition,
-              appliedEffects: c.appliedEffects ?? (primaryEffect ? [primaryEffect] : []),
-              filters: c.filters ?? (primaryFilter ? [primaryFilter] : []),
+              applied_effects: formattedEffects,
+              appliedEffects: formattedEffects,
+              filters: formattedFilters,
               appliedTransition: primaryTransition,
+              keyframes: Array.isArray(c.keyframes) ? c.keyframes : [],
             };
           });
 

@@ -20,3 +20,18 @@ export interface TransitionItem {
   timelineCompatible: boolean;
   exportCompatible: boolean;
 }
+
+export interface AppliedTransitionConfig {
+  id: string;
+  transition_type: string;
+  type?: string;
+  name?: string;
+  duration: number;
+  direction?: string;
+  speed?: number;
+  intensity?: number;
+  easing?: string;
+  motionBlur?: boolean;
+  category?: string;
+  parameters?: Record<string, any>;
+}

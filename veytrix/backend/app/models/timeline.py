@@ -27,7 +27,12 @@ class TransitionData(BaseModel):
 
     transition_type: str = Field(..., description="Transition type name (e.g., fade, wipe, dissolve)")
     duration: float = Field(..., ge=0.0, description="Transition duration in seconds")
-    direction: Optional[str] = Field("in", description="Transition direction: 'in', 'out', or 'cross'")
+    direction: Optional[str] = Field("none", description="Transition direction: 'left', 'right', 'up', 'down', 'cw', 'ccw', 'center', 'none'")
+    speed: Optional[float] = Field(1.0, ge=0.1, le=5.0, description="Speed rate multiplier")
+    intensity: Optional[float] = Field(50.0, ge=0.0, le=100.0, description="Effect intensity percentage")
+    easing: Optional[str] = Field("ease-in-out", description="Easing curve algorithm")
+    motion_blur: Optional[bool] = Field(True, description="Whether motion blur pass is enabled")
+    category: Optional[str] = Field(None, description="Transition category classification")
     parameters: Dict[str, Any] = Field(default_factory=dict, description="Additional transition parameters")
 
 
@@ -36,7 +41,11 @@ class EffectData(BaseModel):
 
     effect_id: str = Field(..., description="Unique effect identifier")
     engine_key: Optional[str] = Field(None, description="Engine key for rendering effect")
+    intensity: float = Field(default=1.0, ge=0.0, le=1.0, description="Effect intensity multiplier")
+    opacity: float = Field(default=1.0, ge=0.0, le=1.0, description="Effect opacity level")
+    blend_mode: str = Field(default="normal", description="Blend mode (e.g. normal, multiply, screen)")
     parameters: Dict[str, Any] = Field(default_factory=dict, description="Effect parameters")
+    keyframes: List[Dict[str, Any]] = Field(default_factory=list, description="Keyframe animation points")
     required_plan: PlanType = Field(default=PlanType.FREE, description="Subscription plan required for effect")
 
 
@@ -45,7 +54,10 @@ class FilterData(BaseModel):
 
     filter_id: str = Field(..., description="Filter identifier")
     intensity: float = Field(default=1.0, ge=0.0, le=1.0, description="Filter intensity factor from 0.0 to 1.0")
+    opacity: float = Field(default=1.0, ge=0.0, le=1.0, description="Filter opacity level from 0.0 to 1.0")
+    blend_mode: str = Field(default="normal", description="Blend mode (e.g. normal, multiply, screen)")
     parameters: Dict[str, Any] = Field(default_factory=dict, description="Filter parameters")
+    keyframes: List[Dict[str, Any]] = Field(default_factory=list, description="Keyframe animation points")
 
 
 class TextData(BaseModel):
@@ -89,10 +101,21 @@ class ClipModel(BaseModel):
     muted: bool = Field(default=False, description="Whether audio is muted")
     hidden: bool = Field(default=False, description="Whether clip is hidden from view")
     transition: Optional[TransitionData] = Field(None, description="Optional transition attached to clip")
-    effect: Optional[EffectData] = Field(None, description="Optional effect metadata")
-    filter: Optional[FilterData] = Field(None, description="Optional filter metadata")
+    filters: List[FilterData] = Field(default_factory=list, description="List of applied filters")
+    applied_effects: List[EffectData] = Field(default_factory=list, description="List of applied effects")
     text: Optional[TextData] = Field(None, description="Optional text properties if text clip")
+    keyframes: List[Dict[str, Any]] = Field(default_factory=list, description="Clip transform keyframes")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Custom metadata attributes")
+
+    @property
+    def filter(self) -> Optional[FilterData]:
+        """Backwards compatibility accessor for primary filter."""
+        return self.filters[0] if self.filters else None
+
+    @property
+    def effect(self) -> Optional[EffectData]:
+        """Backwards compatibility accessor for primary effect."""
+        return self.applied_effects[0] if self.applied_effects else None
 
 
 class TrackModel(BaseModel):
