@@ -115,17 +115,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthModalMode(null);
   }, []);
 
+  const syncInProgressRef = useRef<boolean>(false);
+  const lastSyncedUserIdRef = useRef<string | null>(null);
+
   const syncProfile = useCallback(async (): Promise<UserProfileData | null> => {
+    if (syncInProgressRef.current) return null;
+    syncInProgressRef.current = true;
+
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) {
         setUserProfile(null);
+        lastSyncedUserIdRef.current = null;
         return null;
       }
 
       // Fetch profile from db
       let dbProfile: any = null;
-      const { data: dbProfileData } = await supabase
+      const { data: dbProfileData, error: fetchError } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', currentUser.id)
@@ -133,8 +140,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (dbProfileData) {
         dbProfile = dbProfileData;
-      } else {
-        // If not found, create minimal profile record
+      } else if (!fetchError) {
+        // If profile record does not exist yet, create one
         const newProfile = {
           user_id: currentUser.id,
           display_name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || 'Mavros Member',
@@ -142,22 +149,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
         const { data: insertedData } = await supabase
           .from('profiles')
-          .insert(newProfile)
+          .upsert(newProfile, { onConflict: 'user_id' })
           .select()
           .maybeSingle();
-        if (insertedData) {
-          dbProfile = insertedData;
-        } else {
-          dbProfile = newProfile;
-        }
+        dbProfile = insertedData || newProfile;
       }
 
       const meta = currentUser.user_metadata || {};
       const profileData: UserProfileData = {
         id: currentUser.id,
         email: currentUser.email || null,
-        display_name: dbProfile.display_name || meta.full_name || meta.name || 'Mavros Member',
-        avatar_url: dbProfile.avatar_url || meta.avatar_url || null,
+        display_name: dbProfile?.display_name || meta.full_name || meta.name || 'Mavros Member',
+        avatar_url: dbProfile?.avatar_url || meta.avatar_url || null,
         username: meta.username || null,
         phone: meta.phone || null,
         country: meta.country || null,
@@ -172,17 +175,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         socialLinks: meta.social_links || {},
         workspace_settings: meta.workspace_settings || { autoSave: true, autoRecovery: true },
         notification_settings: meta.notification_settings || { desktop: true, email: true, updates: true, completion: true, marketing: false },
-        created_at: dbProfile.created_at || currentUser.created_at || null,
-        updated_at: dbProfile.updated_at || null,
+        created_at: dbProfile?.created_at || currentUser.created_at || null,
+        updated_at: dbProfile?.updated_at || null,
       };
 
       setUserProfile(profileData);
+      lastSyncedUserIdRef.current = currentUser.id;
       return profileData;
     } catch (err) {
       console.warn('Supabase profile sync notice:', err);
+    } finally {
+      syncInProgressRef.current = false;
     }
-    return userProfile;
-  }, [userProfile, setUserProfile]);
+    return null;
+  }, [setUserProfile]);
 
   useEffect(() => {
     let isMounted = true;
@@ -194,27 +200,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session) {
         setSession(session);
         setUser(session.user);
-        syncProfile();
+        if (lastSyncedUserIdRef.current !== session.user.id) {
+          syncProfile();
+        }
       } else {
         setSession(null);
         setUser(null);
         setUserProfile(null);
+        lastSyncedUserIdRef.current = null;
       }
       setIsLoading(false);
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
 
       if (session) {
         setSession(session);
         setUser(session.user);
-        await syncProfile();
+        if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || lastSyncedUserIdRef.current !== session.user.id) {
+          await syncProfile();
+        }
       } else {
         setSession(null);
         setUser(null);
         setUserProfile(null);
+        lastSyncedUserIdRef.current = null;
       }
       setIsLoading(false);
     });
@@ -223,7 +235,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [syncProfile]);
+  }, [syncProfile, setUserProfile]);
 
   const signInWithEmail = useCallback(async (email: string, password: string, rememberMe: boolean = true) => {
     setIsLoading(true);

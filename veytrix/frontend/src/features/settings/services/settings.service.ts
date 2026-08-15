@@ -21,7 +21,7 @@ export async function fetchAccountSettings(): Promise<AccountSettingsData> {
     const { data: profile } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', user.id)
+      .eq('user_id', user.id)
       .maybeSingle();
 
     return {
@@ -59,7 +59,7 @@ export async function updateAccountSettings(data: Partial<AccountSettingsData>):
       await supabase
         .from('profiles')
         .update({
-          full_name: data.displayName,
+          display_name: data.displayName,
           username: data.username,
           phone: data.phone,
           country: data.country,
@@ -68,7 +68,7 @@ export async function updateAccountSettings(data: Partial<AccountSettingsData>):
           bio: data.bio,
           avatar_url: data.avatarUrl,
         })
-        .eq('id', user.id);
+        .eq('user_id', user.id);
 
       await supabase.auth.updateUser({
         data: {
@@ -115,11 +115,11 @@ export async function fetchWorkspaceSettings(): Promise<WorkspaceSettingsData> {
         .eq('workspace_id', wm.workspace_id);
 
       const formattedMembers = await Promise.all((members || []).map(async (m) => {
-        const { data: p } = await supabase.from('profiles').select('full_name, username, avatar_url').eq('id', m.user_id).maybeSingle();
+        const { data: p } = await supabase.from('profiles').select('display_name, username, avatar_url').eq('user_id', m.user_id).maybeSingle();
         return {
           id: m.id,
           userId: m.user_id,
-          fullName: p?.full_name || 'Team Member',
+          fullName: p?.display_name || 'Team Member',
           username: p?.username || 'member',
           avatarUrl: p?.avatar_url || undefined,
           role: m.role as any,
