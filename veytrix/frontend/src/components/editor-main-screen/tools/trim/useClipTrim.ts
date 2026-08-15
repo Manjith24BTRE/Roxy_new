@@ -30,7 +30,7 @@ export interface UseClipTrimOptions {
 
 export function useClipTrim({
   pixelsPerSecond,
-  minClipDuration = 0.5,
+  minClipDuration = 0.1,
   playbackRate = 1,
   playheadTime,
   adjacentSnapPoints = [],
@@ -65,33 +65,15 @@ export function useClipTrim({
       let activeEdgeTime = newTimelineStart;
 
       if (snap.activeEdge === 'start') {
-        // Left Handle: Trim clip start / in-point
+        // Left Handle: Trim clip start / in-point (anchored flush to timelineStart)
         const maxDeltaTime = snap.originalDuration - snap.minDuration;
         const minDeltaTimeFromSource = -snap.originalSourceStart / rate;
-        const minDeltaTimeFromTimeline = -snap.originalTimelineStart;
-        const minDeltaTime = Math.max(minDeltaTimeFromSource, minDeltaTimeFromTimeline);
+        const minDeltaTime = minDeltaTimeFromSource;
 
         let clampedDelta = Math.max(minDeltaTime, Math.min(deltaTime, maxDeltaTime));
-        let candidateTimelineStart = snap.originalTimelineStart + clampedDelta;
-
-        // Snap check
-        const snapThreshold = 0.12;
-        const allSnapTargets = [
-          ...(playheadTime !== undefined ? [playheadTime] : []),
-          ...adjacentSnapPoints,
-        ];
-
-        for (const snapTarget of allSnapTargets) {
-          if (Math.abs(candidateTimelineStart - snapTarget) <= snapThreshold) {
-            candidateTimelineStart = snapTarget;
-            clampedDelta = candidateTimelineStart - snap.originalTimelineStart;
-            clampedDelta = Math.max(minDeltaTime, Math.min(clampedDelta, maxDeltaTime));
-            break;
-          }
-        }
 
         newSourceStart = Math.max(0, snap.originalSourceStart + clampedDelta * rate);
-        newTimelineStart = Math.max(0, snap.originalTimelineStart + clampedDelta);
+        newTimelineStart = snap.originalTimelineStart;
         newDuration = Math.max(snap.minDuration, snap.originalDuration - clampedDelta);
         activeEdgeTime = newTimelineStart;
       } else {

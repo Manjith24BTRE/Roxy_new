@@ -737,16 +737,18 @@ class FFmpegBuilder:
                 )
                 if clip_src and not str(clip_src).startswith("blob:"):
                     src_str = str(clip_src)
+                    storage_base = Path(__file__).resolve().parent.parent.parent / "storage"
+                    rel_path = src_str
                     if local_static_prefix in src_str:
                         rel_path = src_str.split(local_static_prefix)[-1]
-                        local_abs = (Path(__file__).resolve().parent.parent.parent / "storage" / rel_path).resolve()
-                        if local_abs.is_file():
-                            src_str = str(local_abs)
                     elif "/storage/v1/object/public/" in src_str:
                         rel_path = src_str.split("/storage/v1/object/public/")[-1]
-                        local_abs = (Path(__file__).resolve().parent.parent.parent / "storage" / rel_path).resolve()
-                        if local_abs.is_file():
-                            src_str = str(local_abs)
+
+                    for cand_rel in [rel_path, f"videos/{rel_path}", f"images/{rel_path}", f"audio/{rel_path}", f"assets/{rel_path}"]:
+                        cand_abs = (storage_base / cand_rel.lstrip("/")).resolve()
+                        if cand_abs.is_file():
+                            src_str = str(cand_abs)
+                            break
 
                     if "/storage/v1/object/public/" in src_str:
                         parts = src_str.split("/storage/v1/object/public/")
@@ -757,13 +759,15 @@ class FFmpegBuilder:
                         remainder = parts[1]
                         known_buckets = ["videos", "assets", "images", "audio", "uploads", "exports", "thumbnails"]
                         if not any(remainder.startswith(f"{b}/") for b in known_buckets):
-                            b_name = "videos"
-                            if clip.asset_type == AssetType.AUDIO:
+                            atype_str = str(getattr(clip, "asset_type", "")).upper()
+                            if "AUDIO" in atype_str:
                                 b_name = "audio"
-                            elif clip.asset_type == AssetType.IMAGE:
+                            elif "IMAGE" in atype_str:
                                 b_name = "images"
-                            elif str(clip.asset_type).upper() in ("ASSET", "ASSETS"):
+                            elif "ASSET" in atype_str:
                                 b_name = "assets"
+                            else:
+                                b_name = "videos"
                             src_str = f"{prefix}{b_name}/{remainder}"
                         else:
                             src_str = f"{prefix}{remainder}"
@@ -887,46 +891,70 @@ class FFmpegBuilder:
 
                 processed_clip_labels.append((clip, next_v_label))
 
-            # Apply xfade transitions between adjacent clips on the same track if defined
-            if len(processed_clip_labels) > 1:
-                prev_clip, prev_label = processed_clip_labels[0]
-                for idx in range(1, len(processed_clip_labels)):
-                    curr_clip, curr_label = processed_clip_labels[idx]
+            # Process track clip segments (handling xfade transitions between adjacent clips)
+            track_segments: List[Tuple[float, float, str, float, float]] = []
+            idx_clip = 0
+            while idx_clip < len(processed_clip_labels):
+                clip_i, label_i = processed_clip_labels[idx_clip]
 
-                    trans = prev_clip.transition or curr_clip.transition
+                # Check if xfade transition connects clip_i to next clip(s)
+                if idx_clip < len(processed_clip_labels) - 1:
+                    next_clip, next_label = processed_clip_labels[idx_clip + 1]
+                    trans = clip_i.transition or next_clip.transition
                     if trans and trans.duration > 0:
-                        trans_dur = min(trans.duration, prev_clip.duration / 2.0, curr_clip.duration / 2.0)
-                        trans_dur = max(0.1, trans_dur)
-                        offset = max(0.0, prev_clip.end_time - trans_dur)
-                        trans_type = trans.transition_type
+                        curr_label = label_i
+                        chain_start_time = clip_i.start_time
+                        chain_end_time = clip_i.end_time
+                        pos_x = clip_i.position.get("x", 0.0) if isinstance(clip_i.position, dict) else 0.0
+                        pos_y = clip_i.position.get("y", 0.0) if isinstance(clip_i.position, dict) else 0.0
 
-                        trans_out_label = f"v_trans_{prev_clip.id.replace('-', '')}_{curr_clip.id.replace('-', '')}"
-                        trans_nodes = TransitionBuilder.build_video_transition(
-                            input_label_1=prev_label,
-                            input_label_2=curr_label,
-                            output_label=trans_out_label,
-                            transition=trans,
-                            duration=trans_dur,
-                            offset=offset,
-                        )
-                        filter_nodes.extend(trans_nodes)
-                        prev_label = trans_out_label
+                        j = idx_clip
+                        while j < len(processed_clip_labels) - 1:
+                            c_prev, l_prev = processed_clip_labels[j]
+                            c_next, l_next = processed_clip_labels[j + 1]
+                            t_cur = c_prev.transition or c_next.transition
+                            if not (t_cur and t_cur.duration > 0):
+                                break
 
-                    prev_clip = curr_clip
+                            trans_dur = min(t_cur.duration, c_prev.duration / 2.0, c_next.duration / 2.0)
+                            trans_dur = max(0.1, trans_dur)
+                            offset = max(0.0, (chain_end_time - chain_start_time) - trans_dur)
 
-            # Composite processed clip / sequence onto canvas
-            for clip, clip_label in processed_clip_labels:
-                clip_id_clean = clip.id.replace("-", "")
-                comp_label = f"v_comp_{clip_id_clean}"
-                pos_x = clip.position.get("x", 0.0) if isinstance(clip.position, dict) else 0.0
-                pos_y = clip.position.get("y", 0.0) if isinstance(clip.position, dict) else 0.0
+                            trans_out_label = f"v_trans_{c_prev.id.replace('-', '')}_{c_next.id.replace('-', '')}"
+                            trans_nodes = TransitionBuilder.build_video_transition(
+                                input_label_1=curr_label,
+                                input_label_2=l_next,
+                                output_label=trans_out_label,
+                                transition=t_cur,
+                                duration=trans_dur,
+                                offset=offset,
+                            )
+                            filter_nodes.extend(trans_nodes)
+                            curr_label = trans_out_label
+                            chain_end_time = chain_end_time + (c_next.duration - trans_dur)
+                            j += 1
+
+                        track_segments.append((chain_start_time, chain_end_time, curr_label, pos_x, pos_y))
+                        idx_clip = j + 1
+                        continue
+
+                # Standalone clip without transition
+                pos_x = clip_i.position.get("x", 0.0) if isinstance(clip_i.position, dict) else 0.0
+                pos_y = clip_i.position.get("y", 0.0) if isinstance(clip_i.position, dict) else 0.0
+                track_segments.append((clip_i.start_time, clip_i.end_time, label_i, pos_x, pos_y))
+                idx_clip += 1
+
+            # Composite track segments (clips or xfade transition chains) onto canvas
+            for seg_start, seg_end, seg_label, pos_x, pos_y in track_segments:
+                seg_id_clean = seg_label.replace("-", "").replace(":", "_")
+                comp_label = f"v_comp_{seg_id_clean}"
                 x_expr = f"(W-w)/2+{pos_x:.1f}"
                 y_expr = f"(H-h)/2+{pos_y:.1f}"
 
-                overlay_filter = f"overlay=enable='between(t,{clip.start_time:.4f},{clip.end_time:.4f})':x='{x_expr}':y='{y_expr}'"
+                overlay_filter = f"overlay=enable='between(t,{seg_start:.4f},{seg_end:.4f})':x='{x_expr}':y='{y_expr}'"
                 filter_nodes.append(
                     FilterNode(
-                        inputs=[curr_v_label, clip_label],
+                        inputs=[curr_v_label, seg_label],
                         filter_name=overlay_filter,
                         args="",
                         outputs=[comp_label],

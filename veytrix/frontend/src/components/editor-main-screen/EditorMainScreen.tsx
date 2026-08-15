@@ -21,6 +21,7 @@ import { Captions, CaptionItem } from './tools/captions/Captions';
 import { Effects } from './tools/effects/Effects';
 import { Filters } from './tools/filters/Filters';
 import { Transitions } from './tools/transitions/Transitions';
+import { resolveFrontendTransition, renderFrontendTransitionFrame } from './tools/transitions/frontendTransitionEngine';
 import { SpeedTool, clampPlaybackRate, getSourceDuration, getEffectiveDuration, timelineTimeToSourceTime, sourceTimeToTimelineTime } from './tools/speed';
 import { ReplaceTool, ReplaceMediaPayload } from './tools/replace';
 // Force IDE cache refresh for folder casing
@@ -2222,7 +2223,7 @@ function EditorMainScreenContent() {
         if (!targetClip) return prev;
 
         const isTargetVideo = targetClip.trackId !== 'audio' && targetClip.trackId !== 'music' && targetClip.type !== 'audio' && !targetClip.isDetachedAudio;
-        const validDuration = Math.max(0.5, newDuration);
+        const validDuration = Math.max(0.1, newDuration);
 
         const updated = prev.map((c) => {
           if (c.id === clipId) {
@@ -2409,134 +2410,28 @@ function EditorMainScreenContent() {
       if (clipA.appliedTransition && Math.abs(currentTime - t_boundary) <= halfDur) {
         const progress = Math.max(0, Math.min(1, (currentTime - (t_boundary - halfDur)) / (halfDur * 2)));
 
-        const tItem = SAMPLE_TRANSITIONS_NEW.find(t => t.id === clipA.appliedTransition);
-        const keywordsStr = (tItem?.keywords || []).join(' ');
-        const typeStr = (clipA.appliedTransition + ' ' + (tItem?.name || '') + ' ' + (tItem?.category || '') + ' ' + keywordsStr + ' ' + (tItem?.direction || '')).toLowerCase();
+        const resolvedTrans = resolveFrontendTransition(clipA.appliedTransition);
+        const frame = renderFrontendTransitionFrame(resolvedTrans, progress);
 
-        states[clipA.id] = { ...states[clipA.id], display: true, zIndex: 10 };
-        states[clipB.id] = { ...states[clipB.id], display: true, zIndex: 11 };
+        states[clipA.id] = {
+          ...states[clipA.id],
+          display: true,
+          zIndex: frame.sceneA.zIndex,
+          opacity: frame.sceneA.opacity,
+          transform: frame.sceneA.transform,
+          filter: frame.sceneA.filter,
+        };
 
-        // 1. Dip to Black / Dark
-        if (typeStr.includes('black') || typeStr.includes('dark')) {
-          if (progress <= 0.5) {
-            states[clipA.id].opacity = 1 - progress * 2;
-            states[clipB.id].opacity = 0;
-          } else {
-            states[clipA.id].opacity = 0;
-            states[clipB.id].opacity = (progress - 0.5) * 2;
-          }
-          overlayColor = `rgba(0, 0, 0, ${Math.sin(progress * Math.PI)})`;
-        }
-        // 2. White Flash / Bright Cut
-        else if (typeStr.includes('white') || typeStr.includes('flash') || typeStr.includes('bright')) {
-          states[clipA.id].opacity = 1 - progress;
-          states[clipB.id].opacity = progress;
-          overlayColor = `rgba(255, 255, 255, ${Math.sin(progress * Math.PI) * 0.9})`;
-        }
-        // 3. Zoom Out / Pull Out / Shrink
-        else if (typeStr.includes('out') || typeStr.includes('pull') || typeStr.includes('shrink') || typeStr.includes('back')) {
-          states[clipA.id].transform = `scale(${1 - progress * 0.4})`;
-          states[clipB.id].transform = `scale(${1.4 - progress * 0.4})`;
-          states[clipA.id].opacity = 1 - progress;
-          states[clipB.id].opacity = progress;
-        }
-        // 4. Zoom In / Crash Zoom / Push In / Punch / Snap Zoom
-        else if (typeStr.includes('zoom') || typeStr.includes('push') || typeStr.includes('crash') || typeStr.includes('snap') || typeStr.includes('punch') || typeStr.includes('dolly') || typeStr.includes('perspective') || typeStr.includes('tunnel')) {
-          states[clipA.id].transform = `scale(${1 + progress * 0.5})`;
-          states[clipB.id].transform = `scale(${0.5 + progress * 0.5})`;
-          states[clipA.id].opacity = 1 - progress;
-          states[clipB.id].opacity = progress;
-        }
-        // 5. Slide / Push / Wipe / Swipe / Cover
-        else if (typeStr.includes('slide') || typeStr.includes('swipe') || typeStr.includes('wipe') || typeStr.includes('card') || typeStr.includes('gallery') || typeStr.includes('move')) {
-          const isVert = typeStr.includes('up') || typeStr.includes('down');
-          const isReverse = typeStr.includes('right') || typeStr.includes('down');
-          const factor = isReverse ? 1 : -1;
+        states[clipB.id] = {
+          ...states[clipB.id],
+          display: true,
+          zIndex: frame.sceneB.zIndex,
+          opacity: frame.sceneB.opacity,
+          transform: frame.sceneB.transform,
+          filter: frame.sceneB.filter,
+        };
 
-          if (isVert) {
-            states[clipA.id].transform = `translateY(${progress * 100 * factor}%)`;
-            states[clipB.id].transform = `translateY(${(1 - progress) * -100 * factor}%)`;
-          } else {
-            states[clipA.id].transform = `translateX(${progress * 100 * factor}%)`;
-            states[clipB.id].transform = `translateX(${(1 - progress) * -100 * factor}%)`;
-          }
-          states[clipA.id].opacity = 1;
-          states[clipB.id].opacity = 1;
-        }
-        // 6. Spin / Rotate / Roll / Orbit
-        else if (typeStr.includes('spin') || typeStr.includes('rotate') || typeStr.includes('roll') || typeStr.includes('barrel') || typeStr.includes('orbit') || typeStr.includes('helix')) {
-          const isCCW = typeStr.includes('ccw') || typeStr.includes('counter');
-          const dir = isCCW ? -1 : 1;
-          states[clipA.id].transform = `rotate(${progress * 180 * dir}deg) scale(${1 - progress * 0.3})`;
-          states[clipB.id].transform = `rotate(${(progress - 1) * 180 * dir}deg) scale(${0.7 + progress * 0.3})`;
-          states[clipA.id].opacity = 1 - progress;
-          states[clipB.id].opacity = progress;
-        }
-        // 7. Flip / Page Curl / Cube / 3D
-        else if (typeStr.includes('flip') || typeStr.includes('page') || typeStr.includes('cube')) {
-          states[clipA.id].transform = `perspective(800px) rotateY(${progress * 90}deg)`;
-          states[clipB.id].transform = `perspective(800px) rotateY(${(1 - progress) * -90}deg)`;
-          states[clipA.id].opacity = 1 - progress;
-          states[clipB.id].opacity = progress;
-        }
-        // 8. Whip Pan / Fast Pan
-        else if (typeStr.includes('whip') || typeStr.includes('pan')) {
-          const blurPx = Math.sin(progress * Math.PI) * 20;
-          const translateVal = (progress - 0.5) * 240;
-          states[clipA.id].filter = `blur(${blurPx}px)`;
-          states[clipB.id].filter = `blur(${blurPx}px)`;
-          states[clipA.id].transform = `translateX(${-translateVal}px)`;
-          states[clipB.id].transform = `translateX(${240 - translateVal}px)`;
-          states[clipA.id].opacity = 1 - progress;
-          states[clipB.id].opacity = progress;
-        }
-        // 9. Camera Shake / Jitter / Rumble
-        else if (typeStr.includes('shake') || typeStr.includes('jitter') || typeStr.includes('rumble') || typeStr.includes('handheld')) {
-          const shakeX = Math.sin(progress * 80) * 20 * Math.sin(progress * Math.PI);
-          const shakeY = Math.cos(progress * 60) * 15 * Math.sin(progress * Math.PI);
-          states[clipA.id].transform = `translate(${shakeX}px, ${shakeY}px)`;
-          states[clipB.id].transform = `translate(${-shakeX}px, ${-shakeY}px)`;
-          states[clipA.id].opacity = 1 - progress;
-          states[clipB.id].opacity = progress;
-        }
-        // 10. Blur / Defocus
-        else if (typeStr.includes('blur') || typeStr.includes('defocus') || typeStr.includes('soft')) {
-          const blurPx = Math.sin(progress * Math.PI) * 24;
-          states[clipA.id].filter = `blur(${blurPx}px)`;
-          states[clipB.id].filter = `blur(${blurPx}px)`;
-          states[clipA.id].opacity = 1 - progress;
-          states[clipB.id].opacity = progress;
-        }
-        // 11. Glitch / Signal Loss / CRT / VHS / Distortion
-        else if (typeStr.includes('glitch') || typeStr.includes('static') || typeStr.includes('loss') || typeStr.includes('error') || typeStr.includes('crash') || typeStr.includes('storm') || typeStr.includes('vhs') || typeStr.includes('crt') || typeStr.includes('distortion')) {
-          const glitchShift = (Math.sin(progress * 50) > 0.2 ? (Math.random() - 0.5) * 35 : 0);
-          const hue = Math.sin(progress * Math.PI) * 120;
-          states[clipA.id].filter = `hue-rotate(${hue}deg) contrast(1.5)`;
-          states[clipB.id].filter = `hue-rotate(${-hue}deg) contrast(1.5)`;
-          states[clipA.id].transform = `translateX(${glitchShift}px)`;
-          states[clipB.id].transform = `translateX(${-glitchShift}px)`;
-          states[clipA.id].opacity = 1 - progress;
-          states[clipB.id].opacity = progress;
-          overlayColor = `rgba(255, 255, 255, ${Math.sin(progress * Math.PI) * 0.4})`;
-        }
-        // 12. Light Leak / Glow / Burn / Bloom / Rays / Flare
-        else if (typeStr.includes('light') || typeStr.includes('flare') || typeStr.includes('leak') || typeStr.includes('burn') || typeStr.includes('glow') || typeStr.includes('bloom') || typeStr.includes('rays') || typeStr.includes('burst')) {
-          states[clipA.id].opacity = 1 - progress;
-          states[clipB.id].opacity = progress;
-          overlayColor = `rgba(255, 200, 100, ${Math.sin(progress * Math.PI) * 0.8})`;
-        }
-        // 13. Split / Slice / Shatter
-        else if (typeStr.includes('split') || typeStr.includes('slice') || typeStr.includes('shatter')) {
-          states[clipA.id].transform = `scale(${1 + progress * 0.2}) rotate(${progress * 6}deg)`;
-          states[clipB.id].transform = `scale(${1.2 - progress * 0.2}) rotate(${(1 - progress) * -6}deg)`;
-          states[clipA.id].opacity = 1 - progress;
-          states[clipB.id].opacity = progress;
-        }
-        // 14. Default Cross Dissolve
-        else {
-          states[clipA.id].opacity = 1 - progress;
-          states[clipB.id].opacity = progress;
-        }
+        overlayColor = frame.overlayColor || null;
         break;
       }
     }
@@ -4960,17 +4855,10 @@ function EditorMainScreenContent() {
                           .filter((c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio && c.trackId !== 'overlay')
                           .reduce<React.ReactNode[]>((acc, clip, idx, videoClipsArray) => {
                             const clipWidthPx = clip.duration * pxPerSec;
-                            const isMulti = videoClipsArray.length > 1;
-                            const isFirst = idx === 0;
-                            const isLast = idx === videoClipsArray.length - 1;
+                            const clipLeftPx = clip.timelineStart * pxPerSec;
+                            const clipComputedWidth = Math.max(12, clipWidthPx);
 
-                            const gapLeft = (isMulti && !isFirst) ? 8 : 0;
-                            const gapRight = (isMulti && !isLast) ? 8 : 0;
-
-                            const clipLeftPx = clip.timelineStart * pxPerSec + gapLeft;
-                            const clipComputedWidth = Math.max(12, clipWidthPx - (gapLeft + gapRight));
-
-                            const numThumbnails = Math.max(1, Math.floor(clipComputedWidth / 48));
+                            const numThumbnails = Math.max(1, Math.ceil(clipComputedWidth / 48));
                             const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
                             const isMuted = !!mutedClips[clip.id];
                             const isSelected = clip.id === activeSelectedClipId;
@@ -4988,14 +4876,58 @@ function EditorMainScreenContent() {
                                 onDragStart={(e) => handleDragStart(e, clip.id)}
                                 onDragOver={(e) => handleDragOver(e, clip.id)}
                                 onDragEnd={handleDragEnd}
-                                className={`h-12 rounded-md border flex items-center overflow-hidden cursor-pointer flex-shrink-0 transition absolute ${isSelected
-                                    ? 'border-sky-400 ring-2 ring-sky-400/50 bg-primary/25 z-20 shadow-glow scale-[1.01]'
+                                className={`h-12 rounded-sm border flex items-center overflow-hidden cursor-pointer flex-shrink-0 transition-none absolute ${isSelected
+                                    ? 'border-sky-400 ring-2 ring-sky-400/50 bg-slate-900 z-20 shadow-lg'
                                     : clip.isFreezeFrame
                                       ? 'border-cyan-500/60 bg-cyan-500/10 hover:border-cyan-400/80 z-10'
-                                      : 'border-border-strong bg-surface hover:border-sky-400/60 z-10'
+                                      : 'border-slate-800 bg-slate-900 hover:border-sky-400/50 z-10'
                                   } ${isLocked ? 'opacity-70 border-dashed border-amber-500/30' : ''}`}
                                 style={{ left: `${clipLeftPx}px`, width: `${clipComputedWidth}px` }}
                               >
+                                {/* THUMBNAIL STRIP: Edge-to-Edge inside Clip */}
+                                <div className="absolute inset-0 flex overflow-hidden opacity-90 pointer-events-none">
+                                  {(() => {
+                                    const parentMedia = mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id);
+                                    const clipThumbs = (Array.isArray(clip.thumbnails) && clip.thumbnails.length > 0)
+                                      ? clip.thumbnails
+                                      : (parentMedia && Array.isArray(parentMedia.thumbnails) && parentMedia.thumbnails.length > 0)
+                                        ? parentMedia.thumbnails
+                                        : [];
+                                    const fallbackSrc = clip.url || clip.media_url || clip.src || parentMedia?.url;
+
+                                    return Array.from({ length: numThumbnails }).map((_, idx) => {
+                                      const currentSrc = clipThumbs.length > 0
+                                        ? clipThumbs[idx % clipThumbs.length]
+                                        : fallbackSrc;
+
+                                      return currentSrc ? (
+                                        <img
+                                          key={idx}
+                                          src={currentSrc}
+                                          alt=""
+                                          className="h-full w-12 object-cover flex-shrink-0 border-r border-black/20"
+                                        />
+                                      ) : (
+                                        <div key={idx} className="h-full w-12 bg-slate-900 flex items-center justify-center flex-shrink-0 border-r border-black/20">
+                                          <Film className="h-3 w-3 text-sky-400/60" />
+                                        </div>
+                                      );
+                                    });
+                                  })()}
+                                </div>
+
+                                {/* SUBTLE TOP-LEFT METADATA BADGE */}
+                                <div className="absolute top-1 left-2 z-20 pointer-events-none flex items-center gap-1.5 max-w-[90%] truncate">
+                                  <span className={`px-1.5 py-0.5 rounded font-mono text-[9px] text-white font-semibold truncate flex items-center gap-1 backdrop-blur-md shadow-sm ${clip.isFreezeFrame ? 'bg-cyan-950/90' : 'bg-black/70'}`}>
+                                    {isLocked && <Lock className="h-2.5 w-2.5 text-amber-400 flex-shrink-0" />}
+                                    {isMuted && <VolumeX className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />}
+                                    {clip.isReversed && <span className="text-sky-400 font-bold text-[8.5px]">⏪</span>}
+                                    {clip.isFreezeFrame && <span className="text-cyan-400 font-bold text-[8.5px]">❄️</span>}
+                                    <span className="truncate">{clip.name}</span>
+                                    <span className="text-slate-400 text-[8.5px] font-normal">({formatTimecode(clip.duration)})</span>
+                                  </span>
+                                </div>
+
                                 {(isTrimModeActive && trimmingClipId === clip.id) && !isLocked && (
                                   <ClipTrimHandles
                                     clipId={clip.id}
@@ -5063,45 +4995,6 @@ function EditorMainScreenContent() {
                                     }}
                                   />
                                 )}
-
-                                <div className="h-full flex-1 flex overflow-hidden opacity-90 px-2 pointer-events-none">
-                                  {(() => {
-                                    const parentMedia = mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id);
-                                    const clipThumbs = (Array.isArray(clip.thumbnails) && clip.thumbnails.length > 0)
-                                      ? clip.thumbnails
-                                      : (parentMedia && Array.isArray(parentMedia.thumbnails) && parentMedia.thumbnails.length > 0)
-                                        ? parentMedia.thumbnails
-                                        : [];
-                                    const fallbackSrc = clip.url || clip.media_url || clip.src || parentMedia?.url;
-
-                                    return Array.from({ length: numThumbnails }).map((_, idx) => {
-                                      const currentSrc = clipThumbs.length > 0
-                                        ? clipThumbs[idx % clipThumbs.length]
-                                        : fallbackSrc;
-
-                                      return currentSrc ? (
-                                        <img
-                                          key={idx}
-                                          src={currentSrc}
-                                          alt=""
-                                          className="h-full w-12 object-cover flex-shrink-0 border-r border-black/40"
-                                        />
-                                      ) : (
-                                        <div key={idx} className="h-full w-12 bg-sky-950/60 flex items-center justify-center flex-shrink-0 border-r border-black/40">
-                                          <Film className="h-3 w-3 text-sky-400/60" />
-                                        </div>
-                                      );
-                                    });
-                                  })()}
-                                </div>
-
-                                <span className={`px-2 font-mono text-[9px] text-foreground font-semibold truncate py-0.5 rounded-l absolute right-2 bottom-1 pointer-events-none flex items-center gap-1 ${clip.isFreezeFrame ? 'bg-cyan-950/90' : 'bg-black/80'}`}>
-                                  {isLocked && <Lock className="h-2.5 w-2.5 text-amber-400 flex-shrink-0" />}
-                                  {isMuted && <VolumeX className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />}
-                                  {clip.isReversed && <span className="text-sky-400 font-bold text-[9px] flex-shrink-0">⏪ Reversed</span>}
-                                  {clip.isFreezeFrame && <span className="text-cyan-400 font-bold text-[9px] flex-shrink-0">❄️ Frozen</span>}
-                                  {clip.name} ({formatTimecode(clip.duration)})
-                                </span>
                               </div>
                             );
 

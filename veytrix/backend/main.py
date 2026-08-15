@@ -124,6 +124,13 @@ app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
 
+from fastapi.staticfiles import StaticFiles
+
+# Mount local storage static directory
+local_storage_path = Path(__file__).resolve().parent / "storage"
+local_storage_path.mkdir(parents=True, exist_ok=True)
+app.mount("/storage", StaticFiles(directory=str(local_storage_path)), name="storage")
+
 # Mount API router
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(api_router)

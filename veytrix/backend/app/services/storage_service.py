@@ -162,6 +162,24 @@ class StorageService:
             except Exception as exc:
                 logger.error(f"Supabase HTTP REST upload error: {exc}")
 
+        # Always save copy to local backend disk storage for instant local FFmpeg rendering
+        try:
+            from pathlib import Path
+            storage_root = Path(__file__).resolve().parent.parent.parent / "storage"
+            target_file_1 = storage_root / bucket_name / storage_path
+            target_file_2 = storage_root / storage_path
+            target_file_1.parent.mkdir(parents=True, exist_ok=True)
+            target_file_2.parent.mkdir(parents=True, exist_ok=True)
+            with open(target_file_1, "wb") as f:
+                f.write(file_bytes)
+            with open(target_file_2, "wb") as f:
+                f.write(file_bytes)
+            logger.info(f"Saved asset copy to local storage: '{target_file_1}'")
+            if not uploaded:
+                file_url = f"http://127.0.0.1:8000/storage/{bucket_name}/{storage_path}"
+        except Exception as exc:
+            logger.error(f"Error writing asset to local storage fallback: {exc}")
+
         return file_url, storage_path
 
     async def upload_file_path(
@@ -207,6 +225,21 @@ class StorageService:
                             logger.info(f"Uploaded rendered export via HTTP REST to Supabase storage '{bucket_name}/{storage_path}'")
                 except Exception as exc:
                     logger.error(f"Supabase HTTP REST export upload error: {exc}")
+
+            try:
+                from pathlib import Path
+                import shutil
+                storage_root = Path(__file__).resolve().parent.parent.parent / "storage"
+                target_file_1 = storage_root / bucket_name / storage_path
+                target_file_2 = storage_root / storage_path
+                target_file_1.parent.mkdir(parents=True, exist_ok=True)
+                target_file_2.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(local_file_path, target_file_1)
+                shutil.copyfile(local_file_path, target_file_2)
+                if not uploaded:
+                    file_url = f"http://127.0.0.1:8000/storage/{bucket_name}/{storage_path}"
+            except Exception as exc:
+                logger.error(f"Error copying export to local storage fallback: {exc}")
 
         return file_url, storage_path
 

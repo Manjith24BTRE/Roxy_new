@@ -13,6 +13,7 @@ import {
   Check
 } from 'lucide-react';
 import { renderProgrammaticThumbnail } from './TransitionTemplates';
+import { InteractiveTransitionPlayer } from './InteractiveTransitionPlayer';
 import { SAMPLE_TRANSITIONS_NEW } from './Transitions.data';
 
 interface TransitionGalleryModalProps {
@@ -366,11 +367,15 @@ export const TransitionGalleryModal: React.FC<TransitionGalleryModalProps> = ({
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl">
             {/* Modal Thumbnail Header */}
-            <div className="relative aspect-video">
-              {renderProgrammaticThumbnail(activeItem)}
+            <div className="relative">
+              <InteractiveTransitionPlayer
+                transitionInput={activeItem.originalId || activeItem.name || activeItem.id}
+                showControls={true}
+                autoplay={true}
+              />
               <button
                 onClick={() => setActiveItem(null)}
-                className="absolute top-3 right-3 z-40 p-1.5 rounded-full bg-slate-950/80 text-slate-300 hover:text-white border border-white/10 backdrop-blur-md"
+                className="absolute top-3 right-3 z-40 p-1.5 rounded-full bg-slate-950/80 text-slate-300 hover:text-white border border-white/10 backdrop-blur-md cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>

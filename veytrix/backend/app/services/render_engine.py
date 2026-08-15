@@ -189,6 +189,7 @@ class RenderWorker:
 
     async def _prepare_local_input_assets(self, cmd_args: List[str], temp_dir: Path) -> List[str]:
         """Pre-downloads remote HTTP/HTTPS input assets to the local temporary render directory before running FFmpeg."""
+        from app.core.config import settings
         updated_args = list(cmd_args)
         known_buckets = ["videos", "assets", "images", "audio", "uploads", "exports"]
 
@@ -221,14 +222,18 @@ class RenderWorker:
                             ctx = ssl.create_default_context()
                             ctx.check_hostname = False
                             ctx.verify_mode = ssl.CERT_NONE
-                            req = urllib.request.Request(
-                                cand_url,
-                                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-                            )
+
+                            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+                            auth_key = getattr(settings, "SUPABASE_SERVICE_ROLE_KEY", None) or getattr(settings, "SUPABASE_ANON_KEY", None)
+                            if auth_key and auth_key.strip():
+                                headers["Authorization"] = f"Bearer {auth_key.strip()}"
+                                headers["apikey"] = auth_key.strip()
+
+                            req = urllib.request.Request(cand_url, headers=headers)
                             with urllib.request.urlopen(req, timeout=45, context=ctx) as resp, open(local_path, "wb") as out_f:
                                 shutil.copyfileobj(resp, out_f)
                             if local_path.stat().st_size > 0:
-                                logger.info(f"[RenderWorker] Successfully pre-downloaded remote asset ({local_path.stat().st_size} bytes) -> '{local_path.resolve()}'")
+                                logger.info(f"[RenderWorker] Successfully pre-downloaded remote asset ({local_path.stat().st_size} bytes) from '{cand_url}' -> '{local_path.resolve()}'")
                                 updated_args[i + 1] = str(local_path.resolve())
                                 downloaded = True
                                 break
@@ -237,6 +242,9 @@ class RenderWorker:
                             continue
 
                     if not downloaded:
+                        # Fallback: if candidates exist with bucket prefix, update URL for direct stream candidate
+                        if len(candidates) > 1:
+                            updated_args[i + 1] = candidates[1]
                         logger.warning(f"[RenderWorker] Could not pre-download remote asset URL '{input_path}': {last_err}. FFmpeg will attempt direct stream.")
 
         return updated_args
