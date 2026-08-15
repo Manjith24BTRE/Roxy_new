@@ -159,6 +159,35 @@ export class SyncService {
       return [];
     }
   }
+
+  /**
+   * Deletes a project from Supabase database.
+   */
+  public async deleteRemoteProject(projectId: string): Promise<boolean> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return true;
+
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectId);
+      if (!isUuid) return true;
+
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', projectId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.warn('[SyncService] Failed to delete remote project:', error.message);
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.warn('[SyncService] Exception deleting remote project:', err);
+      return false;
+    }
+  }
 }
 
 export const syncService = SyncService.getInstance();

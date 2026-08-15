@@ -59,25 +59,54 @@ describe('Manual Export Parity Serialization Validation', () => {
     expect(formattedEffects[1].effect_id).toBe('glitch');
   });
 
-  it('serializes transitions between adjacent clips correctly', () => {
+  it('serializes transitions between adjacent clips correctly with full metadata', () => {
     const clipWithTransition = {
       id: 'clip-3',
       type: 'VIDEO',
       duration: 4,
       appliedTransition: {
-        type: 'wipe',
-        duration: 1.0,
-        direction: 'in',
+        id: 'whip-pan-left-premium',
+        transition_type: 'whip-pan-left-premium',
+        type: 'whip-pan-left-premium',
+        name: 'Whip Pan Left',
+        duration: 0.8,
+        direction: 'left',
+        speed: 1.5,
+        intensity: 85,
+        easing: 'ease-in-out',
+        motionBlur: true,
+        category: 'camera',
+        parameters: { customPresetFlag: true }
       },
     };
 
+    const trans = clipWithTransition.appliedTransition;
     const formattedTransition = {
-      transition_type: clipWithTransition.appliedTransition.type,
-      duration: clipWithTransition.appliedTransition.duration,
-      direction: clipWithTransition.appliedTransition.direction,
+      transition_type: trans.id || trans.transition_type || 'fade',
+      type: trans.id || trans.type || 'fade',
+      name: trans.name,
+      duration: trans.duration,
+      direction: trans.direction,
+      speed: trans.speed,
+      intensity: trans.intensity,
+      easing: trans.easing,
+      motion_blur: trans.motionBlur,
+      category: trans.category,
+      parameters: trans.parameters,
     };
 
-    expect(formattedTransition.transition_type).toBe('wipe');
-    expect(formattedTransition.duration).toBe(1.0);
+    expect(formattedTransition).toEqual({
+      transition_type: 'whip-pan-left-premium',
+      type: 'whip-pan-left-premium',
+      name: 'Whip Pan Left',
+      duration: 0.8,
+      direction: 'left',
+      speed: 1.5,
+      intensity: 85,
+      easing: 'ease-in-out',
+      motion_blur: true,
+      category: 'camera',
+      parameters: { customPresetFlag: true }
+    });
   });
 });

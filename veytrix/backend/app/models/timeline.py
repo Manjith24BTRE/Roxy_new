@@ -103,6 +103,15 @@ class ClipModel(BaseModel):
     transition: Optional[TransitionData] = Field(None, description="Optional transition attached to clip")
     filters: List[FilterData] = Field(default_factory=list, description="List of applied filters")
     applied_effects: List[EffectData] = Field(default_factory=list, description="List of applied effects")
+
+    def __init__(self, **data: Any):
+        if "effect" in data and "applied_effects" not in data:
+            eff = data.pop("effect")
+            data["applied_effects"] = [eff] if eff is not None else []
+        if "filter" in data and "filters" not in data:
+            filt = data.pop("filter")
+            data["filters"] = [filt] if filt is not None else []
+        super().__init__(**data)
     text: Optional[TextData] = Field(None, description="Optional text properties if text clip")
     keyframes: List[Dict[str, Any]] = Field(default_factory=list, description="Clip transform keyframes")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Custom metadata attributes")

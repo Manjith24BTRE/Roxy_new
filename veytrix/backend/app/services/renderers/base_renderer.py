@@ -84,7 +84,10 @@ class BaseRenderer(ABC):
                 raise ParameterValidationError(f"Invalid direction '{sanitized['direction']}'. Must be one of {valid_directions}")
             sanitized["direction"] = dir_val
 
-        valid_curves = {"linear", "ease_in", "ease_out", "ease_in_out", "bounce", "exponential", "bezier", "smooth", ""}
+        valid_curves = {
+            "linear", "ease_in", "ease_out", "ease_in_out", "ease-in", "ease-out", "ease-in-out",
+            "elastic", "bounce", "exponential", "bezier", "smooth", ""
+        }
         if "curve" in sanitized and sanitized["curve"] is not None:
             c_val = str(sanitized["curve"]).lower()
             if c_val not in valid_curves:

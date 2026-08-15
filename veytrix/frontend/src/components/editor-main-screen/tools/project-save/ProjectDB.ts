@@ -217,4 +217,39 @@ export class ProjectDB {
     result.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     return result;
   }
+
+  /**
+   * Deletes a project by ID from IndexedDB, LocalStorage, and Supabase cloud.
+   */
+  public static async deleteProject(projectId: string): Promise<boolean> {
+    // 1. Delete from IndexedDB
+    try {
+      const db = await this.getDB();
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const req = store.delete(projectId);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    } catch (err) {
+      console.warn('IndexedDB delete error:', err);
+    }
+
+    // 2. Delete from LocalStorage fallback
+    try {
+      localStorage.removeItem(`${LOCAL_STORAGE_KEY_PREFIX}${projectId}`);
+    } catch (e) {
+      console.warn('LocalStorage delete error:', e);
+    }
+
+    // 3. Delete from Supabase cloud
+    try {
+      await syncService.deleteRemoteProject(projectId);
+    } catch (e) {
+      console.warn('Supabase remote project delete warning:', e);
+    }
+
+    return true;
+  }
 }

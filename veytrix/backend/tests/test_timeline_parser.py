@@ -131,6 +131,90 @@ def test_transitions_effects_filters_parsing(parser):
     assert clip.filter.intensity == 0.85
 
 
+def test_transition_metadata_hydration_and_legacy_compatibility(parser):
+    # 1. Legacy string transition parsing
+    legacy_string_timeline = {
+        "tracks": [{
+            "id": "t-legacy-str",
+            "type": "VIDEO",
+            "clips": [{
+                "id": "clip-leg-1",
+                "start_time": 0.0,
+                "duration": 5.0,
+                "appliedTransition": "wipe-left-legacy"
+            }]
+        }]
+    }
+    res_str = parser.parse(legacy_string_timeline)
+    trans_str = res_str.tracks[0].clips[0].transition
+    assert trans_str.transition_type == "wipe-left-legacy"
+    assert trans_str.duration == 0.5
+    assert trans_str.direction == "none"
+
+    # 2. Legacy object missing new fields
+    legacy_obj_timeline = {
+        "tracks": [{
+            "id": "t-legacy-obj",
+            "type": "VIDEO",
+            "clips": [{
+                "id": "clip-leg-2",
+                "start_time": 0.0,
+                "duration": 5.0,
+                "transition": {
+                    "transition_type": "fade",
+                    "duration": 1.2
+                }
+            }]
+        }]
+    }
+    res_obj = parser.parse(legacy_obj_timeline)
+    trans_obj = res_obj.tracks[0].clips[0].transition
+    assert trans_obj.transition_type == "fade"
+    assert trans_obj.duration == 1.2
+    assert trans_obj.speed == 1.0
+    assert trans_obj.intensity == 50.0
+    assert trans_obj.easing == "ease-in-out"
+
+    # 3. New full Phase 1 payload hydration
+    full_payload_timeline = {
+        "tracks": [{
+            "id": "t-full",
+            "type": "VIDEO",
+            "clips": [{
+                "id": "clip-full-1",
+                "start_time": 0.0,
+                "duration": 5.0,
+                "transition": {
+                    "transition_type": "whip-pan-left-premium",
+                    "duration": 0.8,
+                    "direction": "left",
+                    "speed": 1.5,
+                    "intensity": 85.0,
+                    "easing": "ease-in-out",
+                    "motion_blur": True,
+                    "category": "camera",
+                    "parameters": {
+                        "gpuOptimized": True,
+                        "customPresetKey": "preset_val_123"
+                    }
+                }
+            }]
+        }]
+    }
+    res_full = parser.parse(full_payload_timeline)
+    trans_full = res_full.tracks[0].clips[0].transition
+    assert trans_full.transition_type == "whip-pan-left-premium"
+    assert trans_full.duration == 0.8
+    assert trans_full.direction == "left"
+    assert trans_full.speed == 1.5
+    assert trans_full.intensity == 85.0
+    assert trans_full.easing == "ease-in-out"
+    assert trans_full.motion_blur is True
+    assert trans_full.category == "camera"
+    assert trans_full.parameters["gpuOptimized"] is True
+    assert trans_full.parameters["customPresetKey"] == "preset_val_123"
+
+
 def test_validation_negative_duration(parser):
     raw_timeline = {
         "tracks": [

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, FolderOpen, Plus, Film, Clock, Play } from 'lucide-react';
+import { Search, FolderOpen, Plus, Film, Clock, Play, Trash2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ProjectDB } from '../../../components/editor-main-screen/tools/project-save/ProjectDB';
 import { ProjectSavePayload } from '../../../components/editor-main-screen/tools/project-save/projectSave.types';
@@ -9,6 +9,7 @@ export function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectSavePayload[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -22,6 +23,21 @@ export function ProjectsPage() {
       isMounted = false;
     };
   }, []);
+
+  const handleDeleteProject = async (e: React.MouseEvent, projectId: string, projectName: string) => {
+    e.stopPropagation();
+    if (window.confirm(`Are you sure you want to delete "${projectName || 'Untitled Project'}"?`)) {
+      setDeletingId(projectId);
+      try {
+        await ProjectDB.deleteProject(projectId);
+        setProjects((prev) => prev.filter((p) => p.id !== projectId));
+      } catch (err) {
+        console.error('Failed to delete project:', err);
+      } finally {
+        setDeletingId(null);
+      }
+    }
+  };
 
   const filteredProjects = projects.filter((p) =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -62,12 +78,13 @@ export function ProjectsPage() {
           {filteredProjects.map((p) => {
             const videoCount = p.timelineClips?.filter((c: any) => c.asset_type === 'VIDEO' || c.type === 'VIDEO' || !c.asset_type)?.length || 0;
             const textCount = (p.textOverlays?.length || 0) + (p.captions?.length || 0);
+            const isDeleting = deletingId === p.id;
 
             return (
               <div
                 key={p.id}
                 onClick={() => navigate(`/editor?project=${encodeURIComponent(p.id)}`)}
-                className="group relative bg-white border border-[#1D2B64]/10 hover:border-[#3B6CE7]/40 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between"
+                className={`group relative bg-white border border-[#1D2B64]/10 hover:border-[#3B6CE7]/40 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between ${isDeleting ? 'opacity-50 pointer-events-none' : ''}`}
               >
                 <div>
                   <div className="w-full aspect-video rounded-xl overflow-hidden mb-4 border border-[#1D2B64]/5 relative bg-slate-900/[0.03]">
@@ -83,6 +100,16 @@ export function ProjectsPage() {
                         <Film size={28} />
                       </div>
                     )}
+
+                    {/* Delete Icon Button at top right of card thumbnail */}
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteProject(e, p.id, p.name)}
+                      title="Delete Project"
+                      className="absolute top-2.5 right-2.5 p-2 rounded-xl bg-white/90 hover:bg-red-500 text-slate-600 hover:text-white shadow-md transition-all duration-200 backdrop-blur-sm z-10 border border-slate-200/50 hover:border-red-500 cursor-pointer group/btn"
+                    >
+                      <Trash2 size={15} className="transition-transform group-hover/btn:scale-110" />
+                    </button>
                   </div>
 
                   <div className="flex items-center justify-between mb-3">

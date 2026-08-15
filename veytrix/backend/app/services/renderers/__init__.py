@@ -17,6 +17,18 @@ from app.services.renderers.category_renderers import (
     ThreeDRenderer,
     TransitionRenderer,
 )
+from app.services.renderers.transition_renderers import (
+    BaseTransitionStrategy,
+    CameraTransitionRenderer,
+    EasingEngine,
+    FadeTransitionRenderer,
+    FilmBurnTransitionRenderer,
+    GlitchTransitionRenderer,
+    LightTransitionRenderer,
+    ThreeDTransitionRenderer,
+    TransitionRegistry,
+    transition_registry,
+)
 
 __all__ = [
     "BaseRenderer",
@@ -38,4 +50,14 @@ __all__ = [
     "TextRenderer",
     "AudioRenderer",
     "AIRenderer",
+    "BaseTransitionStrategy",
+    "CameraTransitionRenderer",
+    "GlitchTransitionRenderer",
+    "LightTransitionRenderer",
+    "FilmBurnTransitionRenderer",
+    "ThreeDTransitionRenderer",
+    "FadeTransitionRenderer",
+    "TransitionRegistry",
+    "transition_registry",
+    "EasingEngine",
 ]

@@ -11,6 +11,17 @@ from app.models.timeline import ClipModel, EffectData, FilterData, TimelineModel
 from app.services.entitlement_service import EntitlementService
 from app.core.config import settings
 from pathlib import Path
+from app.services.renderers.transition_renderers import (
+    CameraTransitionRenderer,
+    FilmBurnTransitionRenderer,
+    GlitchTransitionRenderer,
+    LightTransitionRenderer,
+    ThreeDTransitionRenderer,
+    transition_registry,
+)
+
+
+
 
 class GraphValidator:
     """Validates timeline model and rendering options before building FFmpeg commands."""
@@ -447,69 +458,36 @@ class FilterBuilder:
 
 
 class TransitionBuilder:
-    """Generates FFmpeg xfade / crossfade transition nodes for clip joins."""
+    """Generates FFmpeg transition nodes using strategy-based TransitionRegistry."""
 
     @staticmethod
     def resolve_xfade_name(transition_type: str, direction: Optional[str] = "none", category: Optional[str] = None) -> str:
         """Dynamically maps transition presets and directions to native FFmpeg xfade transition names."""
-        tt = (transition_type or "").lower().replace("_", "-")
-        dir_val = (direction or "none").lower()
+        trans_data = TransitionData(
+            transition_type=transition_type,
+            duration=1.0,
+            direction=direction,
+            category=category,
+        )
+        strategy = transition_registry.resolve(trans_data)
 
-        # Direct directional xfade mappings
-        dir_wipe_map = {
-            "left": "wipeleft",
-            "right": "wiperight",
-            "up": "wipeup",
-            "down": "wipedown",
-        }
-        dir_slide_map = {
-            "left": "slideleft",
-            "right": "slideright",
-            "up": "slideup",
-            "down": "slidedown",
-        }
-        dir_push_map = {
-            "left": "pushleft",
-            "right": "pushright",
-            "up": "pushup",
-            "down": "pushdown",
-        }
-        dir_zoom_map = {
-            "center": "zoomin",
-            "in": "zoomin",
-            "out": "zoomout",
-        }
-
-        # 1. Check exact preset keyword patterns
-        if "wipe" in tt:
-            return dir_wipe_map.get(dir_val, "wipeleft")
-        if "slide" in tt or "push" in tt or "whip" in tt:
-            if "push" in tt:
-                return dir_push_map.get(dir_val, "pushleft")
-            return dir_slide_map.get(dir_val, "slideleft")
-        if "zoom" in tt or "scale" in tt:
-            return dir_zoom_map.get(dir_val, "zoomin")
-        if "spin" in tt or "rotate" in tt:
-            return "rotate"
-        if "circle" in tt or "radial" in tt:
-            return "circlecrop"
-        if "rect" in tt or "box" in tt:
-            return "rectcrop"
-        if "glitch" in tt or "pixel" in tt:
+        # Map strategy defaults for direct xfade query callers
+        if isinstance(strategy, CameraTransitionRenderer):
+            dir_val = (direction or "left").lower()
+            dir_map = {"left": "slideleft", "right": "slideright", "up": "slideup", "down": "slidedown"}
+            return dir_map.get(dir_val, "slideleft")
+        elif isinstance(strategy, GlitchTransitionRenderer):
             return "pixelize"
-        if "3d" in tt or "cube" in tt:
-            return "cube"
-        if "dissolve" in tt:
+        elif isinstance(strategy, ThreeDTransitionRenderer):
+            tt = (transition_type or "").lower()
+            return "horzopen" if "flip" in tt or "open" in tt else "cube"
+        elif isinstance(strategy, LightTransitionRenderer):
             return "dissolve"
-        if "blur" in tt:
+        elif isinstance(strategy, FilmBurnTransitionRenderer):
             return "fade"
-
-        # 2. Check direction fallback
-        if dir_val in dir_wipe_map:
-            return dir_wipe_map[dir_val]
-
-        # Default standard fallback
-        return "fade"
+        else:
+            tt = (transition_type or "").lower()
+            return "dissolve" if "dissolve" in tt else "fade"
 
     @classmethod
     def build_video_transition(
@@ -517,44 +495,41 @@ class TransitionBuilder:
         input_label_1: str,
         input_label_2: str,
         output_label: str,
-        transition: TransitionData,
-        duration: float,
-        offset: float,
+        transition: Union[TransitionData, str] = "fade",
+        duration: float = 1.0,
+        offset: float = 0.0,
+        **kwargs: Any,
     ) -> List[FilterNode]:
-        """Builds one or more FilterNodes representing high-fidelity transition execution."""
-        tt = (transition.transition_type or "fade").lower()
-        dir_val = transition.direction or "none"
-        cat_val = transition.category or ""
-        intensity = transition.intensity if transition.intensity is not None else 50.0
-        motion_blur = transition.motion_blur if transition.motion_blur is not None else True
+        """Builds one or more FilterNodes representing high-fidelity CapCut-style transition execution."""
+        if isinstance(transition, TransitionData):
+            trans_data = transition
+            dur = duration if duration is not None else (transition.duration or 1.0)
+        elif isinstance(transition, str):
+            trans_data = TransitionData(
+                transition_type=transition,
+                duration=duration,
+                direction=kwargs.get("direction", "none"),
+                speed=kwargs.get("speed", 1.0),
+                intensity=kwargs.get("intensity", 50.0),
+                easing=kwargs.get("easing", "linear"),
+                motion_blur=kwargs.get("motion_blur", True),
+                category=kwargs.get("category", None),
+                parameters=kwargs.get("parameters", {}),
+            )
+            dur = duration
+        else:
+            trans_data = TransitionData(transition_type="fade", duration=duration)
+            dur = duration
 
-        xfade_name = cls.resolve_xfade_name(tt, dir_val, cat_val)
-        nodes: List[FilterNode] = []
-
-        # Complex multi-pass transitions (e.g. Blur or Glitch with motion blur / intensity scaling)
-        if "blur" in tt or cat_val.lower() == "blur":
-            blur_amount = max(1, int((intensity / 100.0) * 20))
-            prep_1 = f"v_trans_prep1_{input_label_1.replace(':', '_')}"
-            prep_2 = f"v_trans_prep2_{input_label_2.replace(':', '_')}"
-            nodes.append(FilterNode(inputs=[input_label_1], filter_name=f"gblur=sigma={blur_amount}", args="", outputs=[prep_1]))
-            nodes.append(FilterNode(inputs=[input_label_2], filter_name=f"gblur=sigma={blur_amount}", args="", outputs=[prep_2]))
-            nodes.append(FilterNode(inputs=[prep_1, prep_2], filter_name="xfade", args=f"transition=fade:duration={duration:.2f}:offset={offset:.2f}", outputs=[output_label]))
-            return nodes
-
-        if "glitch" in tt or cat_val.lower() == "glitch":
-            pix_size = max(4, int((intensity / 100.0) * 32))
-            nodes.append(FilterNode(inputs=[input_label_1, input_label_2], filter_name="xfade", args=f"transition=pixelize:duration={duration:.2f}:offset={offset:.2f}", outputs=[output_label]))
-            return nodes
-
-        # Standard / Enhanced xfade node pass
-        args = f"transition={xfade_name}:duration={duration:.2f}:offset={offset:.2f}"
-        nodes.append(FilterNode(
-            inputs=[input_label_1, input_label_2],
-            filter_name="xfade",
-            args=args,
-            outputs=[output_label],
-        ))
-        return nodes
+        strategy = transition_registry.resolve(trans_data)
+        return strategy.build_nodes(
+            input_label_1=input_label_1,
+            input_label_2=input_label_2,
+            output_label=output_label,
+            transition=trans_data,
+            duration=dur,
+            offset=offset,
+        )
 
 
 class WatermarkBuilder:
