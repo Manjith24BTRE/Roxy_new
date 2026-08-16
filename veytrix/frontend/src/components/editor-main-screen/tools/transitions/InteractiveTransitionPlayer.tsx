@@ -66,12 +66,14 @@ export const InteractiveTransitionPlayer: React.FC<InteractiveTransitionPlayerPr
   // 2. ANIMATION RAF LOOP (0.0 -> 1.0)
   const animate = useCallback(
     (time: number) => {
+      const effectiveSpeed = Math.max(config.speed || 1.0, 0.1);
+      const totalMs = (durationSeconds * 1000) / effectiveSpeed;
+
       if (!startTimeRef.current) {
-        startTimeRef.current = time - progress * durationSeconds * 1000;
+        startTimeRef.current = time - progress * totalMs;
       }
 
       const elapsed = time - startTimeRef.current;
-      const totalMs = durationSeconds * 1000;
       let newProgress = elapsed / totalMs;
 
       if (newProgress >= 1.0) {

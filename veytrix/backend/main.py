@@ -10,15 +10,10 @@ from typing import AsyncGenerator
 
 
 def configure_windows_asyncio_runtime():
-    """Configures WindowsProactorEventLoopPolicy on Windows."""
-    if sys.platform == "win32":
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=DeprecationWarning)
-            try:
-                proactor_policy = asyncio.WindowsProactorEventLoopPolicy()
-                asyncio.set_event_loop_policy(proactor_policy)
-            except AttributeError:
-                pass
+    """Configures Windows event loop runtime on Windows."""
+    # On Python 3.8+ WindowsProactorEventLoopPolicy is the default.
+    # get/set_event_loop_policy are deprecated in Python 3.14+.
+    pass
 
 
 configure_windows_asyncio_runtime()
@@ -44,21 +39,14 @@ from app.middleware.exception_handler import (
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager for startup and shutdown events."""
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=DeprecationWarning)
-        try:
-            policy = asyncio.get_event_loop_policy()
-            policy_name = type(policy).__name__
-        except Exception:
-            policy = None
-            policy_name = "Default"
-
-    is_proactor_policy = isinstance(policy, asyncio.WindowsProactorEventLoopPolicy) if (sys.platform == "win32" and policy is not None) else True
     try:
         loop = asyncio.get_running_loop()
         loop_class = type(loop).__name__
     except RuntimeError:
         loop_class = "No running loop"
+
+    policy_name = "Default (Proactor)" if sys.platform == "win32" else "Default"
+    is_proactor_policy = "Proactor" in loop_class or sys.platform == "win32"
 
     current_pid = os.getpid()
     current_thread = threading.current_thread().name

@@ -136,7 +136,7 @@ class FilterRenderer(RenderPlugin):
 
 
 class EffectRenderer(RenderPlugin):
-    """Base Effect Renderer derived from BaseRenderer."""
+    """Base Effect Renderer derived from BaseRenderer delegating to CapCut EffectRegistry."""
 
     plugin_type: str = "effect"
     renderer_id: str = "effect"
@@ -144,6 +144,27 @@ class EffectRenderer(RenderPlugin):
 
     def get_layer_priority(self, item_id: str) -> int:
         return 10
+
+    def generate_filters(self, item_id: str, parameters: Dict[str, Any], metadata: Dict[str, Any]) -> List[str]:
+        from app.services.renderers.effect_renderers import EffectData, effect_registry
+
+        raw_int = parameters.get("intensity") if parameters.get("intensity") is not None else metadata.get("defaultIntensity", 50)
+        effect_data = EffectData(
+            effect_type=item_id,
+            category=metadata.get("category", "effect"),
+            intensity=_safe_float(raw_int, 50.0),
+            speed=_safe_float(parameters.get("speed"), 1.0),
+            opacity=_safe_float(parameters.get("opacity"), 1.0),
+            color=str(parameters.get("color", "#ffffff")),
+            blend_mode=str(parameters.get("blend_mode", "normal")),
+            direction=str(parameters.get("direction", "none")),
+            randomness=_safe_float(parameters.get("randomness"), 0.5),
+            parameters=parameters,
+        )
+
+        strategy = effect_registry.resolve(effect_data)
+        return strategy.generate_filters(effect_data)
+
 
 
 class TransitionRenderer(RenderPlugin):
