@@ -1,0 +1,16 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Production build outputs
+dist/
+.output/
+.wrangler/
+.vite/
+
+# TanStack Start / Vite cache
+.tanstack/

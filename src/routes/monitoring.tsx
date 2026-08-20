@@ -1,0 +1,66 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { AlertOctagon, Bug, Gauge, ShieldAlert, Terminal } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LogTable } from "@/components/kit/LogTable";
+import { PageHeader } from "@/components/kit/PageHeader";
+import { StatCard } from "@/components/kit/StatCard";
+import { logs } from "@/lib/mock/data";
+
+export const Route = createFileRoute("/monitoring")({
+  head: () => ({
+    meta: [
+      { title: "Monitoring — Veytrix Control Centre" },
+      {
+        name: "description",
+        content:
+          "Error, API, performance, crash and security telemetry with search and filtering across Veytrix services.",
+      },
+      { property: "og:title", content: "Monitoring — Veytrix Control Centre" },
+      { property: "og:description", content: "Platform telemetry across every service and endpoint." },
+    ],
+  }),
+  component: Monitoring,
+});
+
+const TABS = [
+  { id: "error", label: "Error Logs", icon: AlertOctagon },
+  { id: "api", label: "API Logs", icon: Terminal },
+  { id: "performance", label: "Performance", icon: Gauge },
+  { id: "crash", label: "Crash Logs", icon: Bug },
+  { id: "security", label: "Security", icon: ShieldAlert },
+] as const;
+
+function Monitoring() {
+  return (
+    <>
+      <PageHeader
+        title="Monitoring"
+        description="Structured telemetry across the request path, workers and security surfaces."
+        breadcrumbs={[{ label: "Monitoring" }]}
+      />
+
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <StatCard label="Errors (24h)" value="1,284" delta={-8.2} invertDelta icon={AlertOctagon} tone="danger" />
+        <StatCard label="Requests (24h)" value="4.82M" delta={5.6} icon={Terminal} />
+        <StatCard label="p95 latency" value="412 ms" delta={3.1} invertDelta icon={Gauge} tone="warning" />
+        <StatCard label="Crashes (24h)" value="17" delta={-22.5} invertDelta icon={Bug} />
+      </div>
+
+      <Tabs defaultValue="error" className="space-y-3">
+        <TabsList className="w-full justify-start overflow-x-auto">
+          {TABS.map((t) => (
+            <TabsTrigger key={t.id} value={t.id} className="gap-1.5 text-xs sm:text-sm">
+              <t.icon className="size-3.5" />
+              {t.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {TABS.map((t) => (
+          <TabsContent key={t.id} value={t.id} className="m-0">
+            <LogTable entries={logs.filter((l) => l.kind === t.id)} />
+          </TabsContent>
+        ))}
+      </Tabs>
+    </>
+  );
+}
