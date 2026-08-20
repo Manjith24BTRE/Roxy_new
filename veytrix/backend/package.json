@@ -1,0 +1,11 @@
+{
+  "name": "veytrix-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VEYTRIX FastAPI Backend Service",
+  "scripts": {
+    "dev": ".venv\\Scripts\\python main.py",
+    "start": ".venv\\Scripts\\python main.py",
+    "test": ".venv\\Scripts\\pytest"
+  }
+}

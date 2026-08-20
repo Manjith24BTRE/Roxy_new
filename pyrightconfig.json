@@ -1,0 +1,13 @@
+{
+  "executionEnvironments": [
+    {
+      "root": "veytrix/backend",
+      "extraPaths": [
+        "."
+      ]
+    }
+  ],
+  "extraPaths": [
+    "veytrix/backend"
+  ]
+}
