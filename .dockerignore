@@ -1,0 +1,15 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+node_modules
+.output
+.tanstack
+.wrangler
+.vite
+dist
+veytrix/backend/.venv
+veytrix/backend/__pycache__
+veytrix/backend/**/__pycache__
+veytrix/backend/storage

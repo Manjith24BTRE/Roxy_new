@@ -14,7 +14,7 @@ export function StatCard({
 }: {
   label: string;
   value: string;
-  delta?: number;
+  delta?: number | undefined;
   deltaLabel?: string;
   icon?: LucideIcon;
   invertDelta?: boolean;
@@ -23,7 +23,8 @@ export function StatCard({
 }) {
   const positive = delta !== undefined && delta > 0;
   const good = delta === undefined ? true : invertDelta ? !positive : positive;
-  const DeltaIcon = delta === undefined || delta === 0 ? Minus : positive ? ArrowUpRight : ArrowDownRight;
+  const DeltaIcon =
+    delta === undefined || delta === 0 ? Minus : positive ? ArrowUpRight : ArrowDownRight;
 
   return (
     <div className="panel relative overflow-hidden p-4">
@@ -37,7 +38,9 @@ export function StatCard({
         )}
       />
       <div className="flex items-start justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          {label}
+        </p>
         {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
       </div>
       <p className="num mt-2.5 text-2xl font-semibold tracking-tight">{value}</p>

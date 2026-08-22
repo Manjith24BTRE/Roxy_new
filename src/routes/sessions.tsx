@@ -9,13 +9,16 @@ import { FilterBar } from "@/components/kit/FilterBar";
 import { PageHeader } from "@/components/kit/PageHeader";
 import { StatCard } from "@/components/kit/StatCard";
 import { StatusBadge } from "@/components/kit/StatusBadge";
-import { relative, sessions } from "@/lib/mock/data";
+import { relative, useControlCenterData } from "@/lib/control-center-data";
 
 export const Route = createFileRoute("/sessions")({
   head: () => ({
     meta: [
       { title: "Sessions — Veytrix Control Centre" },
-      { name: "description", content: "Active user sessions with device, geography and revocation controls." },
+      {
+        name: "description",
+        content: "Active user sessions with device, geography and revocation controls.",
+      },
       { property: "og:title", content: "Sessions — Veytrix Control Centre" },
       { property: "og:description", content: "Monitor and revoke active platform sessions." },
     ],
@@ -23,24 +26,47 @@ export const Route = createFileRoute("/sessions")({
   component: SessionsPage,
 });
 
-type Row = (typeof sessions)[number];
+type Row = ReturnType<typeof useControlCenterData>["sessions"][number];
 
 function SessionsPage() {
+  const { sessions } = useControlCenterData();
   const [search, setSearch] = useState("");
   const [revoke, setRevoke] = useState<Row | null>(null);
 
   const rows = useMemo(
-    () => sessions.filter((s) => !search || [s.user, s.ip, s.location, s.device].some((f) => f.toLowerCase().includes(search.toLowerCase()))),
+    () =>
+      sessions.filter(
+        (s) =>
+          !search ||
+          [s.user, s.ip, s.location, s.device].some((f) =>
+            f.toLowerCase().includes(search.toLowerCase()),
+          ),
+      ),
     [search],
   );
 
   const columns: Column<Row>[] = [
     { key: "user", header: "User", render: (s) => <CellStack primary={s.user} secondary={s.id} /> },
-    { key: "device", header: "Device", render: (s) => <span className="text-sm">{s.device}</span>, hideBelow: "md" },
-    { key: "loc", header: "Location", render: (s) => <span className="text-sm">{s.location}</span>, hideBelow: "lg" },
+    {
+      key: "device",
+      header: "Device",
+      render: (s) => <span className="text-sm">{s.device}</span>,
+      hideBelow: "md",
+    },
+    {
+      key: "loc",
+      header: "Location",
+      render: (s) => <span className="text-sm">{s.location}</span>,
+      hideBelow: "lg",
+    },
     { key: "ip", header: "IP", render: (s) => <Mono>{s.ip}</Mono>, hideBelow: "xl" },
     { key: "status", header: "Status", render: (s) => <StatusBadge status={s.status} /> },
-    { key: "seen", header: "Last seen", render: (s) => <span className="num text-xs">{relative(s.lastSeen)}</span>, hideBelow: "md" },
+    {
+      key: "seen",
+      header: "Last seen",
+      render: (s) => <span className="num text-xs">{relative(s.lastSeen)}</span>,
+      hideBelow: "md",
+    },
     {
       key: "actions",
       header: "",
@@ -55,9 +81,18 @@ function SessionsPage() {
 
   return (
     <>
-      <PageHeader title="Sessions" description="Live authenticated sessions across web, mobile and API clients." breadcrumbs={[{ label: "Sessions" }]} />
+      <PageHeader
+        title="Sessions"
+        description="Live authenticated sessions across web, mobile and API clients."
+        breadcrumbs={[{ label: "Sessions" }]}
+      />
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatCard label="Active sessions" value={String(sessions.length)} delta={3.9} icon={MonitorCog} />
+        <StatCard
+          label="Active sessions"
+          value={String(sessions.length)}
+          delta={3.9}
+          icon={MonitorCog}
+        />
         <StatCard label="Mobile share" value="34%" delta={7.1} />
         <StatCard label="Suspicious" value="2" delta={100} invertDelta tone="warning" />
         <StatCard label="Avg duration" value="42m" delta={-1.2} />
@@ -67,7 +102,14 @@ function SessionsPage() {
         rows={rows}
         pageSize={10}
         emptyTitle="No sessions"
-        toolbar={<FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Search user, IP, device…" onReset={() => setSearch("")} />}
+        toolbar={
+          <FilterBar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search user, IP, device…"
+            onReset={() => setSearch("")}
+          />
+        }
       />
       <ConfirmationDialog
         open={!!revoke}

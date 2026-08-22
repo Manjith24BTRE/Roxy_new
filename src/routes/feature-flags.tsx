@@ -8,13 +8,17 @@ import { Panel } from "@/components/kit/ChartCard";
 import { PageHeader } from "@/components/kit/PageHeader";
 import { StatCard } from "@/components/kit/StatCard";
 import { StatusBadge } from "@/components/kit/StatusBadge";
-import { featureFlags, relative } from "@/lib/mock/data";
+import { relative, useControlCenterData } from "@/lib/control-center-data";
 
 export const Route = createFileRoute("/feature-flags")({
   head: () => ({
     meta: [
       { title: "Feature Flags — Veytrix Control Centre" },
-      { name: "description", content: "Toggle features, control rollout percentages and target audiences per environment." },
+      {
+        name: "description",
+        content:
+          "Toggle features, control rollout percentages and target audiences per environment.",
+      },
       { property: "og:title", content: "Feature Flags — Veytrix Control Centre" },
       { property: "og:description", content: "Control Veytrix feature rollouts." },
     ],
@@ -23,6 +27,7 @@ export const Route = createFileRoute("/feature-flags")({
 });
 
 function FlagsPage() {
+  const { featureFlags } = useControlCenterData();
   const [state, setState] = useState(() =>
     Object.fromEntries(featureFlags.map((f) => [f.id, { enabled: f.enabled, rollout: f.rollout }])),
   );
@@ -36,9 +41,23 @@ function FlagsPage() {
       />
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard label="Flags" value={String(featureFlags.length)} icon={Flag} />
-        <StatCard label="Enabled" value={String(Object.values(state).filter((s) => s.enabled).length)} tone="success" />
-        <StatCard label="Partial rollouts" value={String(featureFlags.filter((f) => f.rollout > 0 && f.rollout < 100).length)} tone="warning" />
-        <StatCard label="Production flags" value={String(featureFlags.filter((f) => f.environment === "Production").length)} />
+        <StatCard
+          label="Enabled"
+          value={String(
+            Object.values(state).filter((s) => Boolean((s as { enabled?: boolean }).enabled))
+              .length,
+          )}
+          tone="success"
+        />
+        <StatCard
+          label="Partial rollouts"
+          value={String(featureFlags.filter((f) => f.rollout > 0 && f.rollout < 100).length)}
+          tone="warning"
+        />
+        <StatCard
+          label="Production flags"
+          value={String(featureFlags.filter((f) => f.environment === "Production").length)}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -49,7 +68,12 @@ function FlagsPage() {
               key={f.id}
               title={f.name}
               description={f.key}
-              actions={<StatusBadge status={s.enabled ? "active" : "disabled"} label={s.enabled ? "on" : "off"} />}
+              actions={
+                <StatusBadge
+                  status={s.enabled ? "active" : "disabled"}
+                  label={s.enabled ? "on" : "off"}
+                />
+              }
               bodyClassName="flex flex-col gap-4 p-4"
             >
               <p className="text-sm text-muted-foreground">{f.description}</p>
@@ -79,10 +103,14 @@ function FlagsPage() {
                   max={100}
                   step={5}
                   aria-label={`${f.name} rollout percentage`}
-                  onValueChange={([v]) => setState((p) => ({ ...p, [f.id]: { ...p[f.id]!, rollout: v ?? 0 } }))}
+                  onValueChange={([v]) =>
+                    setState((p) => ({ ...p, [f.id]: { ...p[f.id]!, rollout: v ?? 0 } }))
+                  }
                 />
               </div>
-              <p className="num text-[11px] text-muted-foreground">Updated {relative(f.updatedAt)}</p>
+              <p className="num text-[11px] text-muted-foreground">
+                Updated {relative(f.updatedAt)}
+              </p>
             </Panel>
           );
         })}

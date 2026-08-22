@@ -545,7 +545,7 @@ class ExportService:
 
         signed_url = (
             export_model.file_url
-            or f"https://vriqwtzyxdnlpagexqay.supabase.co/storage/v1/object/public/exports/{export_model.storage_path}"
+            or f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/exports/{export_model.storage_path}"
         )
 
         return ExportDownloadResponse(

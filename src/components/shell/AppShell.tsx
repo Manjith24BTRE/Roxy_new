@@ -1,14 +1,9 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import {
-  Bell,
-  ChevronDown,
-  CircleUser,
-  Command,
-  Menu,
-  Search,
-  ShieldCheck,
-} from "lucide-react";
+import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
+import { Bell, ChevronDown, CircleUser, Command, Menu, Search, ShieldCheck } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -50,8 +45,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           </p>
           <ul className="space-y-0.5">
             {section.items.map((item) => {
-              const active =
-                item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+              const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
               return (
                 <li key={item.to}>
                   <Link
@@ -64,9 +58,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
                         : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground",
                     )}
                   >
-                    <item.icon
-                      className={cn("size-4 shrink-0", active && "text-primary")}
-                    />
+                    <item.icon className={cn("size-4 shrink-0", active && "text-primary")} />
                     <span className="truncate">{item.label}</span>
                     {item.badge && (
                       <span className="num ml-auto rounded border border-border bg-muted px-1.5 text-[10px] font-medium text-muted-foreground">
@@ -88,10 +80,10 @@ function SidebarFooter() {
   return (
     <div className="border-t border-sidebar-border p-3">
       <div className="flex items-center gap-2 rounded-md border border-border bg-surface-raised/60 px-2.5 py-2">
-        <span className="size-2 shrink-0 rounded-full bg-success" />
+        <span className="size-2 shrink-0 rounded-full bg-muted-foreground" />
         <div className="min-w-0 text-xs">
-          <p className="truncate font-medium">All regions nominal</p>
-          <p className="num truncate text-muted-foreground">99.97% uptime · 30d</p>
+          <p className="truncate font-medium">Region status</p>
+          <p className="num truncate text-muted-foreground">Not configured</p>
         </div>
       </div>
     </div>
@@ -100,6 +92,18 @@ function SidebarFooter() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user, profile, role } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast.success("Successfully logged out");
+      navigate({ to: "/login" });
+    } catch (error) {
+      toast.error("Failed to sign out");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,7 +117,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/85 px-3 backdrop-blur sm:px-5">
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="lg:hidden"
+                aria-label="Open navigation"
+              >
                 <Menu className="size-5" />
               </Button>
             </SheetTrigger>
@@ -141,7 +150,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="ml-auto flex items-center gap-1.5">
             <span className="hidden items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-muted-foreground sm:flex">
               <span className="size-1.5 rounded-full bg-success" />
-              Production · us-east-1
+              Environment · Not configured
             </span>
             <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
               <Bell className="size-4" />
@@ -151,19 +160,23 @@ export function AppShell({ children }: { children: ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-9 gap-2 px-2">
                   <CircleUser className="size-4" />
-                  <span className="hidden text-sm sm:inline">ops.admin</span>
+                  <span className="hidden text-sm sm:inline">Account</span>
                   <ChevronDown className="hidden size-3.5 opacity-60 sm:inline" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
-                  <p className="text-sm">Ops Administrator</p>
-                  <p className="text-xs font-normal text-muted-foreground">ops.admin@veytrix.io</p>
+                  <p className="text-sm font-medium">{profile?.full_name || "Unknown User"}</p>
+                  <p className="text-xs font-normal text-muted-foreground">
+                    {user?.email || "No email"}
+                  </p>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Super Admin role</DropdownMenuItem>
+                <DropdownMenuItem className="text-xs text-muted-foreground">
+                  {role?.name ? `Role: ${role.name}` : "Role not configured"}
+                </DropdownMenuItem>
                 <DropdownMenuItem>Audit my actions</DropdownMenuItem>
-                <DropdownMenuItem>Sign out</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleSignOut}>Sign out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

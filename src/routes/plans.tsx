@@ -8,21 +8,28 @@ import { ConfirmationDialog } from "@/components/kit/ConfirmDialog";
 import { PageHeader } from "@/components/kit/PageHeader";
 import { StatCard } from "@/components/kit/StatCard";
 import { StatusBadge } from "@/components/kit/StatusBadge";
-import { compact, money, plans } from "@/lib/mock/data";
+import { compact, money, useControlCenterData } from "@/lib/control-center-data";
 
 export const Route = createFileRoute("/plans")({
   head: () => ({
     meta: [
       { title: "Plans — Veytrix Control Centre" },
-      { name: "description", content: "Subscription plan catalogue with pricing, entitlements and subscriber counts." },
+      {
+        name: "description",
+        content: "Subscription plan catalogue with pricing, entitlements and subscriber counts.",
+      },
       { property: "og:title", content: "Plans — Veytrix Control Centre" },
-      { property: "og:description", content: "Manage Veytrix subscription plans and entitlements." },
+      {
+        property: "og:description",
+        content: "Manage Veytrix subscription plans and entitlements.",
+      },
     ],
   }),
   component: PlansPage,
 });
 
 function PlansPage() {
+  const { plans } = useControlCenterData();
   const [archive, setArchive] = useState<string | null>(null);
   const mrr = plans.reduce((a, p) => a + p.price * p.users, 0);
 
@@ -39,10 +46,22 @@ function PlansPage() {
         }
       />
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatCard label="Active plans" value={String(plans.filter((p) => p.status === "active").length)} icon={CircleDollarSign} />
-        <StatCard label="Subscribers" value={compact(plans.reduce((a, p) => a + p.users, 0))} delta={4.2} />
+        <StatCard
+          label="Active plans"
+          value={String(plans.filter((p) => p.status === "active").length)}
+          icon={CircleDollarSign}
+        />
+        <StatCard
+          label="Subscribers"
+          value={compact(plans.reduce((a, p) => a + p.users, 0))}
+          delta={4.2}
+        />
         <StatCard label="Plan MRR" value={money(mrr)} delta={6.1} tone="success" />
-        <StatCard label="Avg revenue / user" value={money(Math.round(mrr / plans.reduce((a, p) => a + p.users, 0)))} delta={1.8} />
+        <StatCard
+          label="Avg revenue / user"
+          value={money(Math.round(mrr / plans.reduce((a, p) => a + p.users, 0)))}
+          delta={1.8}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -56,7 +75,9 @@ function PlansPage() {
           >
             <div className="flex items-baseline gap-1">
               <span className="num text-3xl font-semibold tracking-tight">{money(p.price)}</span>
-              <span className="text-xs text-muted-foreground">/ {p.cycle === "Annual" ? "year" : "month"}</span>
+              <span className="text-xs text-muted-foreground">
+                / {p.cycle === "Annual" ? "year" : "month"}
+              </span>
             </div>
             <ul className="space-y-1.5">
               {p.features.map((f) => (
@@ -67,10 +88,20 @@ function PlansPage() {
               ))}
             </ul>
             <div className="mt-auto flex gap-2 border-t border-border pt-3">
-              <Button size="sm" variant="outline" className="flex-1" onClick={() => toast.info(`Editing ${p.name}`)}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1"
+                onClick={() => toast.info(`Editing ${p.name}`)}
+              >
                 Edit
               </Button>
-              <Button size="sm" variant="ghost" className="flex-1" onClick={() => setArchive(p.name)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="flex-1"
+                onClick={() => setArchive(p.name)}
+              >
                 Archive
               </Button>
             </div>

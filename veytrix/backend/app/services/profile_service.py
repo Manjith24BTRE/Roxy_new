@@ -20,27 +20,27 @@ def sync_user_profile(user: UserProfile) -> UserProfile:
     client = init_supabase_client()
     if client:
         try:
-            # Check if profile exists in Supabase DB 'profiles' table using user_id
-            response = client.table("profiles").select("*").eq("user_id", user.id).execute()
+            # The final schema stores application profiles in public.users.
+            response = client.table("users").select("*").eq("auth_user_id", user.id).execute()
             if response.data and len(response.data) > 0:
                 profile_data = response.data[0]
                 existing_profile = UserProfile(
                     id=str(user.id),
                     email=user.email,
-                    full_name=profile_data.get("display_name") or user.full_name,
-                    display_name=profile_data.get("display_name") or user.full_name,
+                    full_name=profile_data.get("full_name") or user.full_name,
+                    display_name=profile_data.get("full_name") or user.full_name,
                     avatar_url=profile_data.get("avatar_url") or user.avatar_url,
-                    username=profile_data.get("username"),
+                    username=None,
                     phone=profile_data.get("phone"),
                     country=profile_data.get("country"),
-                    language=profile_data.get("language") or "English (US)",
-                    timezone=profile_data.get("timezone") or "UTC+5:30 (IST)",
-                    bio=profile_data.get("bio"),
-                    occupation=profile_data.get("occupation"),
-                    company=profile_data.get("company"),
-                    website=profile_data.get("website"),
-                    portfolio=profile_data.get("portfolio"),
-                    social_links=profile_data.get("social_links") or {},
+                    language=None,
+                    timezone=None,
+                    bio=None,
+                    occupation=None,
+                    company=None,
+                    website=None,
+                    portfolio=None,
+                    social_links={},
                     role=user.role,
                     app_metadata=user.app_metadata,
                     user_metadata=user.user_metadata,
@@ -52,14 +52,12 @@ def sync_user_profile(user: UserProfile) -> UserProfile:
             else:
                 # Create minimal profile record in Supabase DB
                 new_profile_data = {
-                    "user_id": user.id,
-                    "display_name": user.full_name or user.user_metadata.get("full_name"),
+                    "auth_user_id": user.id,
+                    "email": user.email or "",
+                    "full_name": user.full_name or user.user_metadata.get("full_name"),
                     "avatar_url": user.avatar_url or user.user_metadata.get("avatar_url"),
-                    "language": "English (US)",
-                    "timezone": "UTC+5:30 (IST)",
-                    "social_links": {},
                 }
-                client.table("profiles").upsert(new_profile_data, on_conflict="user_id").execute()
+                client.table("users").upsert(new_profile_data, on_conflict="auth_user_id").execute()
                 logger.info(f"Synchronized new profile record to Supabase DB for user: {user.id}")
         except Exception as exc:
             logger.warning(f"Profile synchronization DB query notice: {exc}")
@@ -103,7 +101,7 @@ def update_user_profile(user_id: str, update_data: UserProfileUpdate, current_us
     client = init_supabase_client()
     if client and payload:
         try:
-            client.table("profiles").update(payload).eq("user_id", user_id).execute()
+            client.table("users").update(payload).eq("auth_user_id", user_id).execute()
             logger.info(f"Updated profile record in Supabase DB for user: {user_id}")
         except Exception as exc:
             logger.warning(f"Profile update DB query notice: {exc}")

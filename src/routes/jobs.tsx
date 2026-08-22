@@ -18,7 +18,7 @@ import { FilterBar } from "@/components/kit/FilterBar";
 import { PageHeader } from "@/components/kit/PageHeader";
 import { StatCard } from "@/components/kit/StatCard";
 import { StatusBadge } from "@/components/kit/StatusBadge";
-import { fmtDateTime, jobs, models, relative, type Job } from "@/lib/mock/data";
+import { fmtDateTime, relative, type Job, useControlCenterData } from "@/lib/control-center-data";
 
 export const Route = createFileRoute("/jobs")({
   head: () => ({
@@ -37,6 +37,7 @@ export const Route = createFileRoute("/jobs")({
 });
 
 function JobsPage() {
+  const { jobs, models } = useControlCenterData();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [model, setModel] = useState("all");
@@ -48,13 +49,17 @@ function JobsPage() {
     () =>
       jobs.filter((j) => {
         const q = search.toLowerCase();
-        const match = !q || [j.id, j.user, j.model, j.region].some((f) => f.toLowerCase().includes(q));
+        const match =
+          !q || [j.id, j.user, j.model, j.region].some((f) => f.toLowerCase().includes(q));
         const tabMatch =
           tab === "all" ||
           (tab === "retry" && (j.status === "failed" || j.status === "retrying")) ||
           (tab === "active" && (j.status === "running" || j.status === "queued"));
         return (
-          match && tabMatch && (status === "all" || j.status === status) && (model === "all" || j.model === model)
+          match &&
+          tabMatch &&
+          (status === "all" || j.status === status) &&
+          (model === "all" || j.model === model)
         );
       }),
     [search, status, model, tab],
@@ -62,12 +67,37 @@ function JobsPage() {
 
   const columns: Column<Job>[] = [
     { key: "id", header: "Job ID", render: (j) => <Mono className="text-foreground">{j.id}</Mono> },
-    { key: "user", header: "User", render: (j) => <CellStack primary={j.user} secondary={j.userId} />, hideBelow: "lg" },
-    { key: "model", header: "Model", render: (j) => <CellStack primary={j.model} secondary={`v${j.version}`} />, hideBelow: "md" },
+    {
+      key: "user",
+      header: "User",
+      render: (j) => <CellStack primary={j.user} secondary={j.userId} />,
+      hideBelow: "lg",
+    },
+    {
+      key: "model",
+      header: "Model",
+      render: (j) => <CellStack primary={j.model} secondary={`v${j.version}`} />,
+      hideBelow: "md",
+    },
     { key: "status", header: "Status", render: (j) => <StatusBadge status={j.status} /> },
-    { key: "tokens", header: "Tokens", render: (j) => <span className="num">{j.tokens.toLocaleString()}</span>, hideBelow: "xl" },
-    { key: "credits", header: "Credits", render: (j) => <span className="num">{j.credits}</span>, hideBelow: "xl" },
-    { key: "started", header: "Started", render: (j) => <span className="num text-xs">{relative(j.startedAt)}</span>, hideBelow: "md" },
+    {
+      key: "tokens",
+      header: "Tokens",
+      render: (j) => <span className="num">{j.tokens.toLocaleString()}</span>,
+      hideBelow: "xl",
+    },
+    {
+      key: "credits",
+      header: "Credits",
+      render: (j) => <span className="num">{j.credits}</span>,
+      hideBelow: "xl",
+    },
+    {
+      key: "started",
+      header: "Started",
+      render: (j) => <span className="num text-xs">{relative(j.startedAt)}</span>,
+      hideBelow: "md",
+    },
     {
       key: "duration",
       header: "Duration",
@@ -115,7 +145,11 @@ function JobsPage() {
         actions={
           <Button
             size="sm"
-            onClick={() => toast.success("Retry queue drained", { description: `${failed} failed jobs re-queued.` })}
+            onClick={() =>
+              toast.success("Retry queue drained", {
+                description: `${failed} failed jobs re-queued.`,
+              })
+            }
           >
             <ListRestart className="size-3.5" /> Drain retry queue
           </Button>
@@ -123,10 +157,21 @@ function JobsPage() {
       />
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatCard label="Jobs (24h)" value="71,892" delta={9.4} icon={Waypoints} />
-        <StatCard label="Running" value="58" delta={4.2} />
-        <StatCard label="Failed" value={String(failed)} delta={-14.2} invertDelta tone="danger" />
-        <StatCard label="Avg duration" value="8.4s" delta={-3.6} invertDelta tone="success" />
+        <StatCard label="Jobs (24h)" value={String(jobs.length)} icon={Waypoints} />
+        <StatCard
+          label="Running"
+          value={String(jobs.filter((job) => job.status === "running").length)}
+        />
+        <StatCard label="Failed" value={String(failed)} tone="danger" />
+        <StatCard
+          label="Avg duration"
+          value={
+            jobs.length
+              ? `${Math.round(jobs.reduce((total, job) => total + job.durationMs, 0) / jobs.length / 100) / 10}s`
+              : "No data available"
+          }
+          tone="success"
+        />
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-3">
@@ -154,7 +199,14 @@ function JobsPage() {
                     label: "Status",
                     value: status,
                     onChange: setStatus,
-                    options: ["queued", "running", "completed", "failed", "retrying", "cancelled"].map((s) => ({
+                    options: [
+                      "queued",
+                      "running",
+                      "completed",
+                      "failed",
+                      "retrying",
+                      "cancelled",
+                    ].map((s) => ({
                       label: s,
                       value: s,
                     })),
@@ -196,7 +248,9 @@ function JobsPage() {
                   ["Duration", `${(detail.durationMs / 1000).toFixed(1)}s`],
                 ].map(([k, v]) => (
                   <div key={k} className="rounded-md border border-border bg-surface px-3 py-2">
-                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{k}</p>
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      {k}
+                    </p>
                     <p className="num mt-0.5 text-sm font-medium capitalize">{v}</p>
                   </div>
                 ))}
@@ -209,8 +263,20 @@ function JobsPage() {
               <div className="rounded-md border border-border">
                 <ActivityTimeline
                   items={[
-                    { id: "1", title: "Job submitted", description: detail.user, at: fmtDateTime(detail.startedAt).slice(11, 19), tone: "info" },
-                    { id: "2", title: "Dispatched to worker", description: detail.region, at: fmtDateTime(detail.startedAt).slice(11, 19), tone: "info" },
+                    {
+                      id: "1",
+                      title: "Job submitted",
+                      description: detail.user,
+                      at: fmtDateTime(detail.startedAt).slice(11, 19),
+                      tone: "info",
+                    },
+                    {
+                      id: "2",
+                      title: "Dispatched to worker",
+                      description: detail.region,
+                      at: fmtDateTime(detail.startedAt).slice(11, 19),
+                      tone: "info",
+                    },
                     {
                       id: "3",
                       title: detail.status === "failed" ? "Execution failed" : "Execution finished",

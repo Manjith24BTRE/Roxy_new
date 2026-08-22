@@ -10,7 +10,7 @@ import {
 import { DataTable, Mono, type Column } from "@/components/kit/DataTable";
 import { FilterBar } from "@/components/kit/FilterBar";
 import { StatusBadge } from "@/components/kit/StatusBadge";
-import { fmtDateTime, relative, type LogEntry } from "@/lib/mock/data";
+import { fmtDateTime, relative, type LogEntry } from "@/lib/control-center-data";
 
 const uniq = (arr: string[]) => Array.from(new Set(arr)).sort();
 
@@ -51,9 +51,24 @@ export function LogTable({ entries }: { entries: LogEntry[] }) {
     },
     { key: "severity", header: "Severity", render: (l) => <StatusBadge status={l.severity} /> },
     { key: "service", header: "Service", render: (l) => <Mono>{l.service}</Mono>, hideBelow: "md" },
-    { key: "endpoint", header: "Endpoint", render: (l) => <Mono>{l.endpoint}</Mono>, hideBelow: "lg" },
-    { key: "user", header: "User", render: (l) => <span className="text-xs">{l.user}</span>, hideBelow: "xl" },
-    { key: "requestId", header: "Request ID", render: (l) => <Mono>{l.requestId}</Mono>, hideBelow: "xl" },
+    {
+      key: "endpoint",
+      header: "Endpoint",
+      render: (l) => <Mono>{l.endpoint}</Mono>,
+      hideBelow: "lg",
+    },
+    {
+      key: "user",
+      header: "User",
+      render: (l) => <span className="text-xs">{l.user}</span>,
+      hideBelow: "xl",
+    },
+    {
+      key: "requestId",
+      header: "Request ID",
+      render: (l) => <Mono>{l.requestId}</Mono>,
+      hideBelow: "xl",
+    },
     {
       key: "message",
       header: "Message",
@@ -125,7 +140,9 @@ export function LogTable({ entries }: { entries: LogEntry[] }) {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-base">Log entry</DialogTitle>
-            <DialogDescription className="font-mono text-xs">{selected?.requestId}</DialogDescription>
+            <DialogDescription className="font-mono text-xs">
+              {selected?.requestId}
+            </DialogDescription>
           </DialogHeader>
           {selected && (
             <dl className="grid grid-cols-3 gap-y-2 text-sm">
@@ -139,7 +156,10 @@ export function LogTable({ entries }: { entries: LogEntry[] }) {
                 ["Duration", `${selected.durationMs} ms`],
                 ["Message", selected.message],
               ].map(([k, v]) => (
-                <div key={k} className="col-span-3 grid grid-cols-3 gap-2 border-b border-border pb-2">
+                <div
+                  key={k}
+                  className="col-span-3 grid grid-cols-3 gap-2 border-b border-border pb-2"
+                >
                   <dt className="text-xs text-muted-foreground">{k}</dt>
                   <dd className="col-span-2 break-words text-xs">{v}</dd>
                 </div>

@@ -10,13 +10,17 @@ import { FilterBar } from "@/components/kit/FilterBar";
 import { PageHeader } from "@/components/kit/PageHeader";
 import { StatCard } from "@/components/kit/StatCard";
 import { StatusBadge } from "@/components/kit/StatusBadge";
-import { backups, fmtDateTime, relative } from "@/lib/mock/data";
+import { fmtDateTime, relative, useControlCenterData } from "@/lib/control-center-data";
 
 export const Route = createFileRoute("/backups")({
   head: () => ({
     meta: [
       { title: "Backups — Veytrix Control Centre" },
-      { name: "description", content: "Database, storage and configuration backup history with retention, region and restore controls." },
+      {
+        name: "description",
+        content:
+          "Database, storage and configuration backup history with retention, region and restore controls.",
+      },
       { property: "og:title", content: "Backups — Veytrix Control Centre" },
       { property: "og:description", content: "Backup and restore operations for Veytrix." },
     ],
@@ -24,9 +28,10 @@ export const Route = createFileRoute("/backups")({
   component: BackupsPage,
 });
 
-type Backup = (typeof backups)[number];
+type Backup = ReturnType<typeof useControlCenterData>["backups"][number];
 
 function BackupsPage() {
+  const { backups } = useControlCenterData();
   const [search, setSearch] = useState("");
   const [type, setType] = useState("all");
   const [restore, setRestore] = useState<Backup | null>(null);
@@ -35,26 +40,64 @@ function BackupsPage() {
     () =>
       backups.filter(
         (b) =>
-          (!search || [b.id, b.location, b.type].some((f) => f.toLowerCase().includes(search.toLowerCase()))) &&
+          (!search ||
+            [b.id, b.location, b.type].some((f) =>
+              f.toLowerCase().includes(search.toLowerCase()),
+            )) &&
           (type === "all" || b.type === type),
       ),
     [search, type],
   );
 
   const columns: Column<Backup>[] = [
-    { key: "id", header: "Backup", render: (b) => <CellStack primary={<Mono className="text-foreground">{b.id}</Mono>} secondary={`${b.type} · ${b.scope}`} /> },
-    { key: "size", header: "Size", render: (b) => <span className="num">{b.size}</span>, hideBelow: "md" },
+    {
+      key: "id",
+      header: "Backup",
+      render: (b) => (
+        <CellStack
+          primary={<Mono className="text-foreground">{b.id}</Mono>}
+          secondary={`${b.type} · ${b.scope}`}
+        />
+      ),
+    },
+    {
+      key: "size",
+      header: "Size",
+      render: (b) => <span className="num">{b.size}</span>,
+      hideBelow: "md",
+    },
     { key: "status", header: "Status", render: (b) => <StatusBadge status={b.status} /> },
-    { key: "dur", header: "Duration", render: (b) => <span className="num">{Math.round(b.durationMs / 1000)}s</span>, hideBelow: "lg" },
+    {
+      key: "dur",
+      header: "Duration",
+      render: (b) => <span className="num">{Math.round(b.durationMs / 1000)}s</span>,
+      hideBelow: "lg",
+    },
     { key: "loc", header: "Region", render: (b) => <Mono>{b.location}</Mono>, hideBelow: "xl" },
-    { key: "ret", header: "Retention", render: (b) => <span className="text-sm">{b.retention}</span>, hideBelow: "xl" },
-    { key: "at", header: "Started", render: (b) => <span className="num text-xs">{fmtDateTime(b.startedAt).slice(0, 16)}</span>, hideBelow: "md" },
+    {
+      key: "ret",
+      header: "Retention",
+      render: (b) => <span className="text-sm">{b.retention}</span>,
+      hideBelow: "xl",
+    },
+    {
+      key: "at",
+      header: "Started",
+      render: (b) => <span className="num text-xs">{fmtDateTime(b.startedAt).slice(0, 16)}</span>,
+      hideBelow: "md",
+    },
     {
       key: "actions",
       header: "",
       className: "text-right",
       render: (b) => (
-        <Button size="sm" variant="ghost" className="h-7 px-2" disabled={b.status !== "completed"} onClick={() => setRestore(b)}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2"
+          disabled={b.status !== "completed"}
+          onClick={() => setRestore(b)}
+        >
           <RotateCcw className="size-3.5" /> Restore
         </Button>
       ),
@@ -76,14 +119,30 @@ function BackupsPage() {
         }
       />
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatCard label="Backups retained" value={String(backups.length)} icon={HardDriveDownload} />
-        <StatCard label="Last successful" value={last ? relative(last.startedAt) : "—"} tone="success" />
-        <StatCard label="Failed (30d)" value={String(backups.filter((b) => b.status === "failed").length)} tone="danger" />
-        <StatCard label="Storage used" value="1.42 TB" delta={3.6} />
+        <StatCard
+          label="Backups retained"
+          value={String(backups.length)}
+          icon={HardDriveDownload}
+        />
+        <StatCard
+          label="Last successful"
+          value={last ? relative(last.startedAt) : "—"}
+          tone="success"
+        />
+        <StatCard
+          label="Failed (30d)"
+          value={String(backups.filter((b) => b.status === "failed").length)}
+          tone="danger"
+        />
+        <StatCard label="Storage used" value="No data available" />
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <Panel title="Schedule" description="Automated policy" bodyClassName="divide-y divide-border">
+        <Panel
+          title="Schedule"
+          description="Automated policy"
+          bodyClassName="divide-y divide-border"
+        >
           {[
             ["Database full", "Daily · 02:00 UTC"],
             ["Database incremental", "Every 6 hours"],
@@ -96,7 +155,11 @@ function BackupsPage() {
             </div>
           ))}
         </Panel>
-        <Panel title="Recovery objectives" bodyClassName="divide-y divide-border" className="lg:col-span-2">
+        <Panel
+          title="Recovery objectives"
+          bodyClassName="divide-y divide-border"
+          className="lg:col-span-2"
+        >
           {[
             ["RPO (recovery point objective)", "15 minutes"],
             ["RTO (recovery time objective)", "45 minutes"],
@@ -127,7 +190,10 @@ function BackupsPage() {
                 label: "Type",
                 value: type,
                 onChange: setType,
-                options: ["Database", "Storage", "Configuration"].map((t) => ({ label: t, value: t })),
+                options: ["Database", "Storage", "Configuration"].map((t) => ({
+                  label: t,
+                  value: t,
+                })),
               },
             ]}
             onReset={() => {

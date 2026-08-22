@@ -13,7 +13,12 @@ import { FilterBar } from "@/components/kit/FilterBar";
 import { PageHeader } from "@/components/kit/PageHeader";
 import { StatCard } from "@/components/kit/StatCard";
 import { StatusBadge } from "@/components/kit/StatusBadge";
-import { auditLogs, fmtDateTime, relative, type AuditLog } from "@/lib/mock/data";
+import {
+  fmtDateTime,
+  relative,
+  type AuditLog,
+  useControlCenterData,
+} from "@/lib/control-center-data";
 
 export const Route = createFileRoute("/audit-logs")({
   head: () => ({
@@ -32,6 +37,7 @@ export const Route = createFileRoute("/audit-logs")({
 });
 
 function AuditLogsPage() {
+  const { auditLogs } = useControlCenterData();
   const [search, setSearch] = useState("");
   const [action, setAction] = useState("all");
   const [actor, setActor] = useState("all");
@@ -41,8 +47,13 @@ function AuditLogsPage() {
     () =>
       auditLogs.filter((a) => {
         const q = search.toLowerCase();
-        const match = !q || [a.actor, a.action, a.resourceId, a.ip].some((f) => f.toLowerCase().includes(q));
-        return match && (action === "all" || a.action === action) && (actor === "all" || a.actor === actor);
+        const match =
+          !q || [a.actor, a.action, a.resourceId, a.ip].some((f) => f.toLowerCase().includes(q));
+        return (
+          match &&
+          (action === "all" || a.action === action) &&
+          (actor === "all" || a.actor === actor)
+        );
       }),
     [search, action, actor],
   );
@@ -58,11 +69,30 @@ function AuditLogsPage() {
         </div>
       ),
     },
-    { key: "actor", header: "Actor", render: (a) => <span className="text-sm">{a.actor}</span>, hideBelow: "md" },
-    { key: "action", header: "Action", render: (a) => <Mono className="text-foreground">{a.action}</Mono> },
-    { key: "resource", header: "Resource", render: (a) => <CellStack primary={a.resource} secondary={a.resourceId} />, hideBelow: "lg" },
+    {
+      key: "actor",
+      header: "Actor",
+      render: (a) => <span className="text-sm">{a.actor}</span>,
+      hideBelow: "md",
+    },
+    {
+      key: "action",
+      header: "Action",
+      render: (a) => <Mono className="text-foreground">{a.action}</Mono>,
+    },
+    {
+      key: "resource",
+      header: "Resource",
+      render: (a) => <CellStack primary={a.resource} secondary={a.resourceId} />,
+      hideBelow: "lg",
+    },
     { key: "ip", header: "IP Address", render: (a) => <Mono>{a.ip}</Mono>, hideBelow: "xl" },
-    { key: "device", header: "Device", render: (a) => <span className="text-xs text-muted-foreground">{a.device}</span>, hideBelow: "xl" },
+    {
+      key: "device",
+      header: "Device",
+      render: (a) => <span className="text-xs text-muted-foreground">{a.device}</span>,
+      hideBelow: "xl",
+    },
     { key: "result", header: "Result", render: (a) => <StatusBadge status={a.result} /> },
   ];
 
@@ -75,9 +105,16 @@ function AuditLogsPage() {
       />
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard label="Events (30d)" value={auditLogs.length.toLocaleString()} icon={FileClock} />
-        <StatCard label="Failed actions" value={String(auditLogs.filter((a) => a.result === "failed").length)} delta={12.5} invertDelta tone="danger" />
-        <StatCard label="Distinct actors" value={String(new Set(auditLogs.map((a) => a.actor)).size)} />
-        <StatCard label="Retention" value="7 years" footer="WORM storage" />
+        <StatCard
+          label="Failed actions"
+          value={String(auditLogs.filter((a) => a.result === "failed").length)}
+          tone="danger"
+        />
+        <StatCard
+          label="Distinct actors"
+          value={String(new Set(auditLogs.map((a) => a.actor)).size)}
+        />
+        <StatCard label="Retention" value="Not configured" />
       </div>
       <DataTable
         columns={columns}
@@ -96,14 +133,18 @@ function AuditLogsPage() {
                 label: "Action",
                 value: action,
                 onChange: setAction,
-                options: Array.from(new Set(auditLogs.map((a) => a.action))).sort().map((s) => ({ label: s, value: s })),
+                options: Array.from(new Set(auditLogs.map((a) => a.action)))
+                  .sort()
+                  .map((s) => ({ label: s, value: s })),
               },
               {
                 id: "actor",
                 label: "Actor",
                 value: actor,
                 onChange: setActor,
-                options: Array.from(new Set(auditLogs.map((a) => a.actor))).sort().map((s) => ({ label: s, value: s })),
+                options: Array.from(new Set(auditLogs.map((a) => a.actor)))
+                  .sort()
+                  .map((s) => ({ label: s, value: s })),
               },
             ]}
             onReset={() => {

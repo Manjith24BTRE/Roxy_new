@@ -14,7 +14,7 @@ async def get_account_settings(current_user: UserProfile = Depends(get_current_u
     profile_data = {}
     if client:
         try:
-            res = client.table("profiles").select("*").eq("id", current_user.id).execute()
+            res = client.table("users").select("*").eq("auth_user_id", current_user.id).execute()
             if res.data and len(res.data) > 0:
                 profile_data = res.data[0]
         except Exception as exc:
@@ -25,12 +25,12 @@ async def get_account_settings(current_user: UserProfile = Depends(get_current_u
         "data": {
             "id": current_user.id,
             "full_name": profile_data.get("full_name") or current_user.full_name or current_user.display_name or "Mavros Member",
-            "username": profile_data.get("username") or current_user.username or "mavros_member",
+            "username": current_user.username,
             "email": current_user.email or "member@mavros.in",
             "phone": profile_data.get("phone") or current_user.phone or "",
             "country": profile_data.get("country") or current_user.country or "India",
-            "language": profile_data.get("language") or current_user.language or "English (US)",
-            "timezone": profile_data.get("timezone") or current_user.timezone or "UTC+5:30 (IST)",
+            "language": current_user.language,
+            "timezone": current_user.timezone,
             "bio": profile_data.get("bio") or current_user.bio or "",
             "avatar_url": profile_data.get("avatar_url") or current_user.avatar_url or None,
         },

@@ -22,7 +22,10 @@ export function PageHeader({
 }) {
   return (
     <div className="border-b border-border pb-5">
-      <nav aria-label="Breadcrumb" className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
+      <nav
+        aria-label="Breadcrumb"
+        className="mb-2 flex items-center gap-1 text-xs text-muted-foreground"
+      >
         <Link to="/" className="transition-colors hover:text-foreground">
           Control Centre
         </Link>

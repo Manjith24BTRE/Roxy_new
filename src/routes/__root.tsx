@@ -4,8 +4,10 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
+  redirect,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
@@ -13,6 +15,8 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppShell } from "@/components/shell/AppShell";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabase";
 
 function NotFoundComponent() {
   return (
@@ -75,6 +79,23 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  beforeLoad: async ({ location }) => {
+    if (location.pathname === "/login" || location.pathname === "/signup") {
+      return;
+    }
+
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
+        throw redirect({
+          to: "/login",
+          search: {
+            redirect: location.href,
+          },
+        });
+      }
+    }
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -132,14 +153,23 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isAuthRoute = pathname === "/login" || pathname === "/signup";
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppShell>
-        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
-      </AppShell>
-      <Toaster position="top-right" />
+      <AuthProvider>
+        {isAuthRoute ? (
+          <div className="min-h-screen bg-background">
+            <Outlet />
+          </div>
+        ) : (
+          <AppShell>
+            <Outlet />
+          </AppShell>
+        )}
+        <Toaster position="top-right" />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

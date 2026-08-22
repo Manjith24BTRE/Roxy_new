@@ -29,7 +29,7 @@ async def get_current_workspace(current_user: UserProfile = Depends(get_current_
                 if members_res.data:
                     for m in members_res.data:
                         # fetch member profile
-                        p_res = client.table("profiles").select("full_name, username, avatar_url").eq("id", m["user_id"]).execute()
+                        p_res = client.table("users").select("full_name, avatar_url").eq("id", m["user_id"]).execute()
                         p = p_res.data[0] if (p_res.data and len(p_res.data) > 0) else {}
                         members_data.append({
                             "id": m["id"],

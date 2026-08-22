@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogTable } from "@/components/kit/LogTable";
 import { PageHeader } from "@/components/kit/PageHeader";
 import { StatCard } from "@/components/kit/StatCard";
-import { logs } from "@/lib/mock/data";
+import { useControlCenterData } from "@/lib/control-center-data";
 
 export const Route = createFileRoute("/monitoring")({
   head: () => ({
@@ -16,7 +16,10 @@ export const Route = createFileRoute("/monitoring")({
           "Error, API, performance, crash and security telemetry with search and filtering across Veytrix services.",
       },
       { property: "og:title", content: "Monitoring — Veytrix Control Centre" },
-      { property: "og:description", content: "Platform telemetry across every service and endpoint." },
+      {
+        property: "og:description",
+        content: "Platform telemetry across every service and endpoint.",
+      },
     ],
   }),
   component: Monitoring,
@@ -31,6 +34,7 @@ const TABS = [
 ] as const;
 
 function Monitoring() {
+  const { logs } = useControlCenterData();
   return (
     <>
       <PageHeader
@@ -40,10 +44,21 @@ function Monitoring() {
       />
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatCard label="Errors (24h)" value="1,284" delta={-8.2} invertDelta icon={AlertOctagon} tone="danger" />
-        <StatCard label="Requests (24h)" value="4.82M" delta={5.6} icon={Terminal} />
-        <StatCard label="p95 latency" value="412 ms" delta={3.1} invertDelta icon={Gauge} tone="warning" />
-        <StatCard label="Crashes (24h)" value="17" delta={-22.5} invertDelta icon={Bug} />
+        <StatCard
+          label="Errors (24h)"
+          value={String(
+            logs.filter((log) => log.severity === "error" || log.severity === "critical").length,
+          )}
+          icon={AlertOctagon}
+          tone="danger"
+        />
+        <StatCard label="Requests (24h)" value="No data available" icon={Terminal} />
+        <StatCard label="p95 latency" value="No data available" icon={Gauge} tone="warning" />
+        <StatCard
+          label="Crashes (24h)"
+          value={String(logs.filter((log) => log.kind === "crash").length)}
+          icon={Bug}
+        />
       </div>
 
       <Tabs defaultValue="error" className="space-y-3">

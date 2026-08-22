@@ -8,13 +8,17 @@ import { ConfirmationDialog } from "@/components/kit/ConfirmDialog";
 import { PageHeader } from "@/components/kit/PageHeader";
 import { StatCard } from "@/components/kit/StatCard";
 import { StatusBadge } from "@/components/kit/StatusBadge";
-import { permissionMatrix, roles } from "@/lib/mock/data";
+import { useControlCenterData } from "@/lib/control-center-data";
 
 export const Route = createFileRoute("/roles")({
   head: () => ({
     meta: [
       { title: "Roles — Veytrix Control Centre" },
-      { name: "description", content: "Role-based access control: administrative roles, scope, membership and granted permissions." },
+      {
+        name: "description",
+        content:
+          "Role-based access control: administrative roles, scope, membership and granted permissions.",
+      },
       { property: "og:title", content: "Roles — Veytrix Control Centre" },
       { property: "og:description", content: "Manage administrative roles and their scope." },
     ],
@@ -23,6 +27,7 @@ export const Route = createFileRoute("/roles")({
 });
 
 function RolesPage() {
+  const { permissionMatrix, roles } = useControlCenterData();
   const [remove, setRemove] = useState<string | null>(null);
 
   return (
@@ -39,8 +44,16 @@ function RolesPage() {
       />
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard label="Roles" value={String(roles.length)} icon={ShieldCheck} />
-        <StatCard label="Operators" value={String(roles.reduce((a, r) => a + r.members, 0))} icon={Users} />
-        <StatCard label="System roles" value={String(roles.filter((r) => r.system).length)} icon={Lock} />
+        <StatCard
+          label="Operators"
+          value={String(roles.reduce((a, r) => a + r.members, 0))}
+          icon={Users}
+        />
+        <StatCard
+          label="System roles"
+          value={String(roles.filter((r) => r.system).length)}
+          icon={Lock}
+        />
         <StatCard label="Privileged holders" value="3" tone="warning" />
       </div>
 
@@ -50,13 +63,21 @@ function RolesPage() {
             key={r.id}
             title={r.name}
             description={r.scope}
-            actions={<StatusBadge status={r.system ? "primary" : "active"} label={r.system ? "system" : "custom"} />}
+            actions={
+              <StatusBadge
+                status={r.system ? "primary" : "active"}
+                label={r.system ? "system" : "custom"}
+              />
+            }
             bodyClassName="flex flex-col gap-3 p-4"
           >
             <p className="text-sm text-muted-foreground">{r.description}</p>
             <div className="flex flex-wrap gap-1">
               {(permissionMatrix[r.name] ?? []).slice(0, 5).map((p) => (
-                <span key={p} className="num rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <span
+                  key={p}
+                  className="num rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                >
                   {p}
                 </span>
               ))}
@@ -69,7 +90,12 @@ function RolesPage() {
             <div className="mt-auto flex items-center justify-between border-t border-border pt-3">
               <span className="num text-xs text-muted-foreground">{r.members} members</span>
               <div className="flex gap-1">
-                <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => toast.info(`Editing ${r.name}`)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => toast.info(`Editing ${r.name}`)}
+                >
                   Edit
                 </Button>
                 <Button

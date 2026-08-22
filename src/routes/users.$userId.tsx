@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Ban, Coins, CreditCard, ShieldOff } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -13,38 +13,17 @@ import { StatCard } from "@/components/kit/StatCard";
 import { StatusBadge } from "@/components/kit/StatusBadge";
 import { EmptyState } from "@/components/kit/States";
 import {
-  creditTransactions,
   fmtDate,
   fmtDateTime,
-  jobs,
   money,
   relative,
-  sessions,
-  tickets,
-  transactions,
-  users,
-} from "@/lib/mock/data";
+  useControlCenterData,
+} from "@/lib/control-center-data";
 
 export const Route = createFileRoute("/users/$userId")({
-  loader: ({ params }) => {
-    const user = users.find((u) => u.id === params.userId);
-    if (!user) throw notFound();
-    return { user };
-  },
-  head: ({ loaderData }) => {
-    if (!loaderData) {
-      return { meta: [{ title: "User unavailable — Veytrix" }, { name: "robots", content: "noindex" }] };
-    }
-    return {
-      meta: [
-        { title: `${loaderData.user.name} — Veytrix Control Centre` },
-        { name: "description", content: `Account overview, subscription, credits, usage and support history for ${loaderData.user.email}.` },
-        { property: "og:title", content: `${loaderData.user.name} — Veytrix Control Centre` },
-        { property: "og:description", content: "Detailed account record in the Veytrix control centre." },
-        { name: "robots", content: "noindex" },
-      ],
-    };
-  },
+  head: () => ({
+    meta: [{ title: "User — Veytrix Control Centre" }, { name: "robots", content: "noindex" }],
+  }),
   component: UserDetail,
 });
 
@@ -58,8 +37,19 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function UserDetail() {
-  const { user } = Route.useLoaderData();
+  const { userId } = Route.useParams();
+  const { creditTransactions, jobs, sessions, tickets, transactions, users } =
+    useControlCenterData();
+  const user = users.find((candidate) => candidate.id === userId);
   const [pending, setPending] = useState<null | "suspend" | "ban">(null);
+
+  if (!user)
+    return (
+      <EmptyState
+        title="No user data available"
+        description="The user record is not available from the configured data source."
+      />
+    );
 
   const userJobs = jobs.slice(0, 6);
   const userTx = transactions.slice(0, 5);
@@ -76,7 +66,9 @@ function UserDetail() {
         meta={
           <>
             <StatusBadge status={user.status} />
-            <span className="rounded-md border border-border bg-surface px-2 py-0.5 text-xs">{user.plan}</span>
+            <span className="rounded-md border border-border bg-surface px-2 py-0.5 text-xs">
+              {user.plan}
+            </span>
             <span className="num rounded-md border border-border bg-surface px-2 py-0.5 text-xs text-muted-foreground">
               Joined {fmtDate(user.createdAt)}
             </span>
@@ -102,13 +94,27 @@ function UserDetail() {
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard label="Credit balance" value={user.credits.toLocaleString()} icon={Coins} />
         <StatCard label="MRR" value={money(user.mrr)} icon={CreditCard} tone="success" />
-        <StatCard label="Quota usage" value={`${user.usage}%`} tone={user.usage > 80 ? "warning" : "default"} />
+        <StatCard
+          label="Quota usage"
+          value={`${user.usage}%`}
+          tone={user.usage > 80 ? "warning" : "default"}
+        />
         <StatCard label="Last login" value={relative(user.lastLogin)} />
       </div>
 
       <Tabs defaultValue="overview" className="space-y-3">
         <TabsList className="w-full justify-start overflow-x-auto">
-          {["overview", "profile", "subscription", "credits", "usage", "logins", "sessions", "transactions", "tickets"].map((t) => (
+          {[
+            "overview",
+            "profile",
+            "subscription",
+            "credits",
+            "usage",
+            "logins",
+            "sessions",
+            "transactions",
+            "tickets",
+          ].map((t) => (
             <TabsTrigger key={t} value={t} className="text-xs capitalize sm:text-sm">
               {t === "logins" ? "Login history" : t}
             </TabsTrigger>
@@ -120,7 +126,10 @@ function UserDetail() {
             <Row label="User ID" value={<span className="font-mono text-xs">{user.id}</span>} />
             <Row label="Role" value={user.role} />
             <Row label="Country" value={user.country} />
-            <Row label="Two-factor" value={<StatusBadge status={user.twoFactor ? "enabled" : "disabled"} />} />
+            <Row
+              label="Two-factor"
+              value={<StatusBadge status={user.twoFactor ? "enabled" : "disabled"} />}
+            />
             <Row label="Status" value={<StatusBadge status={user.status} />} />
           </Panel>
           <Panel title="Recent activity">
@@ -162,7 +171,11 @@ function UserDetail() {
               <Row
                 key={c.id}
                 label={`${c.type} · ${relative(c.date)}`}
-                value={<span className={c.amount < 0 ? "num text-destructive" : "num text-success"}>{c.amount.toLocaleString()}</span>}
+                value={
+                  <span className={c.amount < 0 ? "num text-destructive" : "num text-success"}>
+                    {c.amount.toLocaleString()}
+                  </span>
+                }
               />
             ))}
           </Panel>
@@ -189,7 +202,11 @@ function UserDetail() {
         <TabsContent value="logins" className="m-0">
           <Panel title="Login history">
             {userSessions.map((s) => (
-              <Row key={s.id} label={`${s.device} · ${s.location}`} value={<span className="num text-xs">{relative(s.startedAt)}</span>} />
+              <Row
+                key={s.id}
+                label={`${s.device} · ${s.location}`}
+                value={<span className="num text-xs">{relative(s.startedAt)}</span>}
+              />
             ))}
           </Panel>
         </TabsContent>
@@ -197,7 +214,11 @@ function UserDetail() {
         <TabsContent value="sessions" className="m-0">
           <Panel title="Active sessions">
             {userSessions.map((s) => (
-              <Row key={s.id} label={`${s.ip} · ${s.device}`} value={<StatusBadge status={s.status} />} />
+              <Row
+                key={s.id}
+                label={`${s.ip} · ${s.device}`}
+                value={<StatusBadge status={s.status} />}
+              />
             ))}
           </Panel>
         </TabsContent>
@@ -205,7 +226,11 @@ function UserDetail() {
         <TabsContent value="transactions" className="m-0">
           <Panel title="Transactions">
             {userTx.map((t) => (
-              <Row key={t.id} label={`${t.invoice} · ${fmtDate(t.date)}`} value={<span className="num">{money(t.amount)}</span>} />
+              <Row
+                key={t.id}
+                label={`${t.invoice} · ${fmtDate(t.date)}`}
+                value={<span className="num">{money(t.amount)}</span>}
+              />
             ))}
           </Panel>
         </TabsContent>
@@ -213,9 +238,14 @@ function UserDetail() {
         <TabsContent value="tickets" className="m-0">
           <Panel title="Support tickets">
             {userTickets.length === 0 ? (
-              <EmptyState title="No tickets" description="This account has never contacted support." />
+              <EmptyState
+                title="No tickets"
+                description="This account has never contacted support."
+              />
             ) : (
-              userTickets.map((t) => <Row key={t.id} label={t.subject} value={<StatusBadge status={t.status} />} />)
+              userTickets.map((t) => (
+                <Row key={t.id} label={t.subject} value={<StatusBadge status={t.status} />} />
+              ))
             )}
           </Panel>
         </TabsContent>
@@ -229,7 +259,9 @@ function UserDetail() {
         description={`${user.email} will lose access immediately. The action is recorded in the audit log.`}
         confirmLabel={pending === "ban" ? "Ban user" : "Suspend user"}
         onConfirm={() => {
-          toast.success(pending === "ban" ? "User banned" : "User suspended", { description: user.email });
+          toast.success(pending === "ban" ? "User banned" : "User suspended", {
+            description: user.email,
+          });
           setPending(null);
         }}
       />

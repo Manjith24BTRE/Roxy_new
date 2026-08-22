@@ -1,6 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Activity, Clock, RefreshCw, ServerCog, ShieldCheck, Timer } from "lucide-react";
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
+import {
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Legend,
+} from "recharts";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -10,7 +19,7 @@ import { StatCard } from "@/components/kit/StatCard";
 import { StatusBadge } from "@/components/kit/StatusBadge";
 import { axisProps, chartTooltip, gridProps } from "@/components/kit/chart-theme";
 import { ActivityTimeline } from "@/components/kit/ActivityTimeline";
-import { fmtDateTime, incidents, latencySeries, relative, services } from "@/lib/mock/data";
+import { fmtDateTime, relative, useControlCenterData } from "@/lib/control-center-data";
 
 export const Route = createFileRoute("/system-health")({
   head: () => ({
@@ -29,11 +38,14 @@ export const Route = createFileRoute("/system-health")({
 });
 
 function SystemHealth() {
+  const { incidents, latencySeries, services } = useControlCenterData();
   const operational = services.filter((s) => s.status === "operational").length;
-  const avgLatency = Math.round(
-    services.reduce((a, s) => a + s.responseMs, 0) / services.length,
-  );
-  const avgUptime = (services.reduce((a, s) => a + s.uptime, 0) / services.length).toFixed(2);
+  const avgLatency = services.length
+    ? Math.round(services.reduce((a, s) => a + s.responseMs, 0) / services.length)
+    : null;
+  const avgUptime = services.length
+    ? (services.reduce((a, s) => a + s.uptime, 0) / services.length).toFixed(2)
+    : null;
 
   return (
     <>
@@ -45,7 +57,7 @@ function SystemHealth() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => toast.success("Health probes re-run", { description: "All 8 services re-checked." })}
+            onClick={() => toast.info("Health checks are not configured")}
           >
             <RefreshCw className="size-3.5" /> Re-run checks
           </Button>
@@ -53,10 +65,29 @@ function SystemHealth() {
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Services operational" value={`${operational}/${services.length}`} icon={ServerCog} tone="success" footer="2 degraded · 1 maintenance" />
-        <StatCard label="Avg response time" value={`${avgLatency} ms`} delta={-6.4} invertDelta icon={Timer} />
-        <StatCard label="30-day uptime" value={`${avgUptime}%`} delta={0.03} icon={ShieldCheck} tone="success" />
-        <StatCard label="Open incidents" value="3" delta={50} invertDelta icon={Activity} tone="warning" />
+        <StatCard
+          label="Services operational"
+          value={services.length ? `${operational}/${services.length}` : "No data available"}
+          icon={ServerCog}
+          tone="success"
+        />
+        <StatCard
+          label="Avg response time"
+          value={avgLatency === null ? "No data available" : `${avgLatency} ms`}
+          icon={Timer}
+        />
+        <StatCard
+          label="30-day uptime"
+          value={avgUptime === null ? "No data available" : `${avgUptime}%`}
+          icon={ShieldCheck}
+          tone="success"
+        />
+        <StatCard
+          label="Open incidents"
+          value={incidents.length ? String(incidents.length) : "No data available"}
+          icon={Activity}
+          tone="warning"
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-4">
@@ -73,7 +104,9 @@ function SystemHealth() {
             </div>
             <dl className="mt-3 grid grid-cols-2 gap-y-2 text-xs">
               <dt className="text-muted-foreground">Response</dt>
-              <dd className="num text-right font-medium">{s.responseMs ? `${s.responseMs} ms` : "—"}</dd>
+              <dd className="num text-right font-medium">
+                {s.responseMs ? `${s.responseMs} ms` : "—"}
+              </dd>
               <dt className="text-muted-foreground">Uptime (30d)</dt>
               <dd className="num text-right font-medium">{s.uptime}%</dd>
               <dt className="text-muted-foreground">Incidents (90d)</dt>
@@ -100,9 +133,27 @@ function SystemHealth() {
               <XAxis dataKey="hour" {...axisProps} interval={3} />
               <YAxis {...axisProps} unit="ms" />
               <Tooltip {...chartTooltip} />
-              <Line type="monotone" dataKey="p50" stroke="var(--color-chart-1)" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="p95" stroke="var(--color-chart-4)" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="p99" stroke="var(--color-destructive)" strokeWidth={2} dot={false} />
+              <Line
+                type="monotone"
+                dataKey="p50"
+                stroke="var(--color-chart-1)"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="p95"
+                stroke="var(--color-chart-4)"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="p99"
+                stroke="var(--color-destructive)"
+                strokeWidth={2}
+                dot={false}
+              />
               <Legend wrapperStyle={{ fontSize: 11 }} />
             </LineChart>
           </ResponsiveContainer>
@@ -116,7 +167,11 @@ function SystemHealth() {
               description: `${i.service} · ${i.impact}${i.resolvedAt ? " · Resolved" : " · Ongoing"}`,
               at: fmtDateTime(i.startedAt).slice(5, 16),
               tone:
-                i.severity === "critical" ? ("danger" as const) : i.severity === "warning" ? ("warning" as const) : ("info" as const),
+                i.severity === "critical"
+                  ? ("danger" as const)
+                  : i.severity === "warning"
+                    ? ("warning" as const)
+                    : ("info" as const),
             }))}
           />
         </Panel>

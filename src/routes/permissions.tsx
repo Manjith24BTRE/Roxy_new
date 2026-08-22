@@ -7,14 +7,18 @@ import { Panel } from "@/components/kit/ChartCard";
 import { SearchBar } from "@/components/kit/FilterBar";
 import { PageHeader } from "@/components/kit/PageHeader";
 import { StatCard } from "@/components/kit/StatCard";
-import { permissionGroups, permissionMatrix, roles } from "@/lib/mock/data";
+import { useControlCenterData } from "@/lib/control-center-data";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/permissions")({
   head: () => ({
     meta: [
       { title: "Permissions — Veytrix Control Centre" },
-      { name: "description", content: "Permission matrix mapping every capability to the administrative roles that hold it." },
+      {
+        name: "description",
+        content:
+          "Permission matrix mapping every capability to the administrative roles that hold it.",
+      },
       { property: "og:title", content: "Permissions — Veytrix Control Centre" },
       { property: "og:description", content: "Inspect and edit the Veytrix permission matrix." },
     ],
@@ -23,6 +27,7 @@ export const Route = createFileRoute("/permissions")({
 });
 
 function PermissionsPage() {
+  const { permissionGroups, permissionMatrix, roles } = useControlCenterData();
   const [search, setSearch] = useState("");
   const [matrix, setMatrix] = useState<Record<string, string[]>>(() => ({ ...permissionMatrix }));
 
@@ -50,10 +55,14 @@ function PermissionsPage() {
         <StatCard label="Permissions" value={String(totalKeys)} icon={KeyRound} />
         <StatCard label="Groups" value={String(permissionGroups.length)} />
         <StatCard label="Roles mapped" value={String(roles.length)} />
-        <StatCard label="Destructive scopes" value="4" tone="warning" />
+        <StatCard label="Destructive scopes" value="No data available" tone="warning" />
       </div>
 
-      <Panel title="Permission matrix" description="Toggle a cell to grant or revoke" bodyClassName="p-0">
+      <Panel
+        title="Permission matrix"
+        description="Toggle a cell to grant or revoke"
+        bodyClassName="p-0"
+      >
         <div className="border-b border-border p-3">
           <SearchBar value={search} onChange={setSearch} placeholder="Filter permission keys…" />
         </div>
@@ -65,7 +74,10 @@ function PermissionsPage() {
                   Permission
                 </th>
                 {roles.map((r) => (
-                  <th key={r.id} className="px-3 py-2.5 text-center text-xs font-medium text-muted-foreground">
+                  <th
+                    key={r.id}
+                    className="px-3 py-2.5 text-center text-xs font-medium text-muted-foreground"
+                  >
                     {r.name}
                   </th>
                 ))}
@@ -78,12 +90,18 @@ function PermissionsPage() {
                 return (
                   <Fragment key={g.group}>
                     <tr className="bg-muted/40">
-                      <td colSpan={roles.length + 1} className="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <td
+                        colSpan={roles.length + 1}
+                        className="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                      >
                         {g.group}
                       </td>
                     </tr>
                     {keys.map((k) => (
-                      <tr key={k} className="border-b border-border last:border-0 hover:bg-muted/30">
+                      <tr
+                        key={k}
+                        className="border-b border-border last:border-0 hover:bg-muted/30"
+                      >
                         <td className="num sticky left-0 z-10 bg-card px-4 py-2 text-xs">{k}</td>
                         {roles.map((r) => {
                           const on = (matrix[r.name] ?? []).includes(k);
@@ -100,7 +118,11 @@ function PermissionsPage() {
                                     : "border-border bg-surface text-muted-foreground hover:bg-muted",
                                 )}
                               >
-                                {on ? <Check className="size-3.5" /> : <X className="size-3.5 opacity-50" />}
+                                {on ? (
+                                  <Check className="size-3.5" />
+                                ) : (
+                                  <X className="size-3.5 opacity-50" />
+                                )}
                               </button>
                             </td>
                           );
