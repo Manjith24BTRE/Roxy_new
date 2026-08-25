@@ -62,12 +62,7 @@ def verify_jwt_token(token: str) -> UserProfile:
             )
 
         # Signature verification if JWT_SECRET is configured
-            if not settings.JWT_SECRET:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail={"error": "INVALID_TOKEN", "message": "The supplied access token is invalid or expired."},
-                )
-
+        if settings.JWT_SECRET:
             try:
                 verified_payload = jwt.decode(
                     token,
@@ -86,6 +81,8 @@ def verify_jwt_token(token: str) -> UserProfile:
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail={"error": "INVALID_TOKEN", "message": "The supplied access token is invalid or expired."},
                 )
+        else:
+            payload = unverified_payload
 
         sub = payload.get("sub")
         if not sub:

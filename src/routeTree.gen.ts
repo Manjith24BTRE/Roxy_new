@@ -19,7 +19,6 @@ import { Route as CreditsRouteImport } from './routes/credits'
 import { Route as FeatureFlagsRouteImport } from './routes/feature-flags'
 import { Route as FeedbackRouteImport } from './routes/feedback'
 import { Route as JobsRouteImport } from './routes/jobs'
-import { Route as LoginRouteImport } from './routes/login'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as ModelsRouteImport } from './routes/models'
 import { Route as MonitoringRouteImport } from './routes/monitoring'
@@ -28,7 +27,6 @@ import { Route as PlansRouteImport } from './routes/plans'
 import { Route as RolesRouteImport } from './routes/roles'
 import { Route as SessionsRouteImport } from './routes/sessions'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SystemHealthRouteImport } from './routes/system-health'
 import { Route as TicketsRouteImport } from './routes/tickets'
 import { Route as TransactionsRouteImport } from './routes/transactions'
@@ -85,11 +83,6 @@ const JobsRoute = JobsRouteImport.update({
   path: '/jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const LogsRoute = LogsRouteImport.update({
   id: '/logs',
   path: '/logs',
@@ -130,11 +123,6 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SignupRoute = SignupRouteImport.update({
-  id: '/signup',
-  path: '/signup',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SystemHealthRoute = SystemHealthRouteImport.update({
   id: '/system-health',
   path: '/system-health',
@@ -172,7 +160,6 @@ export interface FileRoutesByFullPath {
   '/feature-flags': typeof FeatureFlagsRoute
   '/feedback': typeof FeedbackRoute
   '/jobs': typeof JobsRoute
-  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/models': typeof ModelsRoute
   '/monitoring': typeof MonitoringRoute
@@ -181,7 +168,6 @@ export interface FileRoutesByFullPath {
   '/roles': typeof RolesRoute
   '/sessions': typeof SessionsRoute
   '/settings': typeof SettingsRoute
-  '/signup': typeof SignupRoute
   '/system-health': typeof SystemHealthRoute
   '/tickets': typeof TicketsRoute
   '/transactions': typeof TransactionsRoute
@@ -199,7 +185,6 @@ export interface FileRoutesByTo {
   '/feature-flags': typeof FeatureFlagsRoute
   '/feedback': typeof FeedbackRoute
   '/jobs': typeof JobsRoute
-  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/models': typeof ModelsRoute
   '/monitoring': typeof MonitoringRoute
@@ -208,7 +193,6 @@ export interface FileRoutesByTo {
   '/roles': typeof RolesRoute
   '/sessions': typeof SessionsRoute
   '/settings': typeof SettingsRoute
-  '/signup': typeof SignupRoute
   '/system-health': typeof SystemHealthRoute
   '/tickets': typeof TicketsRoute
   '/transactions': typeof TransactionsRoute
@@ -227,7 +211,6 @@ export interface FileRoutesById {
   '/feature-flags': typeof FeatureFlagsRoute
   '/feedback': typeof FeedbackRoute
   '/jobs': typeof JobsRoute
-  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/models': typeof ModelsRoute
   '/monitoring': typeof MonitoringRoute
@@ -236,7 +219,6 @@ export interface FileRoutesById {
   '/roles': typeof RolesRoute
   '/sessions': typeof SessionsRoute
   '/settings': typeof SettingsRoute
-  '/signup': typeof SignupRoute
   '/system-health': typeof SystemHealthRoute
   '/tickets': typeof TicketsRoute
   '/transactions': typeof TransactionsRoute
@@ -256,7 +238,6 @@ export interface FileRouteTypes {
     | '/feature-flags'
     | '/feedback'
     | '/jobs'
-    | '/login'
     | '/logs'
     | '/models'
     | '/monitoring'
@@ -265,7 +246,6 @@ export interface FileRouteTypes {
     | '/roles'
     | '/sessions'
     | '/settings'
-    | '/signup'
     | '/system-health'
     | '/tickets'
     | '/transactions'
@@ -283,7 +263,6 @@ export interface FileRouteTypes {
     | '/feature-flags'
     | '/feedback'
     | '/jobs'
-    | '/login'
     | '/logs'
     | '/models'
     | '/monitoring'
@@ -292,7 +271,6 @@ export interface FileRouteTypes {
     | '/roles'
     | '/sessions'
     | '/settings'
-    | '/signup'
     | '/system-health'
     | '/tickets'
     | '/transactions'
@@ -310,7 +288,6 @@ export interface FileRouteTypes {
     | '/feature-flags'
     | '/feedback'
     | '/jobs'
-    | '/login'
     | '/logs'
     | '/models'
     | '/monitoring'
@@ -319,7 +296,6 @@ export interface FileRouteTypes {
     | '/roles'
     | '/sessions'
     | '/settings'
-    | '/signup'
     | '/system-health'
     | '/tickets'
     | '/transactions'
@@ -338,7 +314,6 @@ export interface RootRouteChildren {
   FeatureFlagsRoute: typeof FeatureFlagsRoute
   FeedbackRoute: typeof FeedbackRoute
   JobsRoute: typeof JobsRoute
-  LoginRoute: typeof LoginRoute
   LogsRoute: typeof LogsRoute
   ModelsRoute: typeof ModelsRoute
   MonitoringRoute: typeof MonitoringRoute
@@ -347,7 +322,6 @@ export interface RootRouteChildren {
   RolesRoute: typeof RolesRoute
   SessionsRoute: typeof SessionsRoute
   SettingsRoute: typeof SettingsRoute
-  SignupRoute: typeof SignupRoute
   SystemHealthRoute: typeof SystemHealthRoute
   TicketsRoute: typeof TicketsRoute
   TransactionsRoute: typeof TransactionsRoute
@@ -427,13 +401,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JobsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/logs': {
       id: '/logs'
       path: '/logs'
@@ -490,13 +457,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/signup': {
-      id: '/signup'
-      path: '/signup'
-      fullPath: '/signup'
-      preLoaderRoute: typeof SignupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/system-health': {
       id: '/system-health'
       path: '/system-health'
@@ -546,7 +506,6 @@ const rootRouteChildren: RootRouteChildren = {
   FeatureFlagsRoute: FeatureFlagsRoute,
   FeedbackRoute: FeedbackRoute,
   JobsRoute: JobsRoute,
-  LoginRoute: LoginRoute,
   LogsRoute: LogsRoute,
   ModelsRoute: ModelsRoute,
   MonitoringRoute: MonitoringRoute,
@@ -555,7 +514,6 @@ const rootRouteChildren: RootRouteChildren = {
   RolesRoute: RolesRoute,
   SessionsRoute: SessionsRoute,
   SettingsRoute: SettingsRoute,
-  SignupRoute: SignupRoute,
   SystemHealthRoute: SystemHealthRoute,
   TicketsRoute: TicketsRoute,
   TransactionsRoute: TransactionsRoute,

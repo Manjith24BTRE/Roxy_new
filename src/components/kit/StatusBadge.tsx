@@ -94,7 +94,5 @@ export function StatusBadge({
 
 export function SeverityDot({ severity }: { severity: string }) {
   const tone = TONES[severity] ?? "neutral";
-  return (
-    <span className={cn("inline-block size-2 rounded-full", TONE_CLASS[tone], "bg-current")} />
-  );
+  return <span className={cn("inline-block size-2 rounded-full", TONE_CLASS[tone], "bg-current")} />;
 }

@@ -71,7 +71,8 @@ export function FilterBar({
   children?: ReactNode;
   className?: string;
 }) {
-  const dirty = (search ? search.length > 0 : false) || filters.some((f) => f.value !== "all");
+  const dirty =
+    (search ? search.length > 0 : false) || filters.some((f) => f.value !== "all");
 
   return (
     <div
@@ -86,6 +87,7 @@ export function FilterBar({
           onChange={onSearchChange}
           placeholder={searchPlaceholder ?? "Search…"}
         />
+
       )}
       <div className="flex flex-wrap items-center gap-2">
         {filters.map((f) => (
