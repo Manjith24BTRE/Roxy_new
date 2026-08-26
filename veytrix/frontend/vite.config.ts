@@ -8,10 +8,14 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@command-centre': path.resolve(__dirname, '../command-centre'),
     },
   },
   server: {
     port: 5173,
     host: true,
+    fs: {
+      allow: ['..'],
+    },
   },
 });
