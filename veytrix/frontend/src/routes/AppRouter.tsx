@@ -23,33 +23,42 @@ import { ControllerRoute } from './ControllerRoute';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { FooterModalProvider } from '../context/FooterModalContext';
 
-// Command Centre imports — pages
-import { CommandCentreLayout } from '@command-centre/src/layouts/CommandCentreLayout';
-import { Dashboard as CCDashboard } from '@command-centre/src/pages/operations/Dashboard';
-import { SystemHealth } from '@command-centre/src/pages/operations/SystemHealth';
-import { Monitoring } from '@command-centre/src/pages/operations/Monitoring';
-import { Logs } from '@command-centre/src/pages/operations/Logs';
-import { Users as CCUsers } from '@command-centre/src/pages/platform/Users';
-import { Activity as CCActivity } from '@command-centre/src/pages/platform/Activity';
-import { Sessions } from '@command-centre/src/pages/platform/Sessions';
-import { Roles } from '@command-centre/src/pages/platform/Roles';
-import { Permissions } from '@command-centre/src/pages/platform/Permissions';
-import { AuditLogs } from '@command-centre/src/pages/platform/AuditLogs';
-import { Models } from '@command-centre/src/pages/ai/Models';
-import { Jobs } from '@command-centre/src/pages/ai/Jobs';
-import { Analytics } from '@command-centre/src/pages/ai/Analytics';
-import { Plans } from '@command-centre/src/pages/billing/Plans';
-import { Transactions } from '@command-centre/src/pages/billing/Transactions';
-import { Credits } from '@command-centre/src/pages/billing/Credits';
-import { Tickets } from '@command-centre/src/pages/support/Tickets';
-import { Feedback } from '@command-centre/src/pages/support/Feedback';
-import { Announcements } from '@command-centre/src/pages/settings/Announcements';
-import { PlatformSettings } from '@command-centre/src/pages/settings/PlatformSettings';
-import { FeatureFlags } from '@command-centre/src/pages/settings/FeatureFlags';
-import { Backups } from '@command-centre/src/pages/settings/Backups';
-import { TesterDashboard } from '@command-centre/tester/TesterDashboard';
-import { DeveloperDashboard } from '@command-centre/developer/DeveloperDashboard';
+import React, { Suspense } from 'react';
+import { Loader2 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
+
+// Command Centre imports — lazy loaded
+const CommandCentreLayout = React.lazy(() => import('@command-centre/src/layouts/CommandCentreLayout').then(m => ({ default: m.CommandCentreLayout })));
+const CCDashboard = React.lazy(() => import('@command-centre/src/pages/operations/Dashboard').then(m => ({ default: m.Dashboard })));
+const SystemHealth = React.lazy(() => import('@command-centre/src/pages/operations/SystemHealth').then(m => ({ default: m.SystemHealth })));
+const Monitoring = React.lazy(() => import('@command-centre/src/pages/operations/Monitoring').then(m => ({ default: m.Monitoring })));
+const Logs = React.lazy(() => import('@command-centre/src/pages/operations/Logs').then(m => ({ default: m.Logs })));
+const CCUsers = React.lazy(() => import('@command-centre/src/pages/platform/Users').then(m => ({ default: m.Users })));
+const CCActivity = React.lazy(() => import('@command-centre/src/pages/platform/Activity').then(m => ({ default: m.Activity })));
+const Sessions = React.lazy(() => import('@command-centre/src/pages/platform/Sessions').then(m => ({ default: m.Sessions })));
+const Roles = React.lazy(() => import('@command-centre/src/pages/platform/Roles').then(m => ({ default: m.Roles })));
+const Permissions = React.lazy(() => import('@command-centre/src/pages/platform/Permissions').then(m => ({ default: m.Permissions })));
+const AuditLogs = React.lazy(() => import('@command-centre/src/pages/platform/AuditLogs').then(m => ({ default: m.AuditLogs })));
+const Models = React.lazy(() => import('@command-centre/src/pages/ai/Models').then(m => ({ default: m.Models })));
+const Jobs = React.lazy(() => import('@command-centre/src/pages/ai/Jobs').then(m => ({ default: m.Jobs })));
+const Analytics = React.lazy(() => import('@command-centre/src/pages/ai/Analytics').then(m => ({ default: m.Analytics })));
+const Plans = React.lazy(() => import('@command-centre/src/pages/billing/Plans').then(m => ({ default: m.Plans })));
+const Transactions = React.lazy(() => import('@command-centre/src/pages/billing/Transactions').then(m => ({ default: m.Transactions })));
+const Credits = React.lazy(() => import('@command-centre/src/pages/billing/Credits').then(m => ({ default: m.Credits })));
+const Tickets = React.lazy(() => import('@command-centre/src/pages/support/Tickets').then(m => ({ default: m.Tickets })));
+const Feedback = React.lazy(() => import('@command-centre/src/pages/support/Feedback').then(m => ({ default: m.Feedback })));
+const Announcements = React.lazy(() => import('@command-centre/src/pages/settings/Announcements').then(m => ({ default: m.Announcements })));
+const PlatformSettings = React.lazy(() => import('@command-centre/src/pages/settings/PlatformSettings').then(m => ({ default: m.PlatformSettings })));
+const FeatureFlags = React.lazy(() => import('@command-centre/src/pages/settings/FeatureFlags').then(m => ({ default: m.FeatureFlags })));
+const Backups = React.lazy(() => import('@command-centre/src/pages/settings/Backups').then(m => ({ default: m.Backups })));
+const TesterDashboard = React.lazy(() => import('@command-centre/tester/TesterDashboard').then(m => ({ default: m.TesterDashboard })));
+const DeveloperDashboard = React.lazy(() => import('@command-centre/developer/DeveloperDashboard').then(m => ({ default: m.DeveloperDashboard })));
+
+const SuspenseLoader = () => (
+  <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC]">
+    <Loader2 className="h-6 w-6 text-[#3B6CE7] animate-spin" />
+  </div>
+);
 
 const router = createBrowserRouter([
   {
@@ -89,7 +98,9 @@ const router = createBrowserRouter([
         path: 'command-centre',
         element: (
           <ControllerRoute>
-            <CommandCentreLayout />
+            <Suspense fallback={<SuspenseLoader />}>
+              <CommandCentreLayout />
+            </Suspense>
           </ControllerRoute>
         ),
         children: [

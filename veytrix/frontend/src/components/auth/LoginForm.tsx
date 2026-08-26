@@ -24,7 +24,7 @@ export function LoginForm() {
       setRedirectAfterLogin(null);
       
       if (authUser?.email?.toLowerCase() === 'official@mavrostech.in') {
-        window.location.href = '/command-centre';
+        navigate('/command-centre');
       } else {
         navigate('/home');
       }
