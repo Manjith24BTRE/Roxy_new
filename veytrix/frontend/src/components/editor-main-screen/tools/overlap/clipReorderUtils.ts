@@ -18,18 +18,18 @@ export class ClipReorderUtils {
       }
 
       const updated = { ...c, timelineStart: currentStart, start: currentStart };
-      currentStart += c.duration;
+      currentStart = Math.round((currentStart + c.duration) * 10000) / 10000;
       return updated;
     });
 
-    // 2. Align audio clips to their corresponding parent videos
+    // 2. Align audio clips to their corresponding parent videos ONLY if explicitly linked
     return updatedClips.map((c) => {
       const isAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
       if (!isAudio) return c;
 
       const parentVideo = updatedClips.find(
         (v: any) => (v.trackId !== 'audio' && v.trackId !== 'music' && v.type !== 'audio' && !v.isDetachedAudio && v.trackId !== 'overlay') &&
-               (v.id === c.sourceVideoId || c.id === `detached-audio-${v.id}` || v.mediaId === c.mediaId)
+               (v.id === c.sourceVideoId || c.id === `detached-audio-${v.id}`)
       );
 
       if (parentVideo) {

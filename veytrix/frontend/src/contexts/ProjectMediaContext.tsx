@@ -21,7 +21,7 @@ interface ProjectMediaContextType {
   setProjectTitle: (title: string) => void;
   mediaFiles: MediaItem[];
   activeMediaId: string | null;
-  addMediaFiles: (files: File[]) => Promise<void>;
+  addMediaFiles: (files: File[], expectedType?: 'video' | 'image') => Promise<void>;
   removeMediaFile: (id: string) => void;
   updateMediaName: (id: string, name: string) => void;
   setActiveMediaId: (id: string | null) => void;
@@ -88,11 +88,40 @@ export const ProjectMediaProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [mediaFiles, setMediaFiles] = useState<MediaItem[]>([]);
   const [activeMediaId, setActiveMediaId] = useState<string | null>(null);
 
-  const addMediaFiles = async (files: File[]) => {
+  const addMediaFiles = async (files: File[], expectedType?: 'video' | 'image') => {
+    const validFiles = files.filter((file) => {
+      const isVideoType = file.type.startsWith('video/');
+      const isVideoExt = /\.(mp4|mov|webm|mkv|avi|m4v|ts|mts|3gp|flv|wmv)$/i.test(file.name);
+      const isImageType = file.type.startsWith('image/');
+      const isImageExt = /\.(png|jpg|jpeg|webp|gif|bmp|tiff|svg)$/i.test(file.name);
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+      if (isPdf) return false;
+
+      if (expectedType === 'video') {
+        return (isVideoType || isVideoExt) && !isImageType;
+      } else if (expectedType === 'image') {
+        return (isImageType || isImageExt) && !isVideoType;
+      }
+
+      return (isVideoType || isVideoExt || isImageType || isImageExt);
+    });
+
+    if (validFiles.length === 0 && files.length > 0) {
+      if (expectedType === 'image') {
+        alert('Only image files (PNG, JPG, JPEG, WEBP, GIF, etc.) are allowed. PDF and video files are not accepted.');
+      } else if (expectedType === 'video') {
+        alert('Only video files (MP4, MOV, WebM, MKV, AVI, etc.) are allowed. PDF and image files are not accepted.');
+      } else {
+        alert('Only video and image files are allowed. PDF files are not accepted.');
+      }
+      return;
+    }
+
     const newItems: MediaItem[] = [];
 
-    for (const file of files) {
-      const isVideo = file.type.startsWith('video');
+    for (const file of validFiles) {
+      const isVideo = file.type.startsWith('video') || /\.(mp4|mov|webm|mkv|avi|m4v|ts|mts|3gp|flv|wmv)$/i.test(file.name);
       const blobUrl = URL.createObjectURL(file);
       let duration = 5;
 

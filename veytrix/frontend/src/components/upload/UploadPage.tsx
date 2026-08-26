@@ -25,7 +25,7 @@ export function UploadPage() {
     if (!files || files.length === 0) return;
     setIsProcessing(true);
     const fileArray = Array.from(files);
-    await addMediaFiles(fileArray);
+    await addMediaFiles(fileArray, activeTab);
     setIsProcessing(false);
   };
 

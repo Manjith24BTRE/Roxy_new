@@ -48,7 +48,7 @@ export function UploadTabs({
         type="file"
         ref={videoInputRef}
         multiple
-        accept="video/*"
+        accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v,.ts,.3gp"
         disabled={disabled || isLoading}
         onChange={(e) => {
           if (onFilesSelected) onFilesSelected(e.target.files);
@@ -62,7 +62,7 @@ export function UploadTabs({
         type="file"
         ref={imageInputRef}
         multiple
-        accept="image/*"
+        accept="image/*,.png,.jpg,.jpeg,.webp,.gif,.bmp,.svg"
         disabled={disabled || isLoading}
         onChange={(e) => {
           if (onFilesSelected) onFilesSelected(e.target.files);

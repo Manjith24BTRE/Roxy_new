@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   Plus, Type, AlignLeft, AlignCenter, AlignRight, AlignJustify,
-  Bold, Italic, Underline, Strikethrough, Sparkles, Trash2, Edit,
-  Sliders, Palette, Layers, Move, RotateCw, ZoomIn, Eye, EyeOff,
-  Sun, Wand2, Search, Check, Copy, ArrowLeftRight, ArrowUpDown
+  Bold, Italic, Underline, Strikethrough, Sparkles, Trash2,
+  Sliders, Palette, Move, ArrowLeftRight, ArrowUpDown,
+  Sun, Wand2, Search
 } from 'lucide-react';
 
 export interface TextOverlay {
@@ -149,64 +149,69 @@ export const TEXT_PRESETS = [
     strokeColor: '#000000',
     strokeWidth: 2,
     shadow: true,
-    shadowColor: 'rgba(0,0,0,0.8)',
-    shadowBlur: 6,
-    gradientText: 'linear-gradient(to bottom, #fef08a, #eab308, #ca8a04)',
+    shadowColor: '#ca8a04',
+    shadowBlur: 8,
+    glow: false,
+    neon: false,
   },
   {
-    name: 'Subtitle Clean',
+    name: 'Retro Arcade',
+    color: '#f43f5e',
+    font: 'Press Start 2P',
+    weight: '400',
+    bold: false,
+    stroke: true,
+    strokeColor: '#facc15',
+    strokeWidth: 2,
+    shadow: true,
+    shadowColor: '#881337',
+    shadowBlur: 0,
+    glow: false,
+    neon: false,
+  },
+  {
+    name: 'Minimal White',
     color: '#ffffff',
     font: 'Inter',
     weight: '600',
-    bold: false,
-    stroke: true,
-    strokeColor: '#000000',
-    strokeWidth: 2,
-    shadow: true,
-    shadowColor: 'rgba(0,0,0,0.7)',
-    shadowBlur: 4,
-    bgColor: '#000000',
-    bgOpacity: 60,
-  },
-  {
-    name: 'Retro VHS Synth',
-    color: '#f43f5e',
-    font: 'Courier New',
-    weight: '700',
-    bold: true,
-    stroke: true,
-    strokeColor: '#06b6d4',
-    strokeWidth: 3,
-    shadow: true,
-    shadowColor: '#a855f7',
-    shadowBlur: 8,
-  },
-  {
-    name: 'Bebas Bold Header',
-    color: '#ffffff',
-    font: 'Bebas Neue',
-    weight: '900',
     bold: true,
     stroke: false,
     strokeColor: '#000000',
     strokeWidth: 0,
     shadow: true,
-    shadowColor: 'rgba(0,0,0,0.8)',
-    shadowBlur: 8,
-    textTransform: 'uppercase' as const,
+    shadowColor: 'rgba(0,0,0,0.5)',
+    shadowBlur: 4,
+    bgColor: '#000000',
+    bgOpacity: 50,
   },
   {
-    name: 'Pastel Dream',
-    color: '#f472b6',
-    font: 'Pacifico',
+    name: 'Bold Red Impact',
+    color: '#ef4444',
+    font: 'Anton',
     weight: '400',
     bold: false,
     stroke: true,
     strokeColor: '#ffffff',
     strokeWidth: 2,
     shadow: true,
-    shadowColor: '#c084fc',
+    shadowColor: '#000000',
     shadowBlur: 10,
+  },
+  {
+    name: 'Sunset Glow',
+    color: '#fb923c',
+    font: 'Montserrat',
+    weight: '700',
+    bold: true,
+    gradientText: 'linear-gradient(135deg, #fb923c 0%, #db2777 100%)',
+    stroke: false,
+    strokeColor: '#000000',
+    strokeWidth: 0,
+    shadow: true,
+    shadowColor: '#9d174d',
+    shadowBlur: 12,
+    glow: true,
+    glowColor: '#db2777',
   }
 ];
 
@@ -218,7 +223,9 @@ export function TextPanel({
   activeOverlayId,
   setActiveOverlayId,
 }: TextPanelProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'edit' | 'add' | 'fonts' | 'styles'>('edit');
+  // Main toolbar selection: 'text' (Add/Remove) or 'adjustments' (All styling/fonts/presets)
+  const [activeMainTab, setActiveMainTab] = useState<'text' | 'adjustments'>('text');
+  
   const [inputText, setInputText] = useState('Add Headline');
   const [fontFamily, setFontFamily] = useState('Inter');
   const [fontSearch, setFontSearch] = useState('');
@@ -265,7 +272,7 @@ export function TextPanel({
   const [flipV, setFlipV] = useState(false);
   const [animation, setAnimation] = useState('none');
 
-  const activeOverlay = overlays.find((o) => o.id === activeOverlayId);
+  const activeOverlay = overlays.find((o) => o.id === activeOverlayId) || (overlays.length > 0 ? overlays[0] : null);
 
   // Sync active overlay properties when selected
   useEffect(() => {
@@ -309,15 +316,14 @@ export function TextPanel({
       setFlipH(activeOverlay.flipH ?? false);
       setFlipV(activeOverlay.flipV ?? false);
       setAnimation(activeOverlay.animation || 'none');
-
-      setActiveSubTab('edit');
     }
   }, [activeOverlayId, activeOverlay]);
 
   // Update Field Handler
   const handleUpdateField = (field: keyof TextOverlay, value: any) => {
-    if (activeOverlayId) {
-      onUpdateOverlay(activeOverlayId, { [field]: value });
+    const targetId = activeOverlayId || activeOverlay?.id;
+    if (targetId) {
+      onUpdateOverlay(targetId, { [field]: value });
     }
     // Local state mirror
     switch (field) {
@@ -404,7 +410,7 @@ export function TextPanel({
       startTime: 0,
       duration: 5,
     });
-    setActiveSubTab('edit');
+    setActiveMainTab('adjustments');
   };
 
   const applyPreset = (preset: typeof TEXT_PRESETS[0]) => {
@@ -425,8 +431,9 @@ export function TextPanel({
     if (preset.bgColor !== undefined) setBgColor(preset.bgColor);
     if (preset.bgOpacity !== undefined) setBgOpacity(preset.bgOpacity);
 
-    if (activeOverlayId) {
-      onUpdateOverlay(activeOverlayId, {
+    const targetId = activeOverlayId || activeOverlay?.id;
+    if (targetId) {
+      onUpdateOverlay(targetId, {
         color: preset.color,
         font: preset.font,
         weight: preset.weight,
@@ -447,98 +454,165 @@ export function TextPanel({
     }
   };
 
-  const filteredFonts = FONT_LIBRARY.filter((f) => {
-    const matchesCat = selectedFontCategory === 'All' || f.category === selectedFontCategory;
-    const matchesSearch = f.name.toLowerCase().includes(fontSearch.toLowerCase());
-    return matchesCat && matchesSearch;
-  });
-
   const fontCategories = ['All', 'Sans Serif', 'Serif', 'Display', 'Script', 'Modern', 'Vintage', 'Gaming', 'Luxury'];
 
+  const filteredFonts = FONT_LIBRARY.filter((f) => {
+    const matchesSearch = f.name.toLowerCase().includes(fontSearch.toLowerCase()) || f.category.toLowerCase().includes(fontSearch.toLowerCase());
+    const matchesCategory = selectedFontCategory === 'All' || f.category === selectedFontCategory;
+    return matchesSearch && matchesCategory;
+  });
+
   return (
-    <div className="flex flex-col h-full bg-[#090d16] text-slate-100 select-none">
-      {/* Top Header & Edit Navigation Tabs */}
-      <div className="p-3 border-b border-white/10 bg-[#0c101d] flex-shrink-0 space-y-2">
+    <div className="h-full flex flex-col bg-[#060910] text-slate-200 select-none overflow-hidden">
+      {/* Top Header & Reorganized 2-Main-Option Toolbar: TEXT | ADJUSTMENTS */}
+      <div className="p-3 border-b border-white/10 bg-[#0c101d] flex-shrink-0 space-y-2.5">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
             <Type className="h-4 w-4 text-sky-400" />
-            <span>Text</span>
+            <span>Text Tool</span>
           </h3>
           {activeOverlay && (
-            <span className="text-[9px] font-mono font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20 truncate max-w-[120px]">
-              Editing "{activeOverlay.text}"
+            <span className="text-[9px] font-mono font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20 truncate max-w-[140px]">
+              Active: "{activeOverlay.text}"
             </span>
           )}
         </div>
 
-        {/* Direct Subtabs Access Bar: EDIT | ADD | FONTS | STYLES */}
+        {/* 2 Main Options Navigation Bar */}
         <div className="flex border border-white/10 rounded-lg bg-slate-950/60 p-0.5 gap-0.5">
           <button
             type="button"
-            onClick={() => setActiveSubTab('edit')}
-            className={`flex-1 py-1 text-[10px] font-bold rounded cursor-pointer transition flex items-center justify-center gap-1 ${
-              activeSubTab === 'edit'
+            onClick={() => setActiveMainTab('text')}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-md cursor-pointer transition flex items-center justify-center gap-1.5 ${
+              activeMainTab === 'text'
                 ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Edit className="h-3 w-3" />
-            <span>Edit Controls</span>
+            <Type className="h-3.5 w-3.5" />
+            <span>Text</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveSubTab('add')}
-            className={`flex-1 py-1 text-[10px] font-bold rounded cursor-pointer transition flex items-center justify-center gap-1 ${
-              activeSubTab === 'add'
+            onClick={() => setActiveMainTab('adjustments')}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-md cursor-pointer transition flex items-center justify-center gap-1.5 ${
+              activeMainTab === 'adjustments'
                 ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Plus className="h-3 w-3" />
-            <span>Add Text</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('fonts')}
-            className={`flex-1 py-1 text-[10px] font-bold rounded cursor-pointer transition flex items-center justify-center gap-1 ${
-              activeSubTab === 'fonts'
-                ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Type className="h-3 w-3" />
-            <span>Fonts</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('styles')}
-            className={`flex-1 py-1 text-[10px] font-bold rounded cursor-pointer transition flex items-center justify-center gap-1 ${
-              activeSubTab === 'styles'
-                ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Sparkles className="h-3 w-3 text-amber-400" />
-            <span>Presets</span>
+            <Sliders className="h-3.5 w-3.5" />
+            <span>Adjustments</span>
           </button>
         </div>
       </div>
 
       <div className="flex-1 p-3 overflow-y-auto space-y-4">
-        {/* TAB 1: EDIT TEXT CONTROLS */}
-        {activeSubTab === 'edit' && (
+        {/* MAIN OPTION 1: TEXT (Add Text & Remove/Delete Text) */}
+        {activeMainTab === 'text' && (
+          <div className="space-y-5">
+            {/* 1. ADD NEW TEXT SECTION */}
+            <div className="bg-slate-900/40 border border-white/5 rounded-xl p-3.5 space-y-3">
+              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-sky-400">
+                <Plus className="h-4 w-4" />
+                <span>Add Text</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Text Content</label>
+                <textarea
+                  rows={3}
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder="Type new text title..."
+                  className="w-full rounded-lg bg-slate-950 border border-white/10 px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500/50"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCreateOverlay}
+                className="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md transition"
+              >
+                <Plus className="h-4 w-4 stroke-[3]" />
+                <span>Add Text Clip to Timeline</span>
+              </button>
+            </div>
+
+            {/* 2. REMOVE / DELETE TEXT SECTION */}
+            <div className="bg-slate-900/40 border border-white/5 rounded-xl p-3.5 space-y-3">
+              <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-rose-400">
+                <div className="flex items-center gap-1.5">
+                  <Trash2 className="h-4 w-4" />
+                  <span>Remove / Delete Text</span>
+                </div>
+                <span className="text-[9px] font-mono text-slate-400">({overlays.length} active)</span>
+              </div>
+
+              {overlays.length === 0 ? (
+                <p className="text-xs text-slate-500 italic py-2 text-center">No text clips currently on timeline.</p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                    {overlays.map((item) => {
+                      const isActive = item.id === activeOverlayId;
+                      return (
+                        <div
+                          key={item.id}
+                          className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition ${
+                            isActive
+                              ? 'bg-sky-500/10 border-sky-400/50 text-sky-200'
+                              : 'bg-slate-950 border-white/5 text-slate-300 hover:border-white/15'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setActiveOverlayId(isActive ? null : item.id)}
+                            className="flex items-center gap-2 text-left truncate flex-1 cursor-pointer"
+                          >
+                            <Type className="h-3.5 w-3.5 text-sky-400 flex-shrink-0" />
+                            <span className="text-xs font-medium truncate">{item.text}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => onRemoveOverlay(item.id)}
+                            title="Remove Text"
+                            className="h-7 w-7 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 flex items-center justify-center cursor-pointer transition flex-shrink-0"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {activeOverlay && (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveOverlay(activeOverlay.id)}
+                      className="w-full mt-2 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="truncate">Delete Selected Text ("{activeOverlay.text}")</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* MAIN OPTION 2: ADJUSTMENTS (All customization, fonts, colors, styling, presets in one place) */}
+        {activeMainTab === 'adjustments' && (
           <div className="space-y-4">
-            {/* Active Overlays List Selection Bar */}
+            {/* Timeline Text Selector Bar */}
             {overlays.length > 0 && (
               <div className="space-y-1.5 bg-slate-950/40 p-2 border border-white/5 rounded-xl">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
-                    Text Clips on Timeline ({overlays.length})
-                  </span>
-                </div>
+                <span className="text-[9.5px] font-mono uppercase tracking-wider text-slate-400 block px-1">
+                  Select Text Clip to Edit ({overlays.length})
+                </span>
                 <div className="flex gap-1.5 overflow-x-auto py-1 scrollbar-none">
                   {overlays.map((item) => {
                     const isActive = item.id === activeOverlayId;
@@ -564,21 +638,55 @@ export function TextPanel({
 
             {/* Direct Text String Editor */}
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Text Content</label>
+              <label className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Edit Text Content</label>
               <textarea
                 rows={2}
                 value={inputText}
                 onChange={(e) => handleUpdateField('text', e.target.value)}
-                placeholder="Type overlay text..."
+                placeholder="Type text..."
                 className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500/50"
               />
             </div>
 
-            {/* 1. TYPOGRAPHY */}
+            {/* DESIGNER STYLE PRESETS */}
+            <div className="bg-slate-900/40 border border-white/5 rounded-xl p-3 space-y-2.5">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Text Presets & Styles</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {TEXT_PRESETS.map((p) => (
+                  <button
+                    key={p.name}
+                    type="button"
+                    onClick={() => applyPreset(p)}
+                    className="p-2.5 rounded-xl bg-slate-950 hover:bg-slate-900 border border-white/10 hover:border-white/20 transition cursor-pointer text-left flex flex-col justify-between h-16 group"
+                  >
+                    <span className="text-[8.5px] text-slate-400 font-mono font-bold truncate">{p.name}</span>
+                    <span
+                      className="text-sm font-bold self-center truncate max-w-[110px]"
+                      style={{
+                        color: p.color,
+                        fontFamily: p.font,
+                        textShadow: p.shadow ? `0 0 ${p.shadowBlur}px ${p.shadowColor}` : 'none',
+                        WebkitTextStroke: p.stroke ? `${p.strokeWidth / 2}px ${p.strokeColor}` : 'none',
+                        background: p.gradientText || 'none',
+                        WebkitBackgroundClip: p.gradientText ? 'text' : 'border-box',
+                        WebkitTextFillColor: p.gradientText ? 'transparent' : 'inherit',
+                      }}
+                    >
+                      Style Preview
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 1. TYPOGRAPHY & LAYOUT (Font family, size, weight, alignment, line height, letter spacing) */}
             <div className="bg-slate-900/40 border border-white/5 rounded-xl p-3 space-y-3">
               <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-sky-400 flex items-center justify-between">
-                <span>Typography & Layout</span>
-                <Sliders className="h-3 w-3" />
+                <span>Typography & Formatting</span>
+                <Sliders className="h-3.5 w-3.5" />
               </div>
 
               {/* Font Family & Weight */}
@@ -643,6 +751,23 @@ export function TextPanel({
                     className="w-full accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
                   />
                 </div>
+              </div>
+
+              {/* Line Height Slider */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[8.5px] text-slate-400">
+                  <span>Line Height</span>
+                  <span className="font-mono text-sky-400">{lineHeight.toFixed(1)}x</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.8"
+                  max="3.0"
+                  step="0.1"
+                  value={lineHeight}
+                  onChange={(e) => handleUpdateField('lineHeight', Number(e.target.value))}
+                  className="w-full accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                />
               </div>
 
               {/* Formatting & Alignment Toolbar */}
@@ -724,11 +849,11 @@ export function TextPanel({
               </div>
             </div>
 
-            {/* 2. COLORS & GRADIENTS */}
+            {/* 2. COLORS, BACKGROUND & OPACITY */}
             <div className="bg-slate-900/40 border border-white/5 rounded-xl p-3 space-y-3">
               <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400 flex items-center justify-between">
-                <span>Color & Background</span>
-                <Palette className="h-3 w-3" />
+                <span>Color, Background & Opacity</span>
+                <Palette className="h-3.5 w-3.5" />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -770,13 +895,130 @@ export function TextPanel({
                   </div>
                 </div>
               </div>
+
+              {/* Overall Text Opacity Slider */}
+              <div className="space-y-1 bg-slate-950 p-2 rounded-lg border border-white/5">
+                <div className="flex justify-between text-[8.5px] text-slate-400">
+                  <span>Overall Opacity</span>
+                  <span className="font-mono text-amber-400">{opacity}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={opacity}
+                  onChange={(e) => handleUpdateField('opacity', Number(e.target.value))}
+                  className="w-full accent-amber-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                />
+              </div>
             </div>
 
-            {/* 3. EFFECTS (STROKE, SHADOW, GLOW, NEON) */}
+            {/* 3. TRANSFORM & POSITION (Scale, Rotation, Position X/Y, Flips) */}
+            <div className="bg-slate-900/40 border border-white/5 rounded-xl p-3 space-y-3">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 flex items-center justify-between">
+                <span>Transform, Position & Rotation</span>
+                <Move className="h-3.5 w-3.5" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {/* Scale Multiplier */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[8.5px] text-slate-400">
+                    <span>Scale</span>
+                    <span className="font-mono text-emerald-400">{scale.toFixed(2)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.3"
+                    max="3.0"
+                    step="0.05"
+                    value={scale}
+                    onChange={(e) => handleUpdateField('scale', Number(e.target.value))}
+                    className="w-full accent-emerald-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                {/* Rotation */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[8.5px] text-slate-400">
+                    <span>Rotation</span>
+                    <span className="font-mono text-emerald-400">{rotation}°</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="-180"
+                    max="180"
+                    value={rotation}
+                    onChange={(e) => handleUpdateField('rotation', Number(e.target.value))}
+                    className="w-full accent-emerald-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Position X & Position Y Sliders */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[8.5px] text-slate-400">
+                    <span>Position X</span>
+                    <span className="font-mono text-emerald-400">{posX}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="-500"
+                    max="500"
+                    value={posX}
+                    onChange={(e) => handleUpdateField('posX', Number(e.target.value))}
+                    className="w-full accent-emerald-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[8.5px] text-slate-400">
+                    <span>Position Y</span>
+                    <span className="font-mono text-emerald-400">{posY}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="-500"
+                    max="500"
+                    value={posY}
+                    onChange={(e) => handleUpdateField('posY', Number(e.target.value))}
+                    className="w-full accent-emerald-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Flip Horizontal / Vertical */}
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleUpdateField('flipH', !flipH)}
+                  className={`flex-1 py-1 rounded text-[9.5px] font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
+                    flipH ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300' : 'bg-slate-950 border-white/5 text-slate-400'
+                  }`}
+                >
+                  <ArrowLeftRight className="h-3 w-3" />
+                  <span>Flip Horizontal</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleUpdateField('flipV', !flipV)}
+                  className={`flex-1 py-1 rounded text-[9.5px] font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
+                    flipV ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300' : 'bg-slate-950 border-white/5 text-slate-400'
+                  }`}
+                >
+                  <ArrowUpDown className="h-3 w-3" />
+                  <span>Flip Vertical</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 4. EFFECTS & OUTLINE (Stroke, Shadow, Glow, Neon) */}
             <div className="bg-slate-900/40 border border-white/5 rounded-xl p-3 space-y-3">
               <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-purple-400 flex items-center justify-between">
                 <span>Effects & Outline</span>
-                <Sparkles className="h-3 w-3" />
+                <Sparkles className="h-3.5 w-3.5" />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -869,211 +1111,66 @@ export function TextPanel({
               </div>
             </div>
 
-            {/* 4. TRANSFORM & FLIP */}
+            {/* 5. 100+ FONTS CATALOG */}
             <div className="bg-slate-900/40 border border-white/5 rounded-xl p-3 space-y-3">
-              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 flex items-center justify-between">
-                <span>Transform & Flip</span>
-                <Move className="h-3 w-3" />
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-sky-400 flex items-center justify-between">
+                <span>Font Library (100+ Fonts)</span>
+                <Type className="h-3.5 w-3.5" />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                {/* Scale Multiplier */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[8.5px] text-slate-400">
-                    <span>Scale</span>
-                    <span className="font-mono text-emerald-400">{scale.toFixed(2)}x</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.3"
-                    max="3.0"
-                    step="0.05"
-                    value={scale}
-                    onChange={(e) => handleUpdateField('scale', Number(e.target.value))}
-                    className="w-full accent-emerald-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
-                  />
-                </div>
-
-                {/* Rotation */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[8.5px] text-slate-400">
-                    <span>Rotation</span>
-                    <span className="font-mono text-emerald-400">{rotation}°</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="-180"
-                    max="180"
-                    value={rotation}
-                    onChange={(e) => handleUpdateField('rotation', Number(e.target.value))}
-                    className="w-full accent-emerald-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
-                  />
-                </div>
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search 100+ fonts..."
+                  value={fontSearch}
+                  onChange={(e) => setFontSearch(e.target.value)}
+                  className="w-full bg-[#060910] border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none"
+                />
               </div>
 
-              {/* Flip Horizontal / Vertical */}
-              <div className="flex items-center justify-between gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleUpdateField('flipH', !flipH)}
-                  className={`flex-1 py-1 rounded text-[9.5px] font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
-                    flipH ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300' : 'bg-slate-950 border-white/5 text-slate-400'
-                  }`}
-                >
-                  <ArrowLeftRight className="h-3 w-3" />
-                  <span>Flip Horizontal</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleUpdateField('flipV', !flipV)}
-                  className={`flex-1 py-1 rounded text-[9.5px] font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
-                    flipV ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300' : 'bg-slate-950 border-white/5 text-slate-400'
-                  }`}
-                >
-                  <ArrowUpDown className="h-3 w-3" />
-                  <span>Flip Vertical</span>
-                </button>
-              </div>
-            </div>
-
-            {/* 5. ENTRANCE ANIMATION */}
-            <div className="space-y-1 bg-slate-900/40 border border-white/5 rounded-xl p-3">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-sky-400 block mb-1">
-                Entrance & Motion Animation
-              </span>
-              <select
-                value={animation}
-                onChange={(e) => handleUpdateField('animation', e.target.value)}
-                className="w-full rounded-md bg-slate-950 border border-white/10 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
-              >
-                <option value="none">No Animation</option>
-                <option value="fade">Fade In / Out</option>
-                <option value="typewriter">Typewriter Style</option>
-                <option value="slide">Slide Push</option>
-                <option value="zoom">Zoom Burst</option>
-                <option value="bounce">Bounce Pop</option>
-                <option value="blur">Blur Reveal</option>
-              </select>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: ADD TEXT OVERLAY */}
-        {activeSubTab === 'add' && (
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-mono uppercase tracking-wider text-slate-400">New Text String</label>
-              <textarea
-                rows={3}
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder="Type your new text title..."
-                className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500/50"
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={handleCreateOverlay}
-              className="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md transition"
-            >
-              <Plus className="h-4 w-4 stroke-[3]" />
-              <span>Add Text Clip to Timeline</span>
-            </button>
-          </div>
-        )}
-
-        {/* TAB 3: 100+ FONTS CATALOG */}
-        {activeSubTab === 'fonts' && (
-          <div className="space-y-3">
-            {/* Search Bar */}
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
-              <input
-                type="text"
-                placeholder="Search 100+ fonts..."
-                value={fontSearch}
-                onChange={(e) => setFontSearch(e.target.value)}
-                className="w-full bg-[#060910] border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none"
-              />
-            </div>
-
-            {/* Category Filter Pills */}
-            <div className="flex gap-1 overflow-x-auto py-1 scrollbar-none">
-              {fontCategories.map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setSelectedFontCategory(cat)}
-                  className={`px-2.5 py-1 rounded-md text-[9.5px] font-bold whitespace-nowrap cursor-pointer transition ${
-                    selectedFontCategory === cat
-                      ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
-                      : 'bg-slate-900 border border-white/5 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-
-            {/* Fonts Catalog Grid */}
-            <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-1">
-              {filteredFonts.map((f) => {
-                const isSelected = fontFamily === f.name;
-                return (
+              {/* Category Filter Pills */}
+              <div className="flex gap-1 overflow-x-auto py-1 scrollbar-none">
+                {fontCategories.map((cat) => (
                   <button
-                    key={f.name}
+                    key={cat}
                     type="button"
-                    onClick={() => handleUpdateField('font', f.name)}
-                    className={`p-2.5 rounded-xl border text-left flex flex-col justify-between h-16 transition cursor-pointer ${
-                      isSelected
-                        ? 'bg-sky-500/15 border-sky-400 text-sky-300 shadow'
-                        : 'bg-slate-900/50 border-white/5 hover:border-white/15 text-slate-300'
+                    onClick={() => setSelectedFontCategory(cat)}
+                    className={`px-2.5 py-1 rounded-md text-[9.5px] font-bold whitespace-nowrap cursor-pointer transition ${
+                      selectedFontCategory === cat
+                        ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
+                        : 'bg-slate-950 border border-white/5 text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    <span className="text-[8.5px] font-mono text-slate-500">{f.category}</span>
-                    <span className="text-base truncate block" style={{ fontFamily: f.name }}>
-                      {f.name}
-                    </span>
+                    {cat}
                   </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                ))}
+              </div>
 
-        {/* TAB 4: DESIGNER STYLES & PRESETS */}
-        {activeSubTab === 'styles' && (
-          <div className="space-y-3">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1">
-              <Sparkles className="h-3.5 w-3.5 text-amber-400" /> Designer Style Presets
-            </span>
-            <div className="grid grid-cols-2 gap-2">
-              {TEXT_PRESETS.map((p) => (
-                <button
-                  key={p.name}
-                  type="button"
-                  onClick={() => applyPreset(p)}
-                  className="p-3 rounded-xl bg-slate-900 hover:bg-slate-850 border border-white/10 hover:border-white/20 transition cursor-pointer text-left flex flex-col justify-between h-20 group"
-                >
-                  <span className="text-[9px] text-slate-400 font-mono font-bold truncate">{p.name}</span>
-                  <span
-                    className="text-lg font-bold self-center truncate max-w-[120px]"
-                    style={{
-                      color: p.color,
-                      fontFamily: p.font,
-                      textShadow: p.shadow ? `0 0 ${p.shadowBlur}px ${p.shadowColor}` : 'none',
-                      WebkitTextStroke: p.stroke ? `${p.strokeWidth / 2}px ${p.strokeColor}` : 'none',
-                      background: p.gradientText || 'none',
-                      WebkitBackgroundClip: p.gradientText ? 'text' : 'border-box',
-                      WebkitTextFillColor: p.gradientText ? 'transparent' : 'inherit',
-                    }}
-                  >
-                    Veytrix
-                  </span>
-                </button>
-              ))}
+              {/* Fonts Catalog Grid */}
+              <div className="grid grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-1">
+                {filteredFonts.map((f) => {
+                  const isSelected = fontFamily === f.name;
+                  return (
+                    <button
+                      key={f.name}
+                      type="button"
+                      onClick={() => handleUpdateField('font', f.name)}
+                      className={`p-2.5 rounded-xl border text-left flex flex-col justify-between h-16 transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-sky-500/15 border-sky-400 text-sky-300 shadow'
+                          : 'bg-slate-950/50 border-white/5 hover:border-white/15 text-slate-300'
+                      }`}
+                    >
+                      <span className="text-[8.5px] font-mono text-slate-500">{f.category}</span>
+                      <span className="text-base truncate block" style={{ fontFamily: f.name }}>
+                        {f.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}

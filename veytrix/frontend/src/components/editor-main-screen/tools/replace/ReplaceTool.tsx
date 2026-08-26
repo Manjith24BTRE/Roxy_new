@@ -33,6 +33,17 @@ export function ReplaceTool({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const isVideoType = file.type.startsWith('video/');
+    const isVideoExt = /\.(mp4|mov|webm|mkv|avi|m4v|ts|mts|3gp|flv|wmv)$/i.test(file.name);
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isImage = file.type.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif|bmp|tiff|svg)$/i.test(file.name);
+
+    if ((!isVideoType && !isVideoExt) || isPdf || isImage) {
+      showToast('Only video files (MP4, MOV, WebM, etc.) are allowed. PDF and image files are not accepted.');
+      e.target.value = '';
+      return;
+    }
+
     const objectUrl = URL.createObjectURL(file);
     const tempId = `custom-media-${Date.now()}`;
 
@@ -172,7 +183,7 @@ export function ReplaceTool({
         <input
           ref={fileInputRef}
           type="file"
-          accept="video/*,image/*"
+          accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v,.ts,.3gp"
           onChange={handleCustomFileUpload}
           className="hidden"
         />

@@ -34,7 +34,7 @@ export function UploadDropZone({ activeTab, onFilesSelected }: UploadDropZonePro
         type="file"
         ref={fileInputRef}
         multiple
-        accept={activeTab === 'video' ? 'video/*' : 'image/*'}
+        accept={activeTab === 'video' ? 'video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v,.ts,.3gp' : 'image/*,.png,.jpg,.jpeg,.webp,.gif,.bmp,.svg'}
         onChange={(e) => onFilesSelected(e.target.files)}
         className="hidden"
       />
@@ -47,7 +47,9 @@ export function UploadDropZone({ activeTab, onFilesSelected }: UploadDropZonePro
         Drag & Drop {activeTab === 'video' ? 'Video Clips' : 'Images'} Here
       </h2>
       <p className="mt-1 text-[11px] text-[#1D2B64]/50 leading-relaxed font-semibold">
-        Supports MP4, MOV, ProRes, WebM, PNG, JPG (Up to 4K resolution)
+        {activeTab === 'video'
+          ? 'Supports MP4, MOV, ProRes, WebM, MKV, AVI. Video files only.'
+          : 'Supports PNG, JPG, JPEG, WEBP, GIF, SVG. Image files only.'}
       </p>
 
       <div className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#3B6CE7] px-4 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-[#2555CC] transition">

@@ -28,32 +28,31 @@ export class TimelineSplitManager {
     let updatedClips = [...timelineClips];
     updatedClips.splice(clipIndex, 1, leftPart, rightPart);
 
-    // Synchronize splitting for linked/detached audio or video clips across tracks
+    // Synchronize splitting ONLY for explicitly linked/detached audio clips on separate audio tracks
     const isVideo = clip.trackId !== 'audio' && clip.trackId !== 'music' && clip.type !== 'audio' && !clip.isDetachedAudio;
 
-    const linkedClip = timelineClips.find((c) => {
-      if (c.id === clipId) return false;
-      const isTargetAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
-      if (isVideo && !isTargetAudio) return false;
-      if (!isVideo && isTargetAudio) return false;
+    if (isVideo) {
+      const linkedAudioClip = timelineClips.find((c) => {
+        if (c.id === clipId) return false;
+        const isAudioTrack = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
+        if (!isAudioTrack) return false;
 
-      const cStart = c.timelineStart ?? c.start ?? 0;
-      const cEnd = cStart + c.duration;
-      const isOverlapping = playheadTime > cStart && playheadTime < cEnd;
+        const isExplicitlyLinked = c.sourceVideoId === clip.id || c.id === `detached-audio-${clip.id}`;
+        if (!isExplicitlyLinked) return false;
 
-      const isSameMedia = c.mediaId === clip.mediaId || c.sourceVideoId === clip.id || clip.sourceVideoId === c.id;
-      return isOverlapping && isSameMedia;
-    });
+        const cStart = c.timelineStart ?? c.start ?? 0;
+        const cEnd = cStart + c.duration;
+        return playheadTime > cStart && playheadTime < cEnd;
+      });
 
-    if (linkedClip) {
-      const linkedIndex = updatedClips.findIndex((c) => c.id === linkedClip.id);
-      if (linkedIndex !== -1 && validateClipSplit(linkedClip, playheadTime).canSplit) {
-        const { leftPart: lLeft, rightPart: lRight } = SplitManager.splitClipParts(linkedClip, playheadTime);
-        if (isVideo) {
+      if (linkedAudioClip) {
+        const linkedIndex = updatedClips.findIndex((c) => c.id === linkedAudioClip.id);
+        if (linkedIndex !== -1 && validateClipSplit(linkedAudioClip, playheadTime).canSplit) {
+          const { leftPart: lLeft, rightPart: lRight } = SplitManager.splitClipParts(linkedAudioClip, playheadTime);
           lLeft.sourceVideoId = leftPart.id;
           lRight.sourceVideoId = rightPart.id;
+          updatedClips.splice(linkedIndex, 1, lLeft, lRight);
         }
-        updatedClips.splice(linkedIndex, 1, lLeft, lRight);
       }
     }
 

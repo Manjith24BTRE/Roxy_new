@@ -52,7 +52,10 @@ const CATEGORIES = [
   { id: 'Glitch', name: '⚡ Glitch' },
   { id: 'Cinematic', name: '🎬 Cine' },
   { id: 'Light', name: '💡 Light' },
+  { id: 'Distortion', name: '🌀 Warp' },
   { id: 'Retro', name: '📻 Retro' },
+  { id: 'Comic', name: '🎨 Art' },
+  { id: 'Nature', name: '🌿 Nature' },
   { id: '3D', name: '👓 3D' },
   { id: 'AI', name: '🧠 AI' }
 ];
@@ -7614,19 +7617,19 @@ export function Effects({
                     <div
                       key={preset.id}
                       onClick={() => handleApplyPreset(preset)}
-                      className={`rounded-xl border p-2 flex flex-col justify-between overflow-hidden cursor-pointer group relative h-[92px] transition ${
+                      className={`rounded-xl border p-1.5 flex flex-col justify-between overflow-hidden cursor-pointer group relative transition-all duration-200 ${
                         isApplied 
-                          ? 'border-sky-500/40 bg-sky-500/10' 
-                          : 'border-white/5 hover:border-white/10 bg-[#0b101c]/60'
+                          ? 'border-sky-500/50 bg-sky-500/10 shadow-[0_0_12px_rgba(56,189,248,0.2)]' 
+                          : 'border-white/10 hover:border-sky-500/30 bg-[#0b101c] hover:bg-[#111827]'
                       }`}
                     >
                       {/* Effect Thumbnail Preview */}
-                      <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-950 border border-white/10 mb-1 flex-shrink-0">
+                      <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-950 border border-white/10 flex-shrink-0 shadow-inner">
                         <EffectThumbnail preset={preset} />
                         
                         {/* Applied badge */}
                         {isApplied && (
-                          <span className="absolute top-0.5 left-0.5 z-20 bg-sky-500 text-slate-950 text-[7px] font-black uppercase px-1 py-0.5 rounded flex items-center gap-0.5 shadow-sm">
+                          <span className="absolute top-1 left-1 z-20 bg-sky-500 text-slate-950 text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded flex items-center gap-0.5 shadow-md">
                             <Check className="h-2 w-2 stroke-[3]" /> Applied
                           </span>
                         )}
@@ -7635,14 +7638,14 @@ export function Effects({
                         <button
                           type="button"
                           onClick={(e) => toggleFavorite(preset.id, e)}
-                          className="absolute top-0.5 right-0.5 p-0.5 rounded bg-slate-950/60 hover:bg-slate-950 border border-white/5 text-slate-400 hover:text-yellow-400 cursor-pointer transition z-30"
+                          className="absolute top-1 right-1 p-1 rounded bg-slate-950/80 hover:bg-slate-900 border border-white/10 text-slate-400 hover:text-yellow-400 cursor-pointer transition z-30 shadow-md"
                         >
-                          <Star className={`h-2.5 w-2.5 ${isFav ? 'fill-yellow-400 text-yellow-400' : 'text-slate-500'}`} />
+                          <Star className={`h-2.5 w-2.5 ${isFav ? 'fill-yellow-400 text-yellow-400' : 'text-slate-400'}`} />
                         </button>
                       </div>
 
-                      <div className="min-w-0 flex-1 flex flex-col justify-center">
-                        <span className="text-[9px] font-bold text-slate-200 block truncate leading-tight">
+                      <div className="pt-1.5 pb-0.5 px-0.5 min-w-0 flex flex-col justify-center">
+                        <span className="text-[10px] font-semibold text-slate-200 block truncate leading-tight group-hover:text-sky-400 transition-colors">
                           {preset.name}
                         </span>
                       </div>
