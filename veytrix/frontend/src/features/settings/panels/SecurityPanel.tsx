@@ -72,12 +72,7 @@ export function SecurityPanel() {
     
     setIsLoggingOutAll(true);
     try {
-      const { error } = await supabase.auth.signOut({ scope: 'global' });
-      if (error) throw error;
-      showStatus('Logged out of all sessions. Redirecting...', 'success');
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 1500);
+      await signOut();
     } catch (err: any) {
       showStatus(err?.message || 'Failed to log out of all devices.', 'error');
       setIsLoggingOutAll(false);

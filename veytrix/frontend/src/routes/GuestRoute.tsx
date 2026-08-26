@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { VeytrixLogo } from '../components/VeytrixLogo';
 
 export function GuestRoute({ children }: { children?: React.ReactNode }) {
-  const { isSignedIn, isLoading } = useAuth();
+  const { isSignedIn, isLoading, role } = useAuth();
 
   if (isLoading) {
     return (
@@ -17,6 +17,9 @@ export function GuestRoute({ children }: { children?: React.ReactNode }) {
   }
 
   if (isSignedIn) {
+    if (role === 'controller') {
+      return <Navigate to="/command-centre" replace />;
+    }
     return <Navigate to="/home" replace />;
   }
 

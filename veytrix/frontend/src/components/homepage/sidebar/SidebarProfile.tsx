@@ -30,7 +30,6 @@ export function SidebarProfile({ collapsed }: SidebarProfileProps) {
   const handleSignOut = () => {
     setMenuOpen(false);
     signOut();
-    navigate('/');
   };
 
   const currentUser = {

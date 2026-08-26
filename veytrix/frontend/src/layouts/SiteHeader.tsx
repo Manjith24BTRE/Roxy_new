@@ -18,6 +18,7 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const displayName = userProfile?.display_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || 'Creator';
   const email = user?.email || '';
@@ -31,10 +32,10 @@ export function SiteHeader() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleSignOut = () => {
-    signOut();
+  const handleSignOut = async () => {
+    setIsLoggingOut(true);
     setShowUserMenu(false);
-    navigate('/');
+    await signOut();
   };
 
   return (
@@ -129,13 +130,14 @@ export function SiteHeader() {
                       Settings
                     </Link>
                     <div className="h-px bg-[#1D2B64]/5 mx-3 my-1" />
-                    <button
-                      type="button"
+                    <button 
                       onClick={handleSignOut}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                      disabled={isLoggingOut}
+                      className={`w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold border border-transparent rounded-full transition-all duration-200 mt-2 ${
+                        isLoggingOut ? 'text-gray-400 cursor-not-allowed bg-gray-50' : 'text-red-500 hover:text-red-600 hover:bg-red-50'
+                      }`}
                     >
-                      <LogOut className="h-4 w-4" />
-                      Sign Out
+                      <LogOut size={16} /> {isLoggingOut ? 'Logging out...' : 'Sign Out'}
                     </button>
                   </div>
                 )}
@@ -222,9 +224,12 @@ export function SiteHeader() {
                 <button
                   type="button"
                   onClick={() => { handleSignOut(); setOpen(false); }}
-                  className="px-4 py-3 text-sm font-semibold uppercase tracking-wider rounded-2xl text-red-600 hover:bg-red-50 text-left"
+                  disabled={isLoggingOut}
+                  className={`px-4 py-3 text-sm font-semibold uppercase tracking-wider rounded-2xl text-left ${
+                    isLoggingOut ? 'text-gray-400 bg-gray-50 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'
+                  }`}
                 >
-                  Sign Out
+                  {isLoggingOut ? 'Logging out...' : 'Sign Out'}
                 </button>
               </>
             ) : (

@@ -4,7 +4,12 @@ import { Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { VeytrixLogo } from '../components/VeytrixLogo';
 
-export function ProtectedRoute({ children }: { children?: React.ReactNode }) {
+/**
+ * Route guard for Command Centre pages.
+ * Only allows access if the user is authenticated AND has the 'controller' role.
+ * All other users (including normal authenticated users) are redirected to /login.
+ */
+export function ControllerRoute({ children }: { children?: React.ReactNode }) {
   const { isSignedIn, isLoading, role } = useAuth();
 
   if (isLoading) {
@@ -16,13 +21,8 @@ export function ProtectedRoute({ children }: { children?: React.ReactNode }) {
     );
   }
 
-  if (!isSignedIn) {
+  if (!isSignedIn || role !== 'controller') {
     return <Navigate to="/login" replace />;
-  }
-
-  // Controller should not be in normal user routes — send them to Command Centre
-  if (role === 'controller') {
-    return <Navigate to="/command-centre" replace />;
   }
 
   return children ? <>{children}</> : <Outlet />;

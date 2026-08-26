@@ -35,12 +35,15 @@ export interface SignUpResult {
 
 type AuthModalMode = 'signin' | 'signup' | 'forgot' | null;
 
+export const CONTROLLER_EMAIL = 'official@mavrostech.in';
+
 interface AuthContextValue {
   user: User | null;
   session: Session | null;
   userProfile: UserProfileData | null;
   isSignedIn: boolean;
   isLoading: boolean;
+  role: 'user' | 'controller' | null;
   
   // Modal Controller States
   authModalMode: AuthModalMode;
@@ -50,7 +53,7 @@ interface AuthContextValue {
   redirectAfterLogin: string | null;
   setRedirectAfterLogin: (path: string | null) => void;
 
-  signInWithEmail: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  signInWithEmail: (email: string, password: string, rememberMe?: boolean) => Promise<User | undefined>;
   signUpWithEmail: (email: string, password: string, fullName: string) => Promise<SignUpResult>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -65,13 +68,14 @@ const AuthContext = createContext<AuthContextValue>({
   userProfile: null,
   isSignedIn: false,
   isLoading: true,
+  role: null,
   authModalMode: null,
   isAuthModalOpen: false,
   openAuthModal: () => {},
   closeAuthModal: () => {},
   redirectAfterLogin: null,
   setRedirectAfterLogin: () => {},
-  signInWithEmail: async () => {},
+  signInWithEmail: async () => undefined,
   signUpWithEmail: async () => ({ session: null, user: null }),
   signInWithGoogle: async () => {},
   signOut: async () => {},
@@ -79,6 +83,11 @@ const AuthContext = createContext<AuthContextValue>({
   syncProfile: async () => null,
   updateUserProfile: async () => null,
 });
+
+function computeRole(user: User | null): 'user' | 'controller' | null {
+  if (!user) return null;
+  return user.email?.toLowerCase() === CONTROLLER_EMAIL ? 'controller' : 'user';
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -254,6 +263,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data.session) {
         await syncProfile();
       }
+      return data.user;
     } finally {
       setIsLoading(false);
     }
@@ -306,16 +316,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    const currentRole = computeRole(user);
     setIsLoading(true);
     try {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'global' });
+      
       setSession(null);
       setUser(null);
       setUserProfile(null);
-    } finally {
+      
+      // Controller → landing page, normal user → login page
+      window.location.href = currentRole === 'controller' ? '/' : '/login';
+    } catch (error) {
+      console.error('Logout error:', error);
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const resetPassword = useCallback(async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -383,6 +399,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return nextProfile;
   }, [userProfile, setUserProfile]);
 
+  const role = computeRole(user);
+
   return (
     <AuthContext.Provider
       value={{
@@ -391,6 +409,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userProfile,
         isSignedIn: !!session,
         isLoading,
+        role,
         authModalMode,
         isAuthModalOpen: authModalMode !== null,
         openAuthModal,

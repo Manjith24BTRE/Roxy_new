@@ -19,10 +19,15 @@ export function LoginForm() {
     setIsSubmitting(true);
 
     try {
-      await signInWithEmail(email, password, rememberMe);
+      const authUser = await signInWithEmail(email, password, rememberMe);
       closeAuthModal();
       setRedirectAfterLogin(null);
-      navigate('/home');
+      
+      if (authUser?.email?.toLowerCase() === 'official@mavrostech.in') {
+        window.location.href = '/command-centre';
+      } else {
+        navigate('/home');
+      }
     } catch (err: any) {
       setError(err?.message || 'Invalid email or password.');
     } finally {

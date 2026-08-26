@@ -16,6 +16,7 @@ export function RootLayout() {
 
   const isWorkspace = ['/home', '/projects', '/profile', '/settings', '/report-problem'].includes(location.pathname) || location.pathname.startsWith('/help');
   const isCompany = location.pathname.startsWith('/company');
+  const isCommandCentre = location.pathname.startsWith('/command-centre');
 
   const isUpload = location.pathname.startsWith('/upload');
   const isProcessing = location.pathname.startsWith('/processing');
@@ -79,6 +80,15 @@ export function RootLayout() {
       root.style.setProperty(varName, val);
     });
   }, [theme, location.pathname]);
+
+  // Command Centre has its own layout — skip SiteHeader, SiteFooter, and AuthModal
+  if (isCommandCentre) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background text-foreground font-sans">
+        <Outlet />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground font-sans">
