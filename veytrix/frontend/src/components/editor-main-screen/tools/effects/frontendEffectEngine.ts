@@ -94,6 +94,7 @@ export function renderFrontendEffectFrame(
     const shakeX = (Math.sin(t * 35) * 14 * intensityScale).toFixed(1);
     const shakeY = (Math.cos(t * 28) * 12 * intensityScale).toFixed(1);
     transform = `translate(${shakeX}px, ${shakeY}px)`;
+    filter = `contrast(${1 + 0.05 * intensityScale})`;
   } else if (et.includes('glow') || et.includes('bloom')) {
     const glowPx = (16 * intensityScale).toFixed(1);
     filter = `drop-shadow(0 0 ${glowPx}px rgba(56,189,248,0.85)) brightness(${1 + 0.3 * intensityScale})`;
@@ -130,11 +131,19 @@ export function renderFrontendEffectFrame(
     overlayColor = `rgba(56, 189, 248, ${0.15 * intensityScale})`;
   } else if (et.includes('flare') || et.includes('leak') || et.includes('sun')) {
     const posX = (50 + Math.sin(t * 2) * 30).toFixed(1);
+    const brightnessVal = (1 + Math.sin(t * 3) * 0.2 * intensityScale).toFixed(2);
+    filter = `brightness(${brightnessVal})`;
     overlayGradient = `radial-gradient(circle at ${posX}% 30%, rgba(251, 191, 36, ${0.45 * intensityScale}) 0%, transparent 65%)`;
   } else if (et.includes('neon')) {
     filter = `drop-shadow(0 0 10px #ec4899) drop-shadow(0 0 20px #38bdf8) brightness(1.2) contrast(1.3)`;
   } else if (cat.includes('color')) {
-    filter = `contrast(${1 + 0.25 * intensityScale}) saturate(${1 + 0.3 * intensityScale})`;
+    const contrastVal = config.parameters?.contrast !== undefined 
+      ? (1 + (config.parameters.contrast / 50) * 0.25 * intensityScale).toFixed(2)
+      : (1 + 0.25 * intensityScale).toFixed(2);
+    const satVal = config.parameters?.saturation !== undefined
+      ? (1 + (config.parameters.saturation / 50) * 0.3 * intensityScale).toFixed(2)
+      : (1 + 0.3 * intensityScale).toFixed(2);
+    filter = `contrast(${contrastVal}) saturate(${satVal})`;
   } else if (cat.includes('film')) {
     filter = `contrast(${1 + 0.2 * intensityScale}) sepia(${0.25 * intensityScale})`;
   } else if (cat.includes('motion')) {

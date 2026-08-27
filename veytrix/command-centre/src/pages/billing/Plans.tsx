@@ -1,35 +1,70 @@
-import React from 'react';
-import { Plus, Check, Edit2 } from 'lucide-react';
-
-const mockPlans = [
-  { id: 'pln_1', name: 'Free', price: 0, credits: 100, activeSubscribers: 42100, features: ['Basic AI Models', 'Community Support', 'Standard Speed'], status: 'Active' },
-  { id: 'pln_2', name: 'Pro', price: 20, credits: 1500, activeSubscribers: 2840, features: ['Advanced Models', 'Priority Support', 'Faster Speed', 'API Access'], status: 'Active' },
-  { id: 'pln_3', name: 'Premium', price: 100, credits: 10000, activeSubscribers: 250, features: ['All Models', '24/7 Phone Support', 'Highest Speed', 'Dedicated IP'], status: 'Active' },
-  { id: 'pln_4', name: 'Enterprise', price: 999, credits: 100000, activeSubscribers: 15, features: ['Custom Models', 'SLA Guarantee', 'Dedicated Account Manager'], status: 'Active' },
-];
+import React, { useEffect, useState } from 'react';
+import { Plus, Check, Edit2, RefreshCw } from 'lucide-react';
+import { plansService, PlanMetricsOverview } from '../../services/plansService';
 
 export const Plans = () => {
+  const [data, setData] = useState<PlanMetricsOverview | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchMetrics = async () => {
+    setIsLoading(true);
+    const res = await plansService.getPlanMetrics();
+    setData(res);
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchMetrics();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64 text-[#64748B]">
+        <div className="flex items-center gap-2 font-semibold">
+          <RefreshCw className="animate-spin" size={18} />
+          <span>Loading Live Subscription Metrics...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-black text-[#1D2B64]">Subscription Plans</h1>
-          <p className="text-sm text-[#64748B] mt-1">Manage pricing tiers and features for Veytrix users.</p>
+          <p className="text-sm text-[#64748B] mt-1">Manage pricing tiers and live subscriber metrics for Veytrix users.</p>
         </div>
-        <button className="flex items-center gap-2 bg-[#3B6CE7] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#2b52b3] transition-colors">
-          <Plus size={16} />
-          Create Plan
+        <button 
+          onClick={fetchMetrics}
+          className="flex items-center gap-2 bg-[#3B6CE7] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#2b52b3] transition-colors cursor-pointer"
+        >
+          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          Refresh Metrics
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        {mockPlans.map(plan => (
-          <div key={plan.id} className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm flex flex-col relative overflow-hidden group hover:border-[#3B6CE7]/50 transition-colors">
+      {/* Overview Stat Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-sm">
+          <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Active Subscribers</p>
+          <p className="text-2xl font-black text-[#1D2B64] mt-1">{data?.activeCount || 0}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-sm">
+          <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Cancelled Subscribers</p>
+          <p className="text-2xl font-black text-red-600 mt-1">{data?.cancelledCount || 0}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-sm">
+          <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Total Subscriptions</p>
+          <p className="text-2xl font-black text-[#3B6CE7] mt-1">{data?.totalSubscribers || 0}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {data?.plans.map((plan, idx) => (
+          <div key={idx} className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm flex flex-col relative overflow-hidden group hover:border-[#3B6CE7]/50 transition-colors">
             <div className="flex justify-between items-start mb-2">
               <h3 className="font-bold text-xl text-[#1D2B64]">{plan.name}</h3>
-              <button className="p-1.5 text-[#64748B] hover:bg-[#F1F5F9] rounded-md opacity-0 group-hover:opacity-100 transition-all">
-                <Edit2 size={16} />
-              </button>
             </div>
             <div className="mb-4">
               <span className="text-3xl font-black text-[#1D2B64]">${plan.price}</span>

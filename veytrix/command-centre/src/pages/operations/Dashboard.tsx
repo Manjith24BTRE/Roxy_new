@@ -3,70 +3,87 @@ import { StatCard } from '../../components/ui/StatCard';
 import { ChartCard } from '../../components/ui/ChartCard';
 import { DataTable } from '../../components/ui/DataTable';
 import { StatusBadge } from '../../components/ui/StatusBadge';
-import { Users, CreditCard, BrainCircuit, AlertTriangle, Clock, Server } from 'lucide-react';
-import { mockAIJobs, mockSystemHealth } from '../../data/mockData';
-
-const userGrowthData = [
-  { name: 'Mon', Users: 120 },
-  { name: 'Tue', Users: 180 },
-  { name: 'Wed', Users: 250 },
-  { name: 'Thu', Users: 310 },
-  { name: 'Fri', Users: 420 },
-  { name: 'Sat', Users: 510 },
-  { name: 'Sun', Users: 680 },
-];
-
-const revenueData = [
-  { name: 'Mon', Revenue: 1500 },
-  { name: 'Tue', Revenue: 2100 },
-  { name: 'Wed', Revenue: 1800 },
-  { name: 'Thu', Revenue: 3200 },
-  { name: 'Fri', Revenue: 4500 },
-  { name: 'Sat', Revenue: 3800 },
-  { name: 'Sun', Revenue: 5200 },
-];
+import { Users, CreditCard, BrainCircuit, AlertTriangle, Clock, Server, RefreshCw } from 'lucide-react';
+import { useDashboard } from '../../hooks/useDashboard';
 
 export const Dashboard = () => {
+  const { data, isLoading, error, refresh } = useDashboard();
+
+  if (isLoading && !data) {
+    return (
+      <div className="flex justify-center items-center h-64 text-[#64748B]">
+        <div className="flex items-center gap-2">
+          <RefreshCw className="animate-spin" size={20} />
+          <span>Loading Operations Dashboard...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex justify-between items-center">
+        <span>Failed to load dashboard metrics: {error}</span>
+        <button onClick={refresh} className="px-3 py-1 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700">
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const activeUsers = data?.activeUsers.toLocaleString() || '45,231';
+  const revenueMrr = `$${data?.revenueMrr.toLocaleString() || '128,450'}`;
+  const aiJobs24h = typeof data?.aiJobs24h === 'number' ? (data.aiJobs24h > 1000000 ? `${(data.aiJobs24h / 1000000).toFixed(1)}M` : data.aiJobs24h.toLocaleString()) : '1.2M';
+  const failedJobs = data?.failedJobs24h.toLocaleString() || '842';
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-black text-[#1D2B64]">Operations Dashboard</h1>
+        <button 
+          onClick={refresh}
+          className="p-2 border border-[#E2E8F0] rounded-xl text-[#64748B] hover:bg-white hover:text-[#1D2B64] transition-colors flex items-center gap-2 text-xs font-semibold"
+          title="Refresh Data"
+        >
+          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          Refresh
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <StatCard 
           title="Active Users" 
-          value="45,231" 
+          value={activeUsers} 
           icon={Users} 
-          trend={{ value: 12.5, isPositive: true }} 
+          trend={{ value: data?.activeUsersTrend ?? 12.5, isPositive: true }} 
         />
         <StatCard 
           title="Revenue (MRR)" 
-          value="$128,450" 
+          value={revenueMrr} 
           icon={CreditCard} 
-          trend={{ value: 8.2, isPositive: true }} 
+          trend={{ value: data?.revenueTrend ?? 8.2, isPositive: true }} 
         />
         <StatCard 
           title="AI Jobs (24h)" 
-          value="1.2M" 
+          value={aiJobs24h} 
           icon={BrainCircuit} 
-          trend={{ value: 24.1, isPositive: true }} 
+          trend={{ value: data?.aiJobsTrend ?? 24.1, isPositive: true }} 
         />
         <StatCard 
           title="Failed Jobs" 
-          value="842" 
+          value={failedJobs} 
           icon={AlertTriangle} 
-          trend={{ value: 4.5, isPositive: false }} 
+          trend={{ value: Math.abs(data?.failedJobsTrend ?? 4.5), isPositive: false }} 
           subtitle="Requires attention"
         />
         <StatCard 
           title="Queue Status" 
-          value="Normal" 
+          value={data?.queueStatus || 'Normal'} 
           icon={Clock} 
         />
         <StatCard 
           title="System Status" 
-          value="Operational" 
+          value={data?.systemStatus || 'Operational'} 
           icon={Server} 
         />
       </div>
@@ -74,13 +91,13 @@ export const Dashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard 
           title="User Growth (7 Days)" 
-          data={userGrowthData} 
+          data={data?.userGrowthData || []} 
           dataKey="name" 
           category="Users" 
         />
         <ChartCard 
           title="Revenue (7 Days)" 
-          data={revenueData} 
+          data={data?.revenueData || []} 
           dataKey="name" 
           category="Revenue" 
           colors={['#10B981', '#059669']} 
@@ -91,7 +108,7 @@ export const Dashboard = () => {
         <DataTable 
           title="Recent AI Jobs"
           description="Latest jobs processed by the AI cluster."
-          data={mockAIJobs.slice(0, 5)}
+          data={data?.recentAIJobs || []}
           columns={[
             { header: 'Job ID', key: 'id' },
             { header: 'Type', key: 'type' },
@@ -107,7 +124,7 @@ export const Dashboard = () => {
         <DataTable 
           title="System Health Overview"
           description="Real-time status of core infrastructure."
-          data={mockSystemHealth}
+          data={data?.systemHealth || []}
           columns={[
             { header: 'Service', key: 'service' },
             { 
@@ -123,3 +140,4 @@ export const Dashboard = () => {
     </div>
   );
 };
+

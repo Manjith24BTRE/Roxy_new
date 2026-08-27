@@ -1,46 +1,67 @@
-import React, { useState } from 'react';
-import { DataTable } from '../../components/ui/DataTable';
-import { StatusBadge } from '../../components/ui/StatusBadge';
-import { Plus } from 'lucide-react';
-
-const mockAnnouncements = [
-  { id: 'ann_1', title: 'Scheduled Maintenance', message: 'Veytrix API will undergo maintenance on Sunday.', audience: 'All Users', status: 'Scheduled', publishedDate: '2025-08-30' },
-  { id: 'ann_2', title: 'New GPT-4o Integration', message: 'We have updated our default models to GPT-4o.', audience: 'Pro Users', status: 'Published', publishedDate: '2025-08-15' },
-  { id: 'ann_3', title: 'Welcome to Veytrix 2.0', message: 'Explore the new features in the latest update.', audience: 'All Users', status: 'Expired', publishedDate: '2025-01-10' },
-];
+import React, { useState, useEffect } from 'react';
+import { announcementsService } from '../../services/announcementsService';
+import { Announcement } from '../../types';
+import { Bell, RefreshCw } from 'lucide-react';
 
 export const Announcements = () => {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredAnnouncements = mockAnnouncements.filter(a => 
-    a.title.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const loadAnnouncements = async () => {
+    setIsLoading(true);
+    const data = await announcementsService.getAnnouncements();
+    setAnnouncements(data);
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    loadAnnouncements();
+  }, []);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black text-[#1D2B64]">Announcements</h1>
-          <p className="text-sm text-[#64748B] mt-1">Manage platform-wide banners and user notifications.</p>
+          <h1 className="text-2xl font-black text-[#1D2B64]">Platform Announcements</h1>
+          <p className="text-sm text-[#64748B] mt-1">Broadcast system maintenance and feature update notifications.</p>
         </div>
-        <button className="flex items-center gap-2 bg-[#3B6CE7] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#2b52b3] transition-colors">
-          <Plus size={16} />
-          Create Announcement
+        <button
+          onClick={loadAnnouncements}
+          className="flex items-center gap-2 border border-[#E2E8F0] px-3 py-1.5 rounded-lg text-xs font-semibold text-[#64748B] hover:bg-white transition cursor-pointer"
+        >
+          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          Refresh Announcements
         </button>
       </div>
 
-      <DataTable 
-        data={filteredAnnouncements}
-        onSearch={setSearchTerm}
-        searchPlaceholder="Search announcements by title..."
-        columns={[
-          { header: 'Title', key: 'title', className: 'font-bold text-[#1D2B64]' },
-          { header: 'Message', key: 'message', className: 'truncate max-w-sm' },
-          { header: 'Audience', key: 'audience' },
-          { header: 'Status', key: 'status', render: (a) => <StatusBadge status={a.status} /> },
-          { header: 'Date', key: 'publishedDate' },
-        ]}
-      />
+      {isLoading ? (
+        <div className="flex justify-center items-center h-48 text-[#64748B] font-semibold text-xs gap-2">
+          <RefreshCw className="animate-spin" size={16} />
+          <span>Loading Announcements...</span>
+        </div>
+      ) : announcements.length === 0 ? (
+        <div className="bg-white p-12 rounded-2xl border border-[#E2E8F0] text-center max-w-lg mx-auto my-12">
+          <Bell className="mx-auto text-[#64748B] mb-3" size={36} />
+          <h3 className="font-bold text-[#1D2B64] text-lg">No Active Broadcast Announcements</h3>
+          <p className="text-sm text-[#64748B] mt-1">No system broadcasts or scheduled user notifications exist.</p>
+        </div>
+      ) : (
+        <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm">
+          <div className="space-y-4">
+            {announcements.map((a) => (
+              <div key={a.id} className="p-4 border border-[#E2E8F0] rounded-xl flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-[#1D2B64]">{a.title}</h4>
+                  <p className="text-xs text-[#64748B]">{a.message}</p>
+                </div>
+                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-bold uppercase">
+                  {a.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

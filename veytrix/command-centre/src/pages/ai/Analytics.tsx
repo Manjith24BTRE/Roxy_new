@@ -1,57 +1,53 @@
-import React from 'react';
-import { ChartCard } from '../../components/ui/ChartCard';
+import React, { useState, useEffect } from 'react';
+import { aiAnalyticsService, AIAnalyticsData } from '../../services/aiAnalyticsService';
 import { StatCard } from '../../components/ui/StatCard';
-import { BrainCircuit, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
-
-const jobVolumeData = [
-  { name: 'Mon', Jobs: 120000 },
-  { name: 'Tue', Jobs: 185000 },
-  { name: 'Wed', Jobs: 150000 },
-  { name: 'Thu', Jobs: 220000 },
-  { name: 'Fri', Jobs: 280000 },
-  { name: 'Sat', Jobs: 210000 },
-  { name: 'Sun', Jobs: 190000 },
-];
-
-const costData = [
-  { name: 'Mon', Cost: 450 },
-  { name: 'Tue', Cost: 620 },
-  { name: 'Wed', Cost: 550 },
-  { name: 'Thu', Cost: 800 },
-  { name: 'Fri', Cost: 950 },
-  { name: 'Sat', Cost: 720 },
-  { name: 'Sun', Cost: 680 },
-];
+import { ChartCard } from '../../components/ui/ChartCard';
+import { BrainCircuit, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export const Analytics = () => {
+  const [data, setData] = useState<AIAnalyticsData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadAnalytics = async () => {
+    setIsLoading(true);
+    const res = await aiAnalyticsService.getAIAnalytics();
+    setData(res);
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    loadAnalytics();
+  }, []);
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-black text-[#1D2B64]">AI Analytics</h1>
-        <p className="text-sm text-[#64748B] mt-1">Usage, performance, and cost analytics across all AI models.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black text-[#1D2B64]">AI Cluster Analytics</h1>
+          <p className="text-sm text-[#64748B] mt-1">Live performance metrics and execution success rates of rendering workloads.</p>
+        </div>
+        <button
+          onClick={loadAnalytics}
+          className="flex items-center gap-2 border border-[#E2E8F0] px-3 py-1.5 rounded-lg text-xs font-semibold text-[#64748B] hover:bg-white transition cursor-pointer"
+        >
+          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          Refresh Analytics
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard title="Total Jobs (7d)" value="1.35M" icon={BrainCircuit} trend={{ value: 18.5, isPositive: true }} />
-        <StatCard title="Success Rate" value="98.7%" icon={CheckCircle} trend={{ value: 0.2, isPositive: true }} />
-        <StatCard title="Failure Rate" value="1.3%" icon={AlertTriangle} trend={{ value: 0.2, isPositive: false }} />
-        <StatCard title="Avg Latency" value="1,240ms" icon={Clock} trend={{ value: 45, isPositive: false }} />
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <StatCard title="Total Export Jobs" value={data?.totalJobs.toLocaleString() || '0'} icon={BrainCircuit} />
+        <StatCard title="Completed Jobs" value={data?.completedJobs.toLocaleString() || '0'} icon={CheckCircle} />
+        <StatCard title="Failed Jobs" value={data?.failedJobs.toLocaleString() || '0'} icon={AlertTriangle} />
+        <StatCard title="Execution Success Rate" value={`${data?.successRate || 100}%`} icon={CheckCircle} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ChartCard 
-          title="Job Volume (7 Days)" 
-          data={jobVolumeData} 
-          dataKey="name" 
-          category="Jobs" 
-          colors={['#8E54E9', '#3B6CE7']}
-        />
-        <ChartCard 
-          title="Estimated Cost USD (7 Days)" 
-          data={costData} 
-          dataKey="name" 
-          category="Cost" 
-          colors={['#F59E0B', '#D97706']} 
+      <div className="grid grid-cols-1 gap-6">
+        <ChartCard
+          title="Jobs Processed by Resolution"
+          data={data?.jobsByResolution || []}
+          dataKey="name"
+          category="Jobs"
         />
       </div>
     </div>

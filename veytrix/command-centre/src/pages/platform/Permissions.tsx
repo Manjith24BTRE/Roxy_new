@@ -1,57 +1,68 @@
-import React from 'react';
-import { ShieldCheck, ToggleRight } from 'lucide-react';
-
-const permissionMatrix = [
-  { module: 'User Management', Controller: true, Admin: true, Support: true, Developer: false },
-  { module: 'Billing & Plans', Controller: true, Admin: true, Support: false, Developer: false },
-  { module: 'AI Operations', Controller: true, Admin: false, Support: false, Developer: true },
-  { module: 'System Health', Controller: true, Admin: true, Support: false, Developer: true },
-  { module: 'Audit Logs', Controller: true, Admin: false, Support: false, Developer: false },
-  { module: 'Platform Settings', Controller: true, Admin: true, Support: false, Developer: false },
-];
+import React, { useState, useEffect } from 'react';
+import { permissionsService, PermissionItem } from '../../services/permissionsService';
+import { ShieldCheck, RefreshCw } from 'lucide-react';
 
 export const Permissions = () => {
+  const [permissions, setPermissions] = useState<PermissionItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadPermissions = async () => {
+    setIsLoading(true);
+    const data = await permissionsService.getPermissions();
+    setPermissions(data);
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    loadPermissions();
+  }, []);
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-black text-[#1D2B64]">Permissions Matrix</h1>
-        <p className="text-sm text-[#64748B] mt-1">Configure module-level access control for administrative roles.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black text-[#1D2B64]">Permissions Matrix</h1>
+          <p className="text-sm text-[#64748B] mt-1">Granular access policies for platform controllers and operational tools.</p>
+        </div>
+        <button
+          onClick={loadPermissions}
+          className="flex items-center gap-2 border border-[#E2E8F0] px-3 py-1.5 rounded-lg text-xs font-semibold text-[#64748B] hover:bg-white transition cursor-pointer"
+        >
+          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          Refresh Matrix
+        </button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-[#E2E8F0] bg-gray-50/50">
-                <th className="px-5 py-4 text-xs font-bold text-[#1D2B64] uppercase tracking-wider">Module</th>
-                <th className="px-5 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider text-center">Controller</th>
-                <th className="px-5 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider text-center">Admin</th>
-                <th className="px-5 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider text-center">Support</th>
-                <th className="px-5 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider text-center">Developer</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E2E8F0]">
-              {permissionMatrix.map((row) => (
-                <tr key={row.module} className="hover:bg-[#F8FAFC] transition-colors">
-                  <td className="px-5 py-4 text-sm font-semibold text-[#1D2B64]">{row.module}</td>
-                  
-                  {['Controller', 'Admin', 'Support', 'Developer'].map(role => (
-                    <td key={role} className="px-5 py-4 text-center">
-                      <button className={`p-1 rounded-md transition-colors ${
-                        row[role as keyof typeof row] 
-                          ? 'text-[#3B6CE7] hover:bg-[#3B6CE7]/10' 
-                          : 'text-[#CBD5E1] hover:bg-gray-100'
-                      }`}>
-                        {row[role as keyof typeof row] ? <ShieldCheck size={20} /> : <ToggleRight size={20} />}
-                      </button>
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {isLoading ? (
+        <div className="flex justify-center items-center h-48 text-[#64748B] font-semibold text-xs gap-2">
+          <RefreshCw className="animate-spin" size={16} />
+          <span>Loading Permissions Matrix...</span>
         </div>
-      </div>
+      ) : permissions.length === 0 ? (
+        <div className="bg-white p-12 rounded-2xl border border-[#E2E8F0] text-center max-w-lg mx-auto my-12">
+          <ShieldCheck className="mx-auto text-[#64748B] mb-3" size={36} />
+          <h3 className="font-bold text-[#1D2B64] text-lg">Default Admin Security Gate</h3>
+          <p className="text-sm text-[#64748B] mt-1">
+            All system permissions are currently governed by the strict Controller Authorization Gate (official@mavrostech.in).
+          </p>
+        </div>
+      ) : (
+        <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {permissions.map((p) => (
+              <div key={p.id} className="p-4 border border-[#E2E8F0] rounded-xl flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-[#1D2B64]">{p.name}</h4>
+                  <p className="text-xs text-[#64748B]">{p.category}</p>
+                </div>
+                <span className={`px-2 py-1 rounded text-xs font-bold ${p.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                  {p.enabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
