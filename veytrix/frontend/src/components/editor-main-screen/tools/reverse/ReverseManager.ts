@@ -42,6 +42,8 @@ export class ReverseManager {
     const sourceToUse = mediaSource || target?.url || '';
     let newUrl = '';
 
+    let lastProcessResult: any = null;
+
     if (nextIsReversed && target) {
       if (options.showToast) {
         options.showToast('Reversing media stream... Please wait.');
@@ -61,6 +63,7 @@ export class ReverseManager {
             }
           }
         });
+        lastProcessResult = processResult;
 
         if (!processResult.success || !processResult.outputUrl) {
           throw new Error(processResult.error || 'Video reverse failed.');
@@ -89,17 +92,22 @@ export class ReverseManager {
       newUrl = target.originalUrl || target.url || '';
     }
 
+    const isReversedFileActual = nextIsReversed ? (lastProcessResult?.isReversedFile ?? true) : false;
+    const finalUrl = nextIsReversed
+      ? (isReversedFileActual ? newUrl : (target?.originalUrl || target?.url || sourceToUse))
+      : (target?.originalUrl || target?.url || '');
+
     // Immutably update the target clip with reversed media URLs and flags
     const updatedClips = clips.map((c) => {
       if (c.id === clipId) {
         return {
           ...c,
           isReversed: nextIsReversed,
-          isReversedFile: nextIsReversed, // prevent double playhead mapping
+          isReversedFile: isReversedFileActual, // true if physically reversed MP4 file, false if live stream mapping needed
           originalUrl: c.originalUrl || c.url || c.media_url || c.src,
-          url: newUrl,
-          media_url: newUrl,
-          src: newUrl,
+          url: finalUrl,
+          media_url: finalUrl,
+          src: finalUrl,
         };
       }
       return c;

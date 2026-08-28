@@ -68,14 +68,14 @@ export function getEffectiveDuration(sourceDuration: number, playbackRate: numbe
  * Clamped to valid source range.
  */
 export function timelineTimeToSourceTime(
-  clip: { startOffset: number; timelineStart: number; playbackRate?: number; baseDuration?: number; duration: number; isReversed?: boolean },
+  clip: { startOffset: number; timelineStart: number; playbackRate?: number; baseDuration?: number; duration: number; isReversed?: boolean; isReversedFile?: boolean },
   timelineTime: number
 ): number {
   const rate = clampPlaybackRate(clip.playbackRate ?? 1);
   const localTimelineTime = timelineTime - clip.timelineStart;
   const sourceDuration = getSourceDuration(clip);
 
-  if (clip.isReversed) {
+  if (clip.isReversed && !clip.isReversedFile) {
     const endOffset = clip.startOffset + sourceDuration;
     const sourceTime = endOffset - localTimelineTime * rate;
     return Math.max(clip.startOffset, Math.min(sourceTime, endOffset));
@@ -91,13 +91,13 @@ export function timelineTimeToSourceTime(
  * timelineTime = clip.timelineStart + (sourceTime - clip.startOffset) / clip.playbackRate
  */
 export function sourceTimeToTimelineTime(
-  clip: { startOffset: number; timelineStart: number; playbackRate?: number; baseDuration?: number; duration: number; isReversed?: boolean },
+  clip: { startOffset: number; timelineStart: number; playbackRate?: number; baseDuration?: number; duration: number; isReversed?: boolean; isReversedFile?: boolean },
   sourceTime: number
 ): number {
   const rate = clampPlaybackRate(clip.playbackRate ?? 1);
   const sourceDuration = getSourceDuration(clip);
 
-  if (clip.isReversed) {
+  if (clip.isReversed && !clip.isReversedFile) {
     const endOffset = clip.startOffset + sourceDuration;
     return clip.timelineStart + (endOffset - sourceTime) / rate;
   }

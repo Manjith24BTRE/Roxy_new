@@ -13,3 +13,38 @@ export interface OverlapBounds {
   scale: number;
   rotation: number;
 }
+
+export type OverlapTransitionType =
+  | 'crossfade'
+  | 'fade'
+  | 'fade-black'
+  | 'fade-white'
+  | 'blur'
+  | 'zoom'
+  | 'slide-left'
+  | 'slide-right'
+  | 'slide-up'
+  | 'slide-down'
+  | 'none';
+
+export type OverlapAudioMode =
+  | 'crossfade'
+  | 'keep-both'
+  | 'mute-outgoing'
+  | 'mute-incoming';
+
+export interface OverlapData {
+  id: string;
+  clipAId: string;
+  clipBId: string;
+  overlapStart: number;
+  overlapEnd: number;
+  overlapDuration: number;
+  transition: {
+    type: OverlapTransitionType;
+    easing?: string;
+    direction?: string;
+    intensity?: number;
+  };
+  audioMode: OverlapAudioMode;
+}

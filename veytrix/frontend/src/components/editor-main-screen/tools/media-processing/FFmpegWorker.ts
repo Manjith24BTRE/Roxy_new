@@ -53,7 +53,8 @@ export class FFmpegWorker implements IFFmpegWorker {
           success: true,
           outputBlob,
           outputUrl,
-          mimeType: outputMimeType
+          mimeType: outputMimeType,
+          isReversedFile: true
         };
       }
 
@@ -68,7 +69,8 @@ export class FFmpegWorker implements IFFmpegWorker {
         success: true,
         outputBlob,
         outputUrl,
-        mimeType: outputMimeType
+        mimeType: outputMimeType,
+        isReversedFile: false
       };
     } catch (err: any) {
       console.error('FFmpeg Processing Error:', err);

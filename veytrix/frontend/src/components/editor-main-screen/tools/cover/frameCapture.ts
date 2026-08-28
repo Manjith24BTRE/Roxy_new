@@ -101,3 +101,238 @@ export async function captureVideoFrame(
     video.load();
   });
 }
+
+export interface FilmstripThumbnail {
+  time: number;
+  dataUrl: string;
+}
+
+const filmstripCache = new Map<string, FilmstripThumbnail[]>();
+
+/**
+ * Generates an array of thumbnail frames across the video duration for the cover filmstrip.
+ * Uses in-memory caching to avoid redundant seeking.
+ */
+export async function generateFilmstripThumbnails(
+  videoUrl: string,
+  duration: number,
+  count = 10
+): Promise<FilmstripThumbnail[]> {
+  const cacheKey = `${videoUrl}_${duration}_${count}`;
+  if (filmstripCache.has(cacheKey)) {
+    return filmstripCache.get(cacheKey)!;
+  }
+
+  return new Promise((resolve) => {
+    const thumbnails: FilmstripThumbnail[] = [];
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
+    video.muted = true;
+    video.playsInline = true;
+    video.src = videoUrl;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 160;
+    canvas.height = 90;
+    const ctx = canvas.getContext('2d');
+
+    const times: number[] = [];
+    const step = duration / Math.max(1, count);
+    for (let i = 0; i < count; i++) {
+      times.push(Math.min(duration, i * step + step / 2));
+    }
+
+    let currentIndex = 0;
+
+    const cleanup = () => {
+      video.onseeked = null;
+      video.onloadedmetadata = null;
+      video.onerror = null;
+      video.src = '';
+      video.load();
+    };
+
+    video.onloadedmetadata = () => {
+      seekNext();
+    };
+
+    const seekNext = () => {
+      if (currentIndex >= times.length) {
+        cleanup();
+        filmstripCache.set(cacheKey, thumbnails);
+        resolve(thumbnails);
+        return;
+      }
+      video.currentTime = times[currentIndex];
+    };
+
+    video.onseeked = () => {
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        thumbnails.push({ time: times[currentIndex], dataUrl });
+      }
+      currentIndex++;
+      seekNext();
+    };
+
+    video.onerror = () => {
+      cleanup();
+      resolve(thumbnails);
+    };
+
+    video.load();
+  });
+}
+
+export interface CoverTextElement {
+  id: string;
+  text: string;
+  x: number; // percentage 0-100
+  y: number; // percentage 0-100
+  fontSize: number; // px
+  fontFamily: string;
+  fontWeight: string;
+  color: string;
+  backgroundColor?: string;
+  align: 'left' | 'center' | 'right';
+  letterSpacing?: number;
+  lineHeight?: number;
+  rotation?: number;
+}
+
+export interface CoverOverlayElement {
+  id: string;
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+  opacity?: number;
+}
+
+export interface CoverAdjustments {
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  blur: number;
+  opacity: number;
+}
+
+export interface CoverState {
+  sourceType: 'video-frame' | 'custom-image';
+  videoTime: number;
+  customImageUrl?: string;
+  textElements: CoverTextElement[];
+  overlays: CoverOverlayElement[];
+  adjustments: CoverAdjustments;
+}
+
+/**
+ * Bakes the base frame, CSS filters, overlays, and text elements into a high-res cover image Blob.
+ */
+export async function renderFinalCoverImage(
+  baseImageUrl: string,
+  textElements: CoverTextElement[],
+  overlays: CoverOverlayElement[],
+  adjustments: CoverAdjustments,
+  canvasWidth = 1280,
+  canvasHeight = 720
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return reject(new Error('Canvas 2D context not available'));
+
+    const baseImg = new Image();
+    baseImg.crossOrigin = 'anonymous';
+    baseImg.src = baseImageUrl;
+
+    baseImg.onload = async () => {
+      // 1. Draw base image with adjustments filter
+      ctx.save();
+      const b = adjustments.brightness ?? 100;
+      const c = adjustments.contrast ?? 100;
+      const s = adjustments.saturation ?? 100;
+      const blur = adjustments.blur ?? 0;
+      const opacity = (adjustments.opacity ?? 100) / 100;
+
+      ctx.globalAlpha = opacity;
+      ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%) blur(${blur}px)`;
+      ctx.drawImage(baseImg, 0, 0, canvasWidth, canvasHeight);
+      ctx.restore();
+
+      // 2. Draw overlays
+      for (const ov of overlays) {
+        if (!ov.url) continue;
+        try {
+          const ovImg = new Image();
+          ovImg.crossOrigin = 'anonymous';
+          ovImg.src = ov.url;
+          await new Promise<void>((r) => {
+            ovImg.onload = () => r();
+            ovImg.onerror = () => r();
+          });
+          ctx.save();
+          const x = (ov.x / 100) * canvasWidth;
+          const y = (ov.y / 100) * canvasHeight;
+          const w = (ov.width / 100) * canvasWidth;
+          const h = (ov.height / 100) * canvasHeight;
+          ctx.globalAlpha = (ov.opacity ?? 100) / 100;
+          ctx.translate(x + w / 2, y + h / 2);
+          if (ov.rotation) ctx.rotate((ov.rotation * Math.PI) / 180);
+          ctx.drawImage(ovImg, -w / 2, -h / 2, w, h);
+          ctx.restore();
+        } catch { }
+      }
+
+      // 3. Draw text elements
+      for (const t of textElements) {
+        if (!t.text) continue;
+        ctx.save();
+        const fontPx = (t.fontSize / 1000) * canvasHeight * 1.5;
+        const fontStyle = `${t.fontWeight || 'normal'} ${fontPx}px ${t.fontFamily || 'Inter'}, sans-serif`;
+        ctx.font = fontStyle;
+
+        const x = (t.x / 100) * canvasWidth;
+        const y = (t.y / 100) * canvasHeight;
+
+        ctx.translate(x, y);
+        if (t.rotation) ctx.rotate((t.rotation * Math.PI) / 180);
+
+        ctx.textAlign = t.align || 'center';
+        ctx.textBaseline = 'middle';
+
+        if (t.backgroundColor && t.backgroundColor !== 'transparent') {
+          const metrics = ctx.measureText(t.text);
+          const bgW = metrics.width + fontPx * 0.8;
+          const bgH = fontPx * 1.3;
+          let bgX = -bgW / 2;
+          if (t.align === 'left') bgX = -fontPx * 0.4;
+          if (t.align === 'right') bgX = -metrics.width - fontPx * 0.4;
+
+          ctx.fillStyle = t.backgroundColor;
+          ctx.fillRect(bgX, -bgH / 2, bgW, bgH);
+        }
+
+        ctx.fillStyle = t.color || '#ffffff';
+        ctx.fillText(t.text, 0, 0);
+        ctx.restore();
+      }
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Canvas toBlob failed'));
+        },
+        'image/webp',
+        0.95
+      );
+    };
+
+    baseImg.onerror = () => reject(new Error('Failed to load base cover image for rendering.'));
+  });
+}

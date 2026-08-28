@@ -6,7 +6,7 @@ import {
   Wand2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   ZoomIn, ZoomOut, Scissors, Split, Plus, Search,
   FolderPlus, Maximize2, RotateCcw, Image as ImageIcon,
-  Languages, Crop, Lock, Unlock, Gauge, Replace, ArrowRightLeft, Sliders, Activity, Edit3, Layers
+  Languages, Crop, Lock, Unlock, Gauge, Replace, ArrowRightLeft, Sliders, Activity, Edit3, Layers, Music, Video
 } from 'lucide-react';
 import { VeytrixLogo } from '../VeytrixLogo';
 import { useProjectMedia } from '../../contexts/ProjectMediaContext';
@@ -58,6 +58,9 @@ import { ClipActionsPanel } from './clip-actions/ClipActionsPanel';
 import { EditorHistoryProvider, useEditorHistory, ProjectState } from './history';
 import { OverlapUtils } from './tools/overlap/overlapUtils';
 import { ClipReorderUtils } from './tools/overlap/clipReorderUtils';
+import { OverlapEngine } from './tools/overlap/OverlapEngine';
+import { OverlapControlPanel } from './tools/overlap/OverlapControlPanel';
+import { OverlapData } from './tools/overlap/overlap.types';
 
 const getProjectTotalDuration = (clips: any[]): number => {
   if (!clips || clips.length === 0) return 0;
@@ -121,7 +124,14 @@ function EditorMainScreenContent() {
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<number | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | undefined>(undefined);
+  const [projectCoverState, setProjectCoverState] = useState<any | undefined>(undefined);
   const [isCoverModalOpen, setIsCoverModalOpen] = useState(false);
+  const [overlaps, setOverlaps] = useState<OverlapData[]>([]);
+  const [activeOverlapId, setActiveOverlapId] = useState<string | null>(null);
+  const overlapsRef = useRef<OverlapData[]>(overlaps);
+  useEffect(() => {
+    overlapsRef.current = overlaps;
+  }, [overlaps]);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -142,6 +152,53 @@ function EditorMainScreenContent() {
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  // Production-grade Controlled Media Seeking Pipeline
+  const seekingMapRef = useRef<Record<string, boolean>>({});
+  const pendingSeekMapRef = useRef<Record<string, number | null>>({});
+
+  const safeSeekVideo = useCallback((video: HTMLVideoElement | null, clipId: string, targetTime: number) => {
+    if (!video || !Number.isFinite(targetTime)) return;
+
+    if (video.seeking || seekingMapRef.current[clipId]) {
+      pendingSeekMapRef.current[clipId] = targetTime;
+      return;
+    }
+
+    const currentSec = video.currentTime;
+    if (Math.abs(currentSec - targetTime) < 0.02) {
+      return;
+    }
+
+    seekingMapRef.current[clipId] = true;
+    pendingSeekMapRef.current[clipId] = null;
+
+    const onSeeked = () => {
+      video.removeEventListener('seeked', onSeeked);
+      seekingMapRef.current[clipId] = false;
+
+      const pending = pendingSeekMapRef.current[clipId];
+      if (pending !== null && pending !== undefined) {
+        pendingSeekMapRef.current[clipId] = null;
+        if (Math.abs(video.currentTime - pending) >= 0.02 && !video.seeking) {
+          seekingMapRef.current[clipId] = true;
+          try {
+            video.currentTime = pending;
+          } catch {
+            seekingMapRef.current[clipId] = false;
+          }
+        }
+      }
+    };
+
+    video.addEventListener('seeked', onSeeked, { once: true });
+
+    try {
+      video.currentTime = targetTime;
+    } catch {
+      seekingMapRef.current[clipId] = false;
+    }
+  }, []);
 
   // Duplicate hook initialization
   const { duplicateClipSequence, handleDuplicateEffect } = useDuplicate({ showToast });
@@ -205,13 +262,6 @@ function EditorMainScreenContent() {
         setActiveSelectedClipId(targetClip.id);
         setActiveMediaId(targetClip.mediaId);
 
-        const mediaSource = getClipMediaSource(targetClip);
-        if (targetClip.isReversed && mediaSource) {
-          reversedAudioEngine.loadAndReverseAudio(targetClip.id, mediaSource).catch(() => { });
-        } else {
-          reversedAudioEngine.stopReversedAudio();
-        }
-
         const vEl = videoRefs.current[targetClip.id];
         if (vEl) {
           try {
@@ -219,20 +269,6 @@ function EditorMainScreenContent() {
             vEl.currentTime = timelineTimeToSourceTime(targetClip, currentTime);
           } catch { }
         }
-      }
-
-      if (isPlaying && targetClip && targetClip.isReversed) {
-        const relTime = Math.max(0, currentTime - targetClip.timelineStart);
-        const clipVol = isMuted || !!mutedClips[targetClip.id] ? 0 : volume;
-        const mediaSource = getClipMediaSource(targetClip);
-        reversedAudioEngine.playReversedAudio(
-          targetClip.id,
-          mediaSource,
-          relTime,
-          targetClip.duration,
-          clipVol,
-          targetClip.playbackRate || targetClip.speed || 1
-        );
       }
     },
     showToast,
@@ -1900,70 +1936,8 @@ function EditorMainScreenContent() {
         if (activeClip) {
           const video = videoRefs.current[activeClip.id];
 
-          if (activeClip.isReversed) {
-            // REVERSED CLIP PLAYBACK ENGINE - Hardware throttled to prevent decoder thrashing
-            if (video && video.paused && !video.seeking && (video.readyState >= 2 || video.readyState === undefined)) {
-              const isVideoMuted = isMuted || !!mutedClips[activeClip.id] || !!activeClip.isMuted || !!activeClip.isAudioDetached;
-              video.muted = isVideoMuted;
-              video.play().catch(() => {});
-            }
-
-            const relativeTime = Math.max(0, curTime - activeClip.timelineStart);
-            const clipVol = isMuted || !!mutedClips[activeClip.id] ? 0 : volume;
-            const mediaSource = getClipMediaSource(activeClip);
-
-            reversedAudioEngine.playReversedAudio(
-              activeClip.id,
-              mediaSource,
-              relativeTime,
-              activeClip.duration,
-              clipVol,
-              activeClip.playbackRate || activeClip.speed || 1
-            );
-
-            const speed = activeClip.playbackRate || activeClip.speed || 1;
-            const nextTime = curTime + deltaSec * speed;
-
-            if (nextTime >= totalDur) {
-              setIsPlaying(false);
-              currentTimeRef.current = totalDur;
-              setCurrentTime(totalDur);
-              syncAudioClips(totalDur, false);
-              if (video) video.pause();
-              reversedAudioEngine.stopReversedAudio();
-              showToast('Video playback completed');
-              return;
-            }
-
-            currentTimeRef.current = nextTime;
-            if (now - lastStateUpdateRef.current > 40) {
-              lastStateUpdateRef.current = now;
-              setCurrentTime(nextTime);
-            }
-            syncAudioClips(nextTime, true);
-
-            if (video && !video.seeking) {
-              const targetSourceTime = timelineTimeToSourceTime(activeClip, nextTime);
-              if (Math.abs(video.currentTime - targetSourceTime) >= 0.016) {
-                if ('fastSeek' in video && typeof (video as any).fastSeek === 'function') {
-                  try {
-                    (video as any).fastSeek(targetSourceTime);
-                  } catch {
-                    video.currentTime = targetSourceTime;
-                  }
-                } else {
-                  video.currentTime = targetSourceTime;
-                }
-              }
-            }
-
-            if (timelineScrollRef.current) {
-              const pxPerSec = (zoomLevel / 100) * 35;
-              timelineScrollRef.current.scrollLeft = nextTime * pxPerSec;
-            }
-          } else {
-            // FORWARD CLIP PLAYBACK ENGINE
-            const isFreezeOrImage = activeClip.isFreezeFrame || activeClip.type === 'image' || activeClip.type === 'freeze' || (activeClip.url && (activeClip.url.startsWith('data:image/') || activeClip.url.endsWith('.png') || activeClip.url.endsWith('.jpg') || activeClip.url.endsWith('.jpeg') || activeClip.url.endsWith('.webp')));
+          // UNIFIED PLAYBACK ENGINE (Supports forward and physically reversed media files)
+          const isFreezeOrImage = activeClip.isFreezeFrame || activeClip.type === 'image' || activeClip.type === 'freeze' || (activeClip.url && (activeClip.url.startsWith('data:image/') || activeClip.url.endsWith('.png') || activeClip.url.endsWith('.jpg') || activeClip.url.endsWith('.jpeg') || activeClip.url.endsWith('.webp')));
 
             if (isFreezeOrImage || !video) {
               // STILL IMAGE / FREEZE CLIP PLAYBACK ENGINE - Advance time using deltaSec
@@ -2004,7 +1978,8 @@ function EditorMainScreenContent() {
                     const nextTarget = timelineTimeToSourceTime(nextClip, nextClip.timelineStart);
                     nextVideo.currentTime = nextTarget;
                     if (!nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
-                      if (nextClip.isReversed) nextVideo.muted = true;
+                      const nextMuted = isMuted || !!mutedClips[nextClip.id] || !!nextClip.isMuted || !!nextClip.isAudioDetached;
+                      nextVideo.muted = nextMuted;
                       nextVideo.play().catch(() => { });
                     }
                   }
@@ -2021,7 +1996,52 @@ function EditorMainScreenContent() {
                 }
               }
             } else if (video) {
-              if (video.paused && !video.seeking) {
+              if (activeClip.isReversed && !activeClip.isReversedFile) {
+                // LIVE REVERSED PLAYBACK ENGINE (For non-physically reversed stream fallback)
+                if (!video.paused) {
+                  video.pause();
+                }
+                const speed = activeClip.playbackRate || activeClip.speed || 1;
+                const nextTime = curTime + deltaSec * speed;
+
+                if (nextTime >= totalDur) {
+                  setIsPlaying(false);
+                  currentTimeRef.current = totalDur;
+                  setCurrentTime(totalDur);
+                  syncAudioClips(totalDur, false);
+                  reversedAudioEngine.stopReversedAudio();
+                  showToast('Video playback completed');
+                  return;
+                }
+
+                currentTimeRef.current = nextTime;
+                if (now - lastStateUpdateRef.current > 40) {
+                  lastStateUpdateRef.current = now;
+                  setCurrentTime(nextTime);
+                }
+                syncAudioClips(nextTime, true);
+
+                const relativeTime = Math.max(0, nextTime - activeClip.timelineStart);
+                const clipVol = isMuted || !!mutedClips[activeClip.id] ? 0 : volume;
+                const mediaSource = getClipMediaSource(activeClip);
+
+                reversedAudioEngine.playReversedAudio(
+                  activeClip.id,
+                  mediaSource,
+                  relativeTime,
+                  activeClip.duration,
+                  clipVol,
+                  speed
+                );
+
+                const targetSourceTime = timelineTimeToSourceTime(activeClip, nextTime);
+                safeSeekVideo(video, activeClip.id, targetSourceTime);
+
+                if (timelineScrollRef.current) {
+                  const pxPerSec = (zoomLevel / 100) * 35;
+                  timelineScrollRef.current.scrollLeft = nextTime * pxPerSec;
+                }
+              } else if (video.paused && !video.seeking) {
                 const targetLocalTime = timelineTimeToSourceTime(activeClip, curTime);
                 if (Math.abs(video.currentTime - targetLocalTime) > 0.05) {
                   video.currentTime = targetLocalTime;
@@ -2035,38 +2055,38 @@ function EditorMainScreenContent() {
                 setCurrentTime(absoluteTime);
                 syncAudioClips(absoluteTime, true);
 
-                // Pause and mute all non-active main video track elements to enforce single audio output
+                // Overlap & Multi-Layer Video Playback & Audio Crossfade Synchronization
                 clipsToUse.forEach((c) => {
-                  if (c.id !== activeClip.id && c.trackId !== 'overlay') {
-                    const v = videoRefs.current[c.id];
-                    if (v && preWarmingClipIdRef.current !== c.id) {
-                      if (!v.paused) v.pause();
-                      v.muted = true;
-                    }
-                  }
-                });
+                  if (c.type === 'image' || c.type === 'freeze' || c.isFreezeFrame) return;
+                  const v = videoRefs.current[c.id];
+                  if (!v) return;
 
-                // Drift check and synchronization for overlays
-                clipsToUse.forEach((c) => {
-                  if (c.trackId === 'overlay' && c.id !== activeClip.id) {
-                    const v = videoRefs.current[c.id];
-                    if (v && c.type !== 'image' && c.type !== 'freeze' && !c.isFreezeFrame) {
-                      const isActive = absoluteTime >= c.timelineStart && absoluteTime < c.timelineStart + c.duration;
-                      if (isActive) {
-                        if (v.paused && !v.seeking) {
-                          v.currentTime = timelineTimeToSourceTime(c, absoluteTime);
-                          if (c.isReversed) v.muted = true;
-                          v.play().catch(() => {});
-                        } else if (!v.seeking && !v.paused) {
-                          const expectedLocalTime = timelineTimeToSourceTime(c, absoluteTime);
-                          if (Math.abs(v.currentTime - expectedLocalTime) > 0.15) {
-                            v.currentTime = expectedLocalTime;
-                          }
-                        }
-                      } else if (!v.paused) {
-                        v.pause();
+                  const startSec = c.timelineStart ?? c.start ?? 0;
+                  const isActive = absoluteTime >= startSec && absoluteTime < startSec + c.duration;
+
+                  if (isActive) {
+                    const audioVolMult = OverlapEngine.getOverlapAudioVolumeMultiplier(c.id, clipsToUse, absoluteTime, overlapsRef.current);
+                    const baseClipVol = c.volume ?? 1;
+                    const finalClipVol = volume * baseClipVol * audioVolMult;
+
+                    const isVideoMuted = isMuted || !!mutedClips[c.id] || !!c.isMuted || !!c.isAudioDetached || finalClipVol <= 0.01;
+                    v.muted = isVideoMuted;
+                    if (!isVideoMuted) {
+                      v.volume = Math.max(0, Math.min(1, finalClipVol));
+                    }
+
+                    if (v.paused && !v.seeking) {
+                      v.currentTime = timelineTimeToSourceTime(c, absoluteTime);
+                      v.play().catch(() => {});
+                    } else if (!v.seeking && !v.paused && c.id !== activeClip.id) {
+                      const expectedLocalTime = timelineTimeToSourceTime(c, absoluteTime);
+                      if (Math.abs(v.currentTime - expectedLocalTime) > 0.15) {
+                        v.currentTime = expectedLocalTime;
                       }
                     }
+                  } else if (c.id !== activeClip.id && !v.paused && preWarmingClipIdRef.current !== c.id) {
+                    v.pause();
+                    v.muted = true;
                   }
                 });
 
@@ -2149,7 +2169,6 @@ function EditorMainScreenContent() {
               }
             }
           }
-        }
 
         animationFrameId = requestAnimationFrame(updateLoop);
       }
@@ -2205,11 +2224,12 @@ function EditorMainScreenContent() {
           if (activeIds.has(c.id)) {
             const targetLocalTime = timelineTimeToSourceTime(c, currentTime);
             v.currentTime = targetLocalTime;
+            const isVideoMuted = isMuted || !!mutedClips[c.id] || !!c.isMuted || !!c.isAudioDetached;
+            v.muted = isVideoMuted;
+            v.play().catch(() => { });
             if (c.isReversed) {
-              v.muted = true;
-              v.play().catch(() => { });
               const relTime = Math.max(0, currentTime - c.timelineStart);
-              const clipVol = isMuted || mutedClips[c.id] ? 0 : volume;
+              const clipVol = isVideoMuted ? 0 : volume;
               const mediaSource = getClipMediaSource(c);
               reversedAudioEngine.playReversedAudio(
                 c.id,
@@ -2219,9 +2239,6 @@ function EditorMainScreenContent() {
                 clipVol,
                 c.playbackRate || c.speed || 1
               );
-            } else {
-              reversedAudioEngine.stopReversedAudio();
-              v.play().catch(() => { });
             }
           } else {
             v.pause();
@@ -2268,36 +2285,11 @@ function EditorMainScreenContent() {
               timelineTimeToSourceTime(c, clampedTime)
             )
           );
-          if (!v.seeking) {
-            if ('fastSeek' in v && typeof (v as any).fastSeek === 'function') {
-              try {
-                (v as any).fastSeek(localTime);
-              } catch {
-                v.currentTime = localTime;
-              }
-            } else {
-              v.currentTime = localTime;
-            }
-          }
+          safeSeekVideo(v, c.id, localTime);
           if (isPlaying) {
-            if (c.isReversed) {
-              v.muted = true;
-              v.play().catch(() => { });
-              const relTime = Math.max(0, clampedTime - c.timelineStart);
-              const clipVol = isMuted || mutedClips[c.id] ? 0 : volume;
-              const mediaSource = getClipMediaSource(c);
-              reversedAudioEngine.playReversedAudio(
-                c.id,
-                mediaSource,
-                relTime,
-                c.duration,
-                clipVol,
-                c.playbackRate || c.speed || 1
-              );
-            } else {
-              reversedAudioEngine.stopReversedAudio();
-              v.play().catch(() => { });
-            }
+            const isVideoMuted = isMuted || !!mutedClips[c.id] || !!c.isMuted || !!c.isAudioDetached;
+            v.muted = isVideoMuted;
+            v.play().catch(() => { });
           } else {
             v.pause();
           }
@@ -3915,10 +3907,19 @@ function EditorMainScreenContent() {
                           ? renderedCSS.filterStr
                           : (renderedCSS.filterStr === 'none' ? globalFilterStr : `${globalFilterStr} ${renderedCSS.filterStr}`);
 
-                        const combinedFilter = [rawFilterStr !== 'none' ? rawFilterStr : null, kfFilterStr || null, tState.filter || null].filter(Boolean).join(' ') || 'none';
+                        // Overlap Transition Interpolation Calculation
+                        const ovState = OverlapEngine.getOverlapTransitionState(clip, timelineClips, currentTime, overlaps);
+
+                        const combinedFilter = [
+                          rawFilterStr !== 'none' ? rawFilterStr : null,
+                          kfFilterStr || null,
+                          tState.filter || null,
+                          ovState.blurPx > 0 ? `blur(${ovState.blurPx}px)` : null
+                        ].filter(Boolean).join(' ') || 'none';
                         const finalFilterStr = combinedFilter;
 
-                        const finalOpacity = tState.opacity * renderedCSS.opacityVal * kfOpacityMultiplier * (filterEnabled && !showBeforeOnly ? filterOpacity / 100 : 1);
+                        const baseOpacityVal = tState.opacity * renderedCSS.opacityVal * kfOpacityMultiplier * (filterEnabled && !showBeforeOnly ? filterOpacity / 100 : 1);
+                        const finalOpacity = baseOpacityVal * ovState.opacityMultiplier;
                         const finalBlendMode = (filterEnabled && !showBeforeOnly) ? (filterBlendMode as any) : renderedCSS.mixBlendModeVal;
                         let canvasAspect = 16 / 9;
                         if (aspectRatio === '9/16') canvasAspect = 9 / 16;
@@ -3941,7 +3942,11 @@ function EditorMainScreenContent() {
                         const wrapperWidth = mediaAspect > canvasAspect ? '100%' : 'auto';
                         const wrapperHeight = mediaAspect > canvasAspect ? 'auto' : '100%';
 
-                        const finalTransform = `translate(-50%, -50%) translate(${posX}px, ${posY}px) scale(${clipScale * clipScaleX}, ${clipScale * clipScaleY}) rotate(${clipRotation}deg) ${renderedCSS.transformStr} ${tState.transform}`;
+                        const effectivePosX = posX + ovState.transformOffsetX;
+                        const effectivePosY = posY + ovState.transformOffsetY;
+                        const effectiveScale = clipScale * ovState.scaleMultiplier;
+
+                        const finalTransform = `translate(-50%, -50%) translate(${effectivePosX}px, ${effectivePosY}px) scale(${effectiveScale * clipScaleX}, ${effectiveScale * clipScaleY}) rotate(${clipRotation}deg) ${renderedCSS.transformStr} ${tState.transform}`;
 
                         const isImageOrFreeze = clip.isFreezeFrame || clip.type === 'image' || clip.type === 'freeze' || (clip.url && (clip.url.startsWith('data:image/') || clip.url.endsWith('.png') || clip.url.endsWith('.jpg') || clip.url.endsWith('.jpeg') || clip.url.endsWith('.webp')));
 
@@ -3952,7 +3957,7 @@ function EditorMainScreenContent() {
                             style={{
                               display: isClipVisible ? 'block' : 'none',
                               opacity: isClipVisible ? finalOpacity : 0,
-                              zIndex: clip.trackId === 'overlay' ? 20 : (tState.zIndex || 1),
+                              zIndex: ovState.zIndexOverride ?? (clip.trackId === 'overlay' ? 20 : (tState.zIndex || 1)),
                               visibility: isClipVisible ? 'visible' : 'hidden',
                               position: 'absolute',
                               left: '50%',
@@ -4554,7 +4559,7 @@ function EditorMainScreenContent() {
                 >
                   {/* Row 0: Time Ruler */}
                   <div className="flex flex-row h-6 border-b border-border bg-surface select-none flex-shrink-0">
-                    <div className="w-40 flex-shrink-0 border-r border-border bg-background flex items-center justify-center text-[9px] font-mono text-muted-foreground tracking-wider">
+                    <div className="w-40 flex-shrink-0 border-r border-border bg-background flex items-center justify-center text-[9px] font-mono text-muted-foreground tracking-wider font-bold">
                       TRACKS
                     </div>
                     <div
@@ -4761,7 +4766,7 @@ function EditorMainScreenContent() {
                         className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
                         onClick={(e) => { e.stopPropagation(); setActiveTab('text'); }}
                       >
-                        <span className="text-sm">T</span>
+                        <span className="text-sm font-bold text-amber-400">T</span>
                         <span className="text-[10px] font-medium tracking-wide">Text</span>
                       </div>
                       <div className="relative flex-1 h-full border-b border-border px-0 flex items-center">
@@ -4881,7 +4886,7 @@ function EditorMainScreenContent() {
                         className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
                         onClick={(e) => { e.stopPropagation(); setActiveTab('effects'); }}
                       >
-                        <Layers className="h-3.5 w-3.5" />
+                        <Layers className="h-3.5 w-3.5 text-sky-400" />
                         <span className="text-[10px] font-medium tracking-wide">Overlay</span>
                       </div>
                       <div
@@ -5137,27 +5142,63 @@ function EditorMainScreenContent() {
                               const nextClip = videoClipsArray[idx + 1];
                               const transitionId = clip.appliedTransition;
 
-                              acc.push(
-                                <button
-                                  key={`trans-${clip.id}-${nextClip.id}`}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedTransitionIndex(idx);
-                                    setActiveTransitionId(transitionId);
-                                    setEffectsSubTab('transitions');
-                                    setActiveTab('transitions');
-                                    showToast('Select a transition to apply between clips');
-                                  }}
-                                  className={`h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 border transition-all duration-200 shadow-lg z-40 absolute ${transitionId
-                                      ? 'bg-primary text-primary-foreground font-bold hover:bg-sky-400 border-sky-400 ring-2 ring-sky-400/30 shadow-[0_0_10px_rgba(56,189,248,0.5)] scale-105'
-                                      : 'bg-surface text-primary border-sky-500/40 hover:bg-primary hover:text-primary-foreground hover:border-sky-400 hover:scale-110'
-                                    }`}
-                                  style={{ left: `${(clip.timelineStart + clip.duration) * pxPerSec - 12}px` }}
-                                  title={transitionId ? `Transition: ${transitionId}` : 'Add Transition'}
-                                >
-                                  <Plus className="h-3.5 w-3.5" />
-                                </button>
+                              const detectedOverlaps = OverlapEngine.findTimelineOverlaps(timelineClips, overlaps);
+                              const currentOverlap = detectedOverlaps.find(
+                                (ov) => (ov.clipAId === clip.id && ov.clipBId === nextClip.id) || (ov.clipAId === nextClip.id && ov.clipBId === clip.id)
                               );
+
+                              if (currentOverlap) {
+                                const ovLeftPx = currentOverlap.overlapStart * pxPerSec;
+                                const ovWidthPx = currentOverlap.overlapDuration * pxPerSec;
+                                const transitionType = currentOverlap.transition?.type || 'crossfade';
+
+                                acc.push(
+                                  <React.Fragment key={`ov-wrap-${currentOverlap.id}`}>
+                                    {/* Overlap Highlight Strip */}
+                                    <div
+                                      className="absolute top-1 bottom-1 bg-sky-500/25 border-x-2 border-sky-400 rounded z-20 pointer-events-none shadow-[0_0_10px_rgba(56,189,248,0.4)] overflow-hidden"
+                                      style={{ left: `${ovLeftPx}px`, width: `${ovWidthPx}px` }}
+                                    />
+
+                                    {/* Overlap Transition Badge */}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveOverlapId(currentOverlap.id);
+                                      }}
+                                      className="h-6 px-2 rounded-full flex items-center gap-1 flex-shrink-0 border transition-all duration-200 shadow-xl z-40 absolute bg-sky-500 text-white border-sky-300 font-bold hover:scale-110 text-[9.5px] cursor-pointer shadow-sky-500/30"
+                                      style={{ left: `${ovLeftPx + ovWidthPx / 2 - 18}px` }}
+                                      title={`Overlap Transition: ${transitionType} (${currentOverlap.overlapDuration.toFixed(1)}s)`}
+                                    >
+                                      <span>🔀</span>
+                                      <span>{currentOverlap.overlapDuration.toFixed(1)}s</span>
+                                    </button>
+                                  </React.Fragment>
+                                );
+                              } else {
+                                acc.push(
+                                  <button
+                                    key={`trans-${clip.id}-${nextClip.id}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedTransitionIndex(idx);
+                                      setActiveTransitionId(transitionId);
+                                      setEffectsSubTab('transitions');
+                                      setActiveTab('transitions');
+                                      showToast('Select a transition to apply between clips');
+                                    }}
+                                    className={`h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 border transition-all duration-200 shadow-lg z-40 absolute ${transitionId
+                                        ? 'bg-primary text-primary-foreground font-bold hover:bg-sky-400 border-sky-400 ring-2 ring-sky-400/30 shadow-[0_0_10px_rgba(56,189,248,0.5)] scale-105'
+                                        : 'bg-surface text-primary border-sky-500/40 hover:bg-primary hover:text-primary-foreground hover:border-sky-400 hover:scale-110'
+                                      }`}
+                                    style={{ left: `${(clip.timelineStart + clip.duration) * pxPerSec - 12}px` }}
+                                    title={transitionId ? `Transition: ${transitionId}` : 'Add Transition'}
+                                  >
+                                    <Plus className="h-3.5 w-3.5" />
+                                  </button>
+                                );
+                              }
                             }
 
                             return acc;
@@ -5425,6 +5466,7 @@ function EditorMainScreenContent() {
               speed: c.playbackRate ?? c.speed ?? c.playback_speed ?? 1,
               playbackRate: c.playbackRate ?? c.speed ?? c.playback_speed ?? 1,
               isReversed: c.isReversed ?? c.reverse ?? false,
+              isReversedFile: c.isReversedFile ?? c.isReversed ?? c.reverse ?? false,
               reverse: c.isReversed ?? c.reverse ?? false,
               isMuted: clipIsMuted,
               muted: clipIsMuted,
@@ -5535,9 +5577,51 @@ function EditorMainScreenContent() {
             duration: getProjectTotalDuration(timelineClips),
             isMuted: isMuted,
             mutedClips: mutedClips,
+            overlaps: overlaps,
           };
         })()}
       />
+
+      {/* OVERLAP / TRANSITION CONTROL PANEL */}
+      {(() => {
+        const detectedOverlaps = OverlapEngine.findTimelineOverlaps(timelineClips, overlaps);
+        const activeOverlap = detectedOverlaps.find((ov) => ov.id === activeOverlapId) || null;
+        const clipA = activeOverlap ? timelineClips.find((c) => c.id === activeOverlap.clipAId) : null;
+        const clipB = activeOverlap ? timelineClips.find((c) => c.id === activeOverlap.clipBId) : null;
+
+        return (
+          <OverlapControlPanel
+            isOpen={!!activeOverlapId && !!activeOverlap}
+            onClose={() => setActiveOverlapId(null)}
+            overlap={activeOverlap}
+            clipAName={clipA?.name || 'Clip A'}
+            clipBName={clipB?.name || 'Clip B'}
+            onUpdateOverlap={(ovId, updates) => {
+              beginTransaction('Update overlap transition', getProjectState());
+              setOverlaps((prev) => {
+                const existingIdx = prev.findIndex((o) => o.id === ovId);
+                if (existingIdx !== -1) {
+                  const updated = [...prev];
+                  updated[existingIdx] = { ...updated[existingIdx], ...updates };
+                  return updated;
+                } else if (activeOverlap) {
+                  return [...prev, { ...activeOverlap, ...updates }];
+                }
+                return prev;
+              });
+              commitTransaction(getProjectState());
+              showToast('Overlap settings updated');
+            }}
+            onRemoveOverlap={(ovId) => {
+              beginTransaction('Remove overlap', getProjectState());
+              setOverlaps((prev) => prev.filter((o) => o.id !== ovId));
+              setActiveOverlapId(null);
+              commitTransaction(getProjectState());
+              showToast('Overlap transition removed');
+            }}
+          />
+        );
+      })()}
 
       {/* COVER / THUMBNAIL MODAL */}
       <CoverThumbnailModal
@@ -5549,17 +5633,20 @@ function EditorMainScreenContent() {
         }
         projectId={urlProjectId || projectId || 'default_project'}
         currentCoverUrl={thumbnailUrl}
-        onCoverSet={async (url) => {
+        savedCoverState={projectCoverState}
+        onCoverSet={async (url, coverState) => {
           setThumbnailUrl(url);
+          setProjectCoverState(coverState);
           const currentPayload = getProjectPayload();
-          const updatedPayload = { ...currentPayload, thumbnailUrl: url };
+          const updatedPayload = { ...currentPayload, thumbnailUrl: url, coverState };
           await ProjectDB.saveProject(updatedPayload);
           showToast('Cover saved to project');
         }}
         onCoverRemove={async () => {
           setThumbnailUrl(undefined);
+          setProjectCoverState(undefined);
           const currentPayload = getProjectPayload();
-          const updatedPayload = { ...currentPayload, thumbnailUrl: undefined };
+          const updatedPayload = { ...currentPayload, thumbnailUrl: undefined, coverState: undefined };
           await ProjectDB.saveProject(updatedPayload);
           showToast('Cover removed from project');
         }}

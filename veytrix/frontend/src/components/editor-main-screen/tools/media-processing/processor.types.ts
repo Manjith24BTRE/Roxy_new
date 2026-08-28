@@ -21,6 +21,7 @@ export interface MediaProcessingResult {
   duration?: number;
   error?: string;
   cached?: boolean;
+  isReversedFile?: boolean;
 }
 
 export interface VideoProcessOptions {
