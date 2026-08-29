@@ -55,30 +55,30 @@ export const Dashboard = () => {
           title="Active Users" 
           value={activeUsers} 
           icon={Users} 
-          trend={{ value: data?.activeUsersTrend ?? 12.5, isPositive: true }} 
+          trend={data?.activeUsersTrend} 
         />
         <StatCard 
           title="Revenue (MRR)" 
           value={revenueMrr} 
           icon={CreditCard} 
-          trend={{ value: data?.revenueTrend ?? 8.2, isPositive: true }} 
+          trend={data?.revenueTrend} 
         />
         <StatCard 
           title="AI Jobs (24h)" 
           value={aiJobs24h} 
           icon={BrainCircuit} 
-          trend={{ value: data?.aiJobsTrend ?? 24.1, isPositive: true }} 
+          trend={data?.aiJobsTrend} 
         />
         <StatCard 
           title="Failed Jobs" 
           value={failedJobs} 
           icon={AlertTriangle} 
-          trend={{ value: Math.abs(data?.failedJobsTrend ?? 4.5), isPositive: false }} 
+          trend={data?.failedJobsTrend} 
           subtitle="Requires attention"
         />
         <StatCard 
           title="Queue Status" 
-          value={data?.queueStatus || 'Normal'} 
+          value={data?.queueStatus || 'Idle'} 
           icon={Clock} 
         />
         <StatCard 

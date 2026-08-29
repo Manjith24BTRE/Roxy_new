@@ -5,13 +5,13 @@ import { adminAnalyticsService } from './adminAnalyticsService';
 
 export interface DashboardMetrics {
   activeUsers: number;
-  activeUsersTrend: number;
+  activeUsersTrend?: { value: number | string; isPositive?: boolean };
   revenueMrr: number;
-  revenueTrend: number;
+  revenueTrend?: { value: number | string; isPositive?: boolean };
   aiJobs24h: number;
-  aiJobsTrend: number;
+  aiJobsTrend?: { value: number | string; isPositive?: boolean };
   failedJobs24h: number;
-  failedJobsTrend: number;
+  failedJobsTrend?: { value: number | string; isPositive?: boolean };
   queueStatus: string;
   systemStatus: string;
   userGrowthData: { name: string; Users: number }[];

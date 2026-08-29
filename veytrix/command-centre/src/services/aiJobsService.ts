@@ -71,12 +71,19 @@ export const aiJobsService = {
   },
 
   /**
-   * Subscribes to live Supabase Realtime changes for the render_jobs table.
+   * Subscribes to live Supabase Realtime changes for exports and render_jobs tables.
    * RBAC Security Gate Placeholder: 'ai.jobs.read'
    */
   subscribeToJobs(onJobChange: (payload: any) => void) {
     const channel = supabase
-      .channel('public:render_jobs')
+      .channel('public:jobs_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'exports' },
+        (payload) => {
+          onJobChange(payload);
+        }
+      )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'render_jobs' },
