@@ -410,34 +410,42 @@ class FilterBuilder:
         opacity = filt.opacity
         params = filt.parameters or {}
 
-        filters_cat = {f.id: f for f in get_filters_catalog()}
-        cat_item = filters_cat.get(filt_id)
-
         filt_lower = filt_id.lower()
-        cat_str = cat_item.category.lower() if cat_item else ""
+        filters: List[str] = []
 
-        filter_str = None
-
-        if "warm" in filt_lower or "warm" in cat_str or "sepia" in filt_lower:
+        # Map frontend CSS filter presets to explicit FFmpeg filters
+        if "vintage" in filt_lower or "retro" in filt_lower or "classic" in filt_lower or "film" in filt_lower or "polaroid" in filt_lower or "kodak" in filt_lower or "fuji" in filt_lower:
+            filters.append(f"curves=vintage,vignette=PI/{max(2.0, 4.0 - intensity):.2f}")
+        elif "warm" in filt_lower or "autumn" in filt_lower or "amber" in filt_lower or "sunset" in filt_lower or "gold" in filt_lower:
             sat = 1.0 + (0.3 * intensity)
-            filter_str = f"eq=gamma_r={1.0 + (0.2 * intensity):.2f}:saturation={sat:.2f}"
-        elif "cool" in filt_lower or "cool" in cat_str:
-            filter_str = f"eq=gamma_b={1.0 + (0.25 * intensity):.2f}:contrast={1.0 + (0.1 * intensity):.2f}"
-        elif "monochrome" in filt_lower or "bw" in filt_lower or "black" in filt_lower or "monochrome" in cat_str:
-            filter_str = f"hue=s={1.0 - intensity:.2f}"
+            filters.append(f"eq=gamma_r={1.0 + (0.2 * intensity):.2f}:saturation={sat:.2f}")
+        elif "cool" in filt_lower or "nordic" in filt_lower or "arctic" in filt_lower or "frost" in filt_lower or "blue" in filt_lower:
+            filters.append(f"eq=gamma_b={1.0 + (0.25 * intensity):.2f}:contrast={1.0 + (0.1 * intensity):.2f}")
+        elif "monochrome" in filt_lower or "bw" in filt_lower or "b&w" in filt_lower or "black" in filt_lower or "noir" in filt_lower or "silver" in filt_lower:
+            filters.append(f"hue=s={max(0.0, 1.0 - intensity):.2f}")
+        elif "sepia" in filt_lower:
+            filters.append("colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131")
         elif "sharpen" in filt_lower:
-            filter_str = f"unsharp=5:5:{1.0 * intensity:.2f}:5:5:0.0"
+            filters.append(f"unsharp=5:5:{max(0.1, 1.0 * intensity):.2f}:5:5:0.0")
         elif "vignette" in filt_lower:
-            filter_str = f"vignette=PI/{max(2.0, 4.0 - intensity):.2f}"
+            filters.append(f"vignette=PI/{max(1.5, 4.0 - (2.0 * intensity)):.2f}")
         elif "grain" in filt_lower or "noise" in filt_lower:
-            filter_str = f"noise=alls={int(20 * intensity)}:allf=t+u"
+            filters.append(f"noise=alls={int(30 * intensity)}:allf=t+u")
+        elif "neon" in filt_lower or "cyber" in filt_lower or "glow" in filt_lower:
+            filters.append(f"eq=contrast={1.0 + (0.3 * intensity):.2f}:saturation={1.0 + (0.4 * intensity):.2f}")
+        elif "cinematic" in filt_lower or "moody" in filt_lower or "dramatic" in filt_lower or "hdr" in filt_lower:
+            filters.append(f"eq=contrast={1.0 + (0.25 * intensity):.2f}:saturation={1.0 + (0.15 * intensity):.2f}")
         else:
-            filter_str = f"eq=contrast={1.0 + (0.15 * intensity):.2f}:brightness=0.0"
+            # Leverage FilterRenderer for complete generic coverage
+            from app.services.renderers.category_renderers import FilterRenderer
+            renderer = FilterRenderer()
+            params_dict = {"intensity": intensity * 100.0, **params}
+            filters = renderer.generate_filters(filt_id, params_dict, {"category": "color"})
 
-        if opacity < 1.0 and filter_str:
-            filter_str += f",colorchannelmixer=aa={opacity:.2f}"
+        if opacity < 1.0 and filters:
+            filters.append(f"format=rgba,colorchannelmixer=aa={opacity:.2f}")
 
-        return filter_str
+        return ",".join(filters) if filters else None
 
     @staticmethod
     def build_filter_chains(clip: ClipModel) -> List[str]:

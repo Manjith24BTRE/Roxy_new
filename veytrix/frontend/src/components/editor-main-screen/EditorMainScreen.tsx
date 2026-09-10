@@ -3147,6 +3147,22 @@ function EditorMainScreenContent() {
                 activeFilterId={activeFilterId}
                 onSelectFilter={(id) => {
                   setActiveFilterId(id);
+                  if (activeSelectedClipId || activeSelectedClip?.id) {
+                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
+                    setTimelineClips((prev) =>
+                      prev.map((c) => {
+                        if (c.id === targetId) {
+                          if (id) {
+                            const newFilter = { id, intensity: filterIntensity, opacity: filterOpacity, blendMode: filterBlendMode };
+                            return { ...c, filterId: id, filters: [newFilter], appliedFilters: [newFilter] };
+                          } else {
+                            return { ...c, filterId: null, filters: [], appliedFilters: [] };
+                          }
+                        }
+                        return c;
+                      })
+                    );
+                  }
                   if (id) {
                     setFilterEnabled(true);
                     showToast('Filter applied');
@@ -3155,11 +3171,53 @@ function EditorMainScreenContent() {
                   }
                 }}
                 filterIntensity={filterIntensity}
-                onFilterIntensityChange={setFilterIntensity}
+                onFilterIntensityChange={(intensity) => {
+                  setFilterIntensity(intensity);
+                  if (activeSelectedClipId || activeSelectedClip?.id) {
+                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
+                    setTimelineClips((prev) =>
+                      prev.map((c) => {
+                        if (c.id === targetId && c.filterId) {
+                          const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, intensity }));
+                          return { ...c, filterIntensity: intensity, filters: updatedFilters, appliedFilters: updatedFilters };
+                        }
+                        return c;
+                      })
+                    );
+                  }
+                }}
                 filterOpacity={filterOpacity}
-                onFilterOpacityChange={setFilterOpacity}
+                onFilterOpacityChange={(opacity) => {
+                  setFilterOpacity(opacity);
+                  if (activeSelectedClipId || activeSelectedClip?.id) {
+                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
+                    setTimelineClips((prev) =>
+                      prev.map((c) => {
+                        if (c.id === targetId && c.filterId) {
+                          const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, opacity }));
+                          return { ...c, filterOpacity: opacity, filters: updatedFilters, appliedFilters: updatedFilters };
+                        }
+                        return c;
+                      })
+                    );
+                  }
+                }}
                 filterBlendMode={filterBlendMode}
-                onFilterBlendModeChange={setFilterBlendMode}
+                onFilterBlendModeChange={(blendMode) => {
+                  setFilterBlendMode(blendMode);
+                  if (activeSelectedClipId || activeSelectedClip?.id) {
+                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
+                    setTimelineClips((prev) =>
+                      prev.map((c) => {
+                        if (c.id === targetId && c.filterId) {
+                          const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, blendMode }));
+                          return { ...c, filterBlendMode: blendMode, filters: updatedFilters, appliedFilters: updatedFilters };
+                        }
+                        return c;
+                      })
+                    );
+                  }
+                }}
                 filterEnabled={filterEnabled}
                 onFilterEnabledChange={setFilterEnabled}
                 showBeforeOnly={showBeforeOnly}
@@ -3177,6 +3235,22 @@ function EditorMainScreenContent() {
                 activeFilterId={activeFilterId}
                 onSelectFilter={(id) => {
                   setActiveFilterId(id);
+                  if (activeSelectedClipId || activeSelectedClip?.id) {
+                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
+                    setTimelineClips((prev) =>
+                      prev.map((c) => {
+                        if (c.id === targetId) {
+                          if (id) {
+                            const newFilter = { id, intensity: filterIntensity, opacity: filterOpacity, blendMode: filterBlendMode };
+                            return { ...c, filterId: id, filters: [newFilter], appliedFilters: [newFilter] };
+                          } else {
+                            return { ...c, filterId: null, filters: [], appliedFilters: [] };
+                          }
+                        }
+                        return c;
+                      })
+                    );
+                  }
                   if (id) {
                     setFilterEnabled(true);
                     showToast('Filter applied');
@@ -3185,11 +3259,53 @@ function EditorMainScreenContent() {
                   }
                 }}
                 filterIntensity={filterIntensity}
-                onFilterIntensityChange={setFilterIntensity}
+                onFilterIntensityChange={(intensity) => {
+                  setFilterIntensity(intensity);
+                  if (activeSelectedClipId || activeSelectedClip?.id) {
+                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
+                    setTimelineClips((prev) =>
+                      prev.map((c) => {
+                        if (c.id === targetId && c.filterId) {
+                          const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, intensity }));
+                          return { ...c, filterIntensity: intensity, filters: updatedFilters, appliedFilters: updatedFilters };
+                        }
+                        return c;
+                      })
+                    );
+                  }
+                }}
                 filterOpacity={filterOpacity}
-                onFilterOpacityChange={setFilterOpacity}
+                onFilterOpacityChange={(opacity) => {
+                  setFilterOpacity(opacity);
+                  if (activeSelectedClipId || activeSelectedClip?.id) {
+                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
+                    setTimelineClips((prev) =>
+                      prev.map((c) => {
+                        if (c.id === targetId && c.filterId) {
+                          const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, opacity }));
+                          return { ...c, filterOpacity: opacity, filters: updatedFilters, appliedFilters: updatedFilters };
+                        }
+                        return c;
+                      })
+                    );
+                  }
+                }}
                 filterBlendMode={filterBlendMode}
-                onFilterBlendModeChange={setFilterBlendMode}
+                onFilterBlendModeChange={(blendMode) => {
+                  setFilterBlendMode(blendMode);
+                  if (activeSelectedClipId || activeSelectedClip?.id) {
+                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
+                    setTimelineClips((prev) =>
+                      prev.map((c) => {
+                        if (c.id === targetId && c.filterId) {
+                          const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, blendMode }));
+                          return { ...c, filterBlendMode: blendMode, filters: updatedFilters, appliedFilters: updatedFilters };
+                        }
+                        return c;
+                      })
+                    );
+                  }
+                }}
                 filterEnabled={filterEnabled}
                 onFilterEnabledChange={setFilterEnabled}
                 showBeforeOnly={showBeforeOnly}
