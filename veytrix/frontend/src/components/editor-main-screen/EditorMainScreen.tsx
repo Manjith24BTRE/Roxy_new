@@ -6,8 +6,10 @@ import {
   Wand2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   ZoomIn, ZoomOut, Scissors, Split, Plus, Search,
   FolderPlus, Maximize2, RotateCcw, Image as ImageIcon,
-  Languages, Crop, Lock, Unlock, Gauge, Replace, ArrowRightLeft, Sliders, Activity, Edit3, Layers, Music, Video
+  Languages, Crop, Lock, Unlock, Gauge, Replace, ArrowRightLeft, Sliders, Activity, Edit3, Layers, Music, Video, Sparkles
 } from 'lucide-react';
+import { AiAssistantPanel, EditorContextProvider } from '../../features/ai_command_engine';
+
 import { VeytrixLogo } from '../VeytrixLogo';
 import { useProjectMedia } from '../../contexts/ProjectMediaContext';
 import { ExportCenter } from './components/ExportCenter/ExportCenter';
@@ -106,7 +108,9 @@ function EditorMainScreenContent() {
   };
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [activeTab, setActiveTab] = useState<'media' | 'ratio' | 'audio' | 'text' | 'captions' | 'effects' | 'transitions' | 'filters' | 'speed' | 'replace' | 'keyframes'>('media');
+  const [activeTab, setActiveTab] = useState<'media' | 'ai_assistant' | 'ratio' | 'audio' | 'text' | 'captions' | 'effects' | 'transitions' | 'filters' | 'speed' | 'replace' | 'keyframes'>('media');
+  const [rightInspectorTab, setRightInspectorTab] = useState<'properties' | 'ai_assistant'>('properties');
+
   const [autoKeyframeEnabled, setAutoKeyframeEnabled] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(120);
   const [currentTime, setCurrentTime] = useState(0);
@@ -243,6 +247,28 @@ function EditorMainScreenContent() {
       ? (timelineClips.find(c => c.id === activeMediaId || c.mediaId === activeMediaId) || null)
       : (timelineClips.find(c => currentTime >= c.timelineStart && currentTime <= c.timelineStart + c.duration) || timelineClips[0] || null));
   const activeClipLocalTime = activeSelectedClip ? Math.max(0, currentTime - activeSelectedClip.timelineStart) : 0;
+
+  // Sync AI Command Engine Editor Context
+  useEffect(() => {
+    EditorContextProvider.updateContext({
+      selectedClipId: activeSelectedClip?.id,
+      selectedClip: activeSelectedClip,
+      clipDuration: activeSelectedClip?.duration,
+      playheadTime: currentTime,
+      clipStartTime: activeSelectedClip?.timelineStart,
+      clipEndTime: activeSelectedClip ? activeSelectedClip.timelineStart + activeSelectedClip.duration : undefined,
+      totalDuration: duration,
+      activeFilter: activeSelectedClip?.filterId,
+      activeTransition: activeSelectedClip?.transitionId,
+      clipsList: timelineClips.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        start: c.timelineStart ?? 0,
+        end: (c.timelineStart ?? 0) + c.duration,
+      })),
+    });
+  }, [activeSelectedClip, timelineClips, currentTime, duration]);
+
 
   // Reverse hook initialization
   const { toggleReverse, isProcessing: isReversing } = useReverse({
@@ -2974,6 +3000,7 @@ function EditorMainScreenContent() {
           <div className="flex border-b border-border bg-surface p-1 gap-1 overflow-x-auto flex-shrink-0 scrollbar-none select-none">
             {[
               { id: 'media', label: 'Media', icon: Film },
+              { id: 'ai_assistant', label: 'AI Assistant', icon: Sparkles },
               { id: 'ratio', label: 'Ratio', icon: Crop },
               { id: 'audio', label: 'Audio', icon: AudioWaveform },
               { id: 'text', label: 'Text', icon: Type },
@@ -2984,6 +3011,7 @@ function EditorMainScreenContent() {
               { id: 'speed', label: 'Speed', icon: Gauge },
               { id: 'keyframes', label: 'Keyframes', icon: Activity },
             ].map((tab) => (
+
               <button
                 key={tab.id}
                 type="button"
@@ -3013,7 +3041,94 @@ function EditorMainScreenContent() {
           </div>
 
           <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
+            {activeTab === 'ai_assistant' && (
+              <AiAssistantPanel
+                onTrim={(targetId, start, end) => handleTrimUpdate(targetId, activeClipLocalTime + start, activeClipLocalTime, end - start)}
+                onSplit={(targetId, time) => {
+                  const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                  if (!targetClip) return { success: false, error: 'No clip selected' };
+                  const splitAt = time !== undefined ? time : currentTime;
+                  const res = SplitService.splitClip(timelineClips, targetClip.id, splitAt);
+                  if (!res.success) return { success: false, error: res.message || 'Split failed' };
+                  beginTransaction('Split clip', getProjectState());
+                  if (res.updatedTimelineClips) {
+                    setTimelineClips(res.updatedTimelineClips);
+                  }
+                  commitTransaction(getProjectState());
+                  return { success: true };
+                }}
+                onDelete={(targetId, ripple) => {
+                  const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                  if (!targetClip) return;
+                  beginTransaction('Delete clip', getProjectState());
+                  const res = ripple
+                    ? DeleteService.rippleDeleteClip(timelineClips, targetClip.id, currentTime)
+                    : DeleteService.deleteClip(timelineClips, targetClip.id, currentTime);
+                  if (res.success && res.updatedTimelineClips) {
+                    setTimelineClips(res.updatedTimelineClips);
+                  }
+                  commitTransaction(getProjectState());
+                }}
+                onSpeed={(targetId, speed) => {
+                  const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                  if (targetClip) {
+                    handleUpdateClipSpeed(targetClip.id, speed);
+                  }
+                }}
+
+                onMute={(targetId, muted) => {
+                  const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                  if (targetClip) {
+                    setMutedClipsState(prev => ({ ...prev, [targetClip.id]: muted }));
+                  }
+                }}
+                onVolume={(targetId, vol) => setVolumeState(vol)}
+                onDuplicate={(targetId) => {
+                  const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                  if (targetClip) {
+                    const dupClips = duplicateClipSequence(timelineClips, targetClip.id);
+                    if (dupClips) {
+                      beginTransaction('Duplicate clip', getProjectState());
+                      setTimelineClips(dupClips);
+                      commitTransaction(getProjectState());
+                    }
+                  }
+                }}
+                onRotate={(targetId, angle) => setCanvasRotationState(angle)}
+                onScale={(targetId, scaleVal) => setCanvasScaleState(scaleVal)}
+                onAspectRatio={(fmt) => setAspectRatio(fmt)}
+                onDetachAudio={() => detachAudio()}
+                onSeekPlayhead={(t) => handleSeek(t)}
+                onSelectClip={(id) => {
+                  setActiveSelectedClipId(id);
+                  const clip = timelineClips.find(c => c.id === id);
+                  if (clip) setActiveMediaId(clip.mediaId);
+                }}
+                onApplyFilter={(targetId, filterName) => {
+                  const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                  const filterObj = SAMPLE_FILTERS.find(f => f.id === filterName || f.name.toLowerCase() === filterName.toLowerCase());
+                  if (targetClip && filterObj) {
+                    beginTransaction('Apply filter', getProjectState());
+                    setTimelineClips(prev => prev.map(c => {
+                      if (c.id === targetClip.id) {
+                        const newFilter = { id: filterObj.id, intensity: 1, opacity: 1, blendMode: 'normal' };
+                        return { ...c, filterId: filterObj.id, filters: [newFilter], appliedFilters: [newFilter] };
+                      }
+                      return c;
+                    }));
+                    commitTransaction(getProjectState());
+                  }
+                }}
+                onAddTransition={(targetId, transType) => {
+                  handleSelectTransition(transType);
+                }}
+              />
+            )}
+
+
+
             {activeTab === 'media' && (
+
               <>
                 <div className="p-3 border-b border-border space-y-2 flex-shrink-0">
                   <div className="relative">
@@ -4381,127 +4496,212 @@ function EditorMainScreenContent() {
           </div>
         </main>
 
-        {/* RIGHT PANEL: Clip Inspector */}
-        <aside className="border-l border-border bg-surface flex flex-col overflow-y-auto p-4 space-y-6">
-          <div>
-            <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-3">
-              Active Clip Properties
-            </div>
-            <div className="rounded-lg border border-border bg-surface/60 p-3 space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Asset Name</span>
-                <span className="font-mono text-foreground truncate max-w-[140px]">{activeMedia?.name || 'None'}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">File Size</span>
-                <span className="font-mono text-foreground">{activeMedia?.size || '0 MB'}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Duration</span>
-                <span className="font-mono text-foreground">{activeMedia?.durationFormatted || '00:00'}</span>
-              </div>
-            </div>
+        {/* RIGHT PANEL: Clip Inspector with Properties and AI Assistant Tab Switcher */}
+        <aside className="border-l border-border bg-surface flex flex-col w-[320px] flex-shrink-0 overflow-hidden">
+          {/* Top Tab Bar: Properties | AI Assistant */}
+          <div className="flex items-center gap-1.5 p-2 border-b border-border bg-surface flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setRightInspectorTab('properties')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                rightInspectorTab === 'properties'
+                  ? 'bg-background text-foreground border border-border shadow-sm font-bold'
+                  : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
+              }`}
+            >
+              <Sliders className="h-3.5 w-3.5" />
+              <span>Properties</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRightInspectorTab('ai_assistant')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                rightInspectorTab === 'ai_assistant'
+                  ? 'bg-background text-foreground border border-border shadow-sm font-bold'
+                  : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5 text-sky-400" />
+              <span>AI Assistant</span>
+            </button>
           </div>
 
-          <div>
-            <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-3">
-              Transform & Blend
-            </div>
-            <div className="space-y-4">
-              {/* Opacity */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Opacity</span>
-                  <span className="font-mono text-foreground">{Math.round((activeSelectedClip?.opacity ?? 1.0) * 100)}%</span>
+          {/* Tab Content Container */}
+          <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
+            {rightInspectorTab === 'properties' && (
+              <div className="p-4 space-y-6">
+                <div>
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-3">
+                    Active Clip Properties
+                  </div>
+                  <div className="rounded-lg border border-border bg-surface/60 p-3 space-y-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Asset Name</span>
+                      <span className="font-mono text-foreground truncate max-w-[140px]">{activeMedia?.name || 'None'}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">File Size</span>
+                      <span className="font-mono text-foreground">{activeMedia?.size || '0 MB'}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Duration</span>
+                      <span className="font-mono text-foreground">{activeMedia?.durationFormatted || '00:00'}</span>
+                    </div>
+                  </div>
                 </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={Math.round((activeSelectedClip?.opacity ?? 1.0) * 100)}
-                  onChange={(e) => {
-                    const nextVal = Number(e.target.value) / 100;
-                    setTimelineClips((prev) => prev.map((c) => {
-                      if (c.id === activeSelectedClip?.id) {
-                        return { ...c, opacity: nextVal };
-                      }
-                      return c;
-                    }));
-                  }}
-                  className="w-full accent-primary h-1 bg-slate-800 rounded-lg cursor-pointer"
-                />
-              </div>
 
-              {/* Scale */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Scale</span>
-                  <span className="font-mono text-foreground">{canvasScale.toFixed(2)}x</span>
-                </div>
-                <input
-                  type="range"
-                  min="10"
-                  max="250"
-                  value={Math.round(canvasScale * 100)}
-                  onChange={(e) => {
-                    const nextVal = Number(e.target.value) / 100;
-                    setCanvasScale(nextVal);
-                  }}
-                  className="w-full accent-primary h-1 bg-slate-800 rounded-lg cursor-pointer"
-                />
-              </div>
-
-              {/* Rotation */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Rotation</span>
-                  <span className="font-mono text-foreground">{Math.round(canvasRotation)}°</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="360"
-                  value={Math.round(canvasRotation)}
-                  onChange={(e) => {
-                    const nextVal = Number(e.target.value);
-                    setCanvasRotation(nextVal);
-                  }}
-                  className="w-full accent-primary h-1 bg-slate-800 rounded-lg cursor-pointer"
-                />
-              </div>
-
-              {/* Crop Controls */}
-              <div className="space-y-2 pt-2 border-t border-border-strong">
-                <span className="text-xs font-semibold text-muted-foreground">Crop Visuals (%)</span>
-                <div className="grid grid-cols-2 gap-2">
-                  {['left', 'right', 'top', 'bottom'].map((side) => {
-                    const currentCropVal = activeSelectedClip?.crop?.[side as any] ?? 0;
-                    return (
-                      <div key={side} className="space-y-1">
-                        <span className="text-[10px] text-muted-foreground capitalize">{side}</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="99"
-                          value={currentCropVal}
-                          onChange={(e) => {
-                            const val = Math.max(0, Math.min(99, Number(e.target.value) || 0));
-                            setTimelineClips((prev) => prev.map((c) => {
-                              if (c.id === activeSelectedClip?.id) {
-                                const nextCrop = { ...(c.crop || { left: 0, right: 0, top: 0, bottom: 0 }), [side]: val };
-                                return { ...c, crop: nextCrop };
-                              }
-                              return c;
-                            }));
-                          }}
-                          className="w-full text-xs font-mono bg-background border border-border rounded px-1.5 py-0.5 text-foreground focus:outline-none"
-                        />
+                <div>
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-3">
+                    Transform & Blend
+                  </div>
+                  <div className="space-y-4">
+                    {/* Opacity */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Opacity</span>
+                        <span className="font-mono text-foreground">{Math.round((activeSelectedClip?.opacity ?? 1.0) * 100)}%</span>
                       </div>
-                    );
-                  })}
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={Math.round((activeSelectedClip?.opacity ?? 1.0) * 100)}
+                        onChange={(e) => {
+                          const nextVal = Number(e.target.value) / 100;
+                          setTimelineClips((prev) => prev.map((c) => {
+                            if (c.id === activeSelectedClip?.id) {
+                              return { ...c, opacity: nextVal };
+                            }
+                            return c;
+                          }));
+                        }}
+                        className="w-full accent-primary h-1 bg-surface-hover rounded-lg cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Scale */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Scale</span>
+                        <span className="font-mono text-foreground">{canvasScale.toFixed(2)}x</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.2"
+                        max="3"
+                        step="0.05"
+                        value={canvasScale}
+                        onChange={(e) => setCanvasScaleState(Number(e.target.value))}
+                        className="w-full accent-primary h-1 bg-surface-hover rounded-lg cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Rotation */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Rotation</span>
+                        <span className="font-mono text-foreground">{canvasRotation}°</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="-180"
+                        max="180"
+                        step="5"
+                        value={canvasRotation}
+                        onChange={(e) => setCanvasRotationState(Number(e.target.value))}
+                        className="w-full accent-primary h-1 bg-surface-hover rounded-lg cursor-pointer"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {rightInspectorTab === 'ai_assistant' && (
+              <div className="flex-1 flex flex-col h-full overflow-hidden">
+                <AiAssistantPanel
+                  onTrim={(targetId, start, end) => handleTrimUpdate(targetId, activeClipLocalTime + start, activeClipLocalTime, end - start)}
+                  onSplit={(targetId, time) => {
+                    const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                    if (!targetClip) return { success: false, error: 'No clip selected' };
+                    const splitAt = time !== undefined ? time : currentTime;
+                    const res = SplitService.splitClip(timelineClips, targetClip.id, splitAt);
+                    if (!res.success) return { success: false, error: res.message || 'Split failed' };
+                    beginTransaction('Split clip', getProjectState());
+                    if (res.updatedTimelineClips) {
+                      setTimelineClips(res.updatedTimelineClips);
+                    }
+                    commitTransaction(getProjectState());
+                    return { success: true };
+                  }}
+                  onDelete={(targetId, ripple) => {
+                    const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                    if (!targetClip) return;
+                    beginTransaction('Delete clip', getProjectState());
+                    const res = ripple
+                      ? DeleteService.rippleDeleteClip(timelineClips, targetClip.id, currentTime)
+                      : DeleteService.deleteClip(timelineClips, targetClip.id, currentTime);
+                    if (res.success && res.updatedTimelineClips) {
+                      setTimelineClips(res.updatedTimelineClips);
+                    }
+                    commitTransaction(getProjectState());
+                  }}
+                  onSpeed={(targetId, speed) => {
+                    const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                    if (targetClip) {
+                      handleUpdateClipSpeed(targetClip.id, speed);
+                    }
+                  }}
+                  onMute={(targetId, muted) => {
+                    const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                    if (targetClip) {
+                      setMutedClipsState(prev => ({ ...prev, [targetClip.id]: muted }));
+                    }
+                  }}
+                  onVolume={(targetId, vol) => setVolumeState(vol)}
+                  onDuplicate={(targetId) => {
+                    const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                    if (targetClip) {
+                      const dupClips = duplicateClipSequence(timelineClips, targetClip.id);
+                      if (dupClips) {
+                        beginTransaction('Duplicate clip', getProjectState());
+                        setTimelineClips(dupClips);
+                        commitTransaction(getProjectState());
+                      }
+                    }
+                  }}
+                  onRotate={(targetId, angle) => setCanvasRotationState(angle)}
+                  onScale={(targetId, scaleVal) => setCanvasScaleState(scaleVal)}
+                  onAspectRatio={(fmt) => setAspectRatio(fmt)}
+                  onDetachAudio={() => detachAudio()}
+                  onSeekPlayhead={(t) => handleSeek(t)}
+                  onSelectClip={(id) => {
+                    setActiveSelectedClipId(id);
+                    const clip = timelineClips.find(c => c.id === id);
+                    if (clip) setActiveMediaId(clip.mediaId);
+                  }}
+                  onApplyFilter={(targetId, filterName) => {
+                    const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                    const filterObj = SAMPLE_FILTERS.find(f => f.id === filterName || f.name.toLowerCase() === filterName.toLowerCase());
+                    if (targetClip && filterObj) {
+                      beginTransaction('Apply filter', getProjectState());
+                      setTimelineClips(prev => prev.map(c => {
+                        if (c.id === targetClip.id) {
+                          const newFilter = { id: filterObj.id, intensity: 1, opacity: 1, blendMode: 'normal' };
+                          return { ...c, filterId: filterObj.id, filters: [newFilter], appliedFilters: [newFilter] };
+                        }
+                        return c;
+                      }));
+                      commitTransaction(getProjectState());
+                    }
+                  }}
+                  onAddTransition={(targetId, transType) => {
+                    handleSelectTransition(transType);
+                  }}
+                />
+              </div>
+            )}
           </div>
         </aside>
       </div>
