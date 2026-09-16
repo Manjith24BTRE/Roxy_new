@@ -17,6 +17,8 @@ interface FiltersProps {
   showBeforeOnly?: boolean;
   onShowBeforeOnlyChange?: (showBefore: boolean) => void;
   onHoverFilter?: (id: string | null) => void;
+  onStartSliderDrag?: (actionName?: string) => void;
+  onEndSliderDrag?: () => void;
 }
 
 const CATEGORIES = [
@@ -109,7 +111,7 @@ const FilterThumbnail = React.memo(({
   );
 });
 
-export function Filters({
+export function FiltersComponent({
   activeFilterId,
   onSelectFilter,
   filterIntensity,
@@ -122,7 +124,9 @@ export function Filters({
   onFilterEnabledChange,
   showBeforeOnly = false,
   onShowBeforeOnlyChange,
-  onHoverFilter
+  onHoverFilter,
+  onStartSliderDrag,
+  onEndSliderDrag
 }: FiltersProps) {
   // Search & Navigation
   const [searchQuery, setSearchQuery] = useState('');
@@ -424,7 +428,13 @@ export function Filters({
                   max="100"
                   value={filterIntensity}
                   disabled={!filterEnabled}
+                  onPointerDown={() => onStartSliderDrag?.('Adjust Filter Intensity')}
+                  onMouseDown={() => onStartSliderDrag?.('Adjust Filter Intensity')}
+                  onTouchStart={() => onStartSliderDrag?.('Adjust Filter Intensity')}
                   onChange={(e) => onFilterIntensityChange(Number(e.target.value))}
+                  onPointerUp={() => onEndSliderDrag?.()}
+                  onMouseUp={() => onEndSliderDrag?.()}
+                  onTouchEnd={() => onEndSliderDrag?.()}
                   className="w-full accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                 />
               </div>
@@ -441,7 +451,13 @@ export function Filters({
                   max="100"
                   value={filterOpacity}
                   disabled={!filterEnabled}
+                  onPointerDown={() => onStartSliderDrag?.('Adjust Filter Opacity')}
+                  onMouseDown={() => onStartSliderDrag?.('Adjust Filter Opacity')}
+                  onTouchStart={() => onStartSliderDrag?.('Adjust Filter Opacity')}
                   onChange={(e) => onFilterOpacityChange?.(Number(e.target.value))}
+                  onPointerUp={() => onEndSliderDrag?.()}
+                  onMouseUp={() => onEndSliderDrag?.()}
+                  onTouchEnd={() => onEndSliderDrag?.()}
                   className="w-full accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                 />
               </div>
@@ -475,3 +491,5 @@ export function Filters({
     </div>
   );
 }
+
+export const Filters = React.memo(FiltersComponent);

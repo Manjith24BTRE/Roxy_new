@@ -101,10 +101,6 @@ export class AudioTrackManager implements IAudioTrackManager {
       (newClip as any).start = targetStart;
     }
 
-    if (selectedVideoClip) {
-      (newClip as any).sourceVideoId = selectedVideoClip.id;
-    }
-
     // Do NOT shift, move, or push any existing clips
     const updatedClips = [...clips, newClip];
     return { updatedClips, createdClip: newClip };

@@ -28,33 +28,7 @@ export class TimelineSplitManager {
     let updatedClips = [...timelineClips];
     updatedClips.splice(clipIndex, 1, leftPart, rightPart);
 
-    // Synchronize splitting ONLY for explicitly linked/detached audio clips on separate audio tracks
-    const isVideo = clip.trackId !== 'audio' && clip.trackId !== 'music' && clip.type !== 'audio' && !clip.isDetachedAudio;
-
-    if (isVideo) {
-      const linkedAudioClip = timelineClips.find((c) => {
-        if (c.id === clipId) return false;
-        const isAudioTrack = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
-        if (!isAudioTrack) return false;
-
-        const isExplicitlyLinked = c.sourceVideoId === clip.id || c.id === `detached-audio-${clip.id}`;
-        if (!isExplicitlyLinked) return false;
-
-        const cStart = c.timelineStart ?? c.start ?? 0;
-        const cEnd = cStart + c.duration;
-        return playheadTime > cStart && playheadTime < cEnd;
-      });
-
-      if (linkedAudioClip) {
-        const linkedIndex = updatedClips.findIndex((c) => c.id === linkedAudioClip.id);
-        if (linkedIndex !== -1 && validateClipSplit(linkedAudioClip, playheadTime).canSplit) {
-          const { leftPart: lLeft, rightPart: lRight } = SplitManager.splitClipParts(linkedAudioClip, playheadTime);
-          lLeft.sourceVideoId = leftPart.id;
-          lRight.sourceVideoId = rightPart.id;
-          updatedClips.splice(linkedIndex, 1, lLeft, lRight);
-        }
-      }
-    }
+    // Splitting audio splits only audio; splitting video splits only video.
 
     return {
       success: true,

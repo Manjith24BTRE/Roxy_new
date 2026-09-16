@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Replace, Film, Check, Upload, Sparkles, RefreshCw, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Replace, Film, Check, Upload, Sparkles, RefreshCw, AlertCircle, ShieldCheck, Music } from 'lucide-react';
 
 export interface ReplaceMediaPayload {
   url: string;
@@ -120,11 +120,15 @@ export function ReplaceTool({
 
           <div className="flex items-center gap-3">
             <div className="w-16 h-10 rounded-lg overflow-hidden bg-slate-950 border border-white/10 flex-shrink-0 relative">
-              {activeClip.thumbnails && activeClip.thumbnails[0] ? (
+              {activeClip.thumbnails && activeClip.thumbnails[0] && activeClip.type !== 'audio' && !activeClip.isDetachedAudio && activeClip.trackId !== 'audio' ? (
                 <img src={activeClip.thumbnails[0]} alt="" className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <Film className="h-4 w-4 text-slate-600" />
+                  {activeClip.type === 'audio' || activeClip.isDetachedAudio || activeClip.trackId === 'audio' ? (
+                    <Music className="h-4 w-4 text-emerald-400" />
+                  ) : (
+                    <Film className="h-4 w-4 text-slate-600" />
+                  )}
                 </div>
               )}
             </div>

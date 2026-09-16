@@ -1,5 +1,5 @@
 import './theme/editorTheme.css';
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Save, Download, Film, Type, AudioWaveform,
@@ -203,6 +203,9 @@ function EditorMainScreenContent() {
       seekingMapRef.current[clipId] = false;
     }
   }, []);
+
+  // Memoized Map for O(1) sample filter lookups during canvas rendering
+  const sampleFiltersMap = useMemo(() => new Map(SAMPLE_FILTERS.map((f: any) => [f.id, f])), []);
 
   // Duplicate hook initialization
   const { duplicateClipSequence, handleDuplicateEffect } = useDuplicate({ showToast });
@@ -636,129 +639,7 @@ function EditorMainScreenContent() {
     showToast(`Keyframe icon clicked for ${clip.name}`);
   };
 
-  const handleAddAppliedEffect = (presetId: string) => {
-    const preset = EFFECT_PRESETS.find(p => p.id === presetId);
-    if (!preset) return;
 
-    const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
-    const activeClip = timelineClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
-      (currentTime >= totalDur ? timelineClips[timelineClips.length - 1] : timelineClips[0]);
-
-    if (activeClip) {
-      const existingEffect = activeClip.appliedEffects?.find(
-        (e: AppliedEffect) => e.presetId === presetId || e.presetId === preset.id || e.name === preset.name
-      );
-
-      if (existingEffect) {
-        setTimelineClips((prev) =>
-          prev.map((c) => {
-            if (c.id === activeClip.id) {
-              const appliedEffects = c.appliedEffects ? c.appliedEffects.filter((e: any) => e.id !== existingEffect.id) : [];
-              return { ...c, appliedEffects };
-            }
-            return c;
-          })
-        );
-        if (activeAppliedEffectId === existingEffect.id) {
-          setActiveAppliedEffectId(null);
-        }
-        showToast(`Effect "${preset.name}" removed from clip`);
-        return;
-      }
-
-      const newEffect: AppliedEffect = {
-        id: `effect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        presetId: preset.id,
-        name: preset.name,
-        category: preset.category,
-        enabled: true,
-        intensity: preset.defaultIntensity,
-        opacity: preset.defaultOpacity,
-        speed: preset.defaultSpeed,
-        angle: preset.defaultAngle,
-        direction: preset.defaultDirection,
-        blendMode: preset.defaultBlendMode,
-        keyframes: []
-      };
-
-      // Enforce single effect per single clip
-      setTimelineClips((prev) =>
-        prev.map((c) => {
-          if (c.id === activeClip.id) {
-            return { ...c, appliedEffects: [newEffect] };
-          }
-          return c;
-        })
-      );
-      setActiveAppliedEffectId(newEffect.id);
-      showToast(`Effect "${preset.name}" applied to active clip`);
-    } else {
-      showToast('No active clip found to apply effect');
-    }
-  };
-
-  const handleDeleteAppliedEffect = (clipId: string, effectId: string) => {
-    setTimelineClips((prev) =>
-      prev.map((c) => {
-        if (c.id === clipId) {
-          const appliedEffects = c.appliedEffects ? c.appliedEffects.filter((e: any) => e.id !== effectId) : [];
-          return { ...c, appliedEffects };
-        }
-        return c;
-      })
-    );
-    if (activeAppliedEffectId === effectId) {
-      setActiveAppliedEffectId(null);
-    }
-    showToast('Effect removed');
-  };
-
-  const handleToggleAppliedEffect = (clipId: string, effectId: string) => {
-    setTimelineClips((prev) =>
-      prev.map((c) => {
-        if (c.id === clipId) {
-          const appliedEffects = c.appliedEffects ? c.appliedEffects.map((e: any) =>
-            e.id === effectId ? { ...e, enabled: !e.enabled } : e
-          ) : [];
-          return { ...c, appliedEffects };
-        }
-        return c;
-      })
-    );
-  };
-
-  const handleUpdateAppliedEffect = (clipId: string, effectId: string, updates: Partial<AppliedEffect>) => {
-    setTimelineClips((prev) =>
-      prev.map((c) => {
-        if (c.id === clipId) {
-          const appliedEffects = c.appliedEffects ? c.appliedEffects.map((e: any) =>
-            e.id === effectId ? { ...e, ...updates } : e
-          ) : [];
-          return { ...c, appliedEffects };
-        }
-        return c;
-      })
-    );
-  };
-
-  const handleDuplicateAppliedEffect = (clipId: string, effectId: string) => {
-    const clip = timelineClips.find(c => c.id === clipId);
-    handleDuplicateEffect(clip, effectId);
-  };
-
-  const handleReorderAppliedEffects = (clipId: string, startIndex: number, endIndex: number) => {
-    setTimelineClips((prev) =>
-      prev.map((c) => {
-        if (c.id === clipId && c.appliedEffects) {
-          const result = Array.from(c.appliedEffects);
-          const [removed] = result.splice(startIndex, 1);
-          result.splice(endIndex, 0, removed);
-          return { ...c, appliedEffects: result };
-        }
-        return c;
-      })
-    );
-  };
 
   const handleAddEffectKeyframe = (clipId: string, effectId: string, time: number, properties: any) => {
     setTimelineClips((prev) =>
@@ -1019,6 +900,155 @@ function EditorMainScreenContent() {
     getProjectStateRef.current = getProjectState;
   }, [getProjectState]);
 
+  const handleStartSliderDrag = useCallback((actionName: string = 'Adjust Parameter') => {
+    if (!isInTransactionRef.current) {
+      beginTransaction(actionName, getProjectState());
+    }
+  }, [beginTransaction, getProjectState]);
+
+  const handleEndSliderDrag = useCallback(() => {
+    if (isInTransactionRef.current) {
+      commitTransaction(getProjectState());
+    }
+  }, [commitTransaction, getProjectState]);
+
+  const handleDeleteAppliedEffect = useCallback((clipId: string, effectId: string) => {
+    beginTransaction('Delete effect', getProjectState());
+    setTimelineClipsState((prev) =>
+      prev.map((c) => {
+        if (c.id === clipId) {
+          const appliedEffects = c.appliedEffects ? c.appliedEffects.filter((e: any) => e.id !== effectId) : [];
+          return { ...c, appliedEffects };
+        }
+        return c;
+      })
+    );
+    if (activeAppliedEffectId === effectId) {
+      setActiveAppliedEffectId(null);
+    }
+    commitTransaction(getProjectState());
+    showToast('Effect removed');
+  }, [activeAppliedEffectId, beginTransaction, commitTransaction, getProjectState, showToast]);
+
+  const handleToggleAppliedEffect = useCallback((clipId: string, effectId: string) => {
+    beginTransaction('Toggle effect', getProjectState());
+    setTimelineClipsState((prev) =>
+      prev.map((c) => {
+        if (c.id === clipId) {
+          const appliedEffects = c.appliedEffects ? c.appliedEffects.map((e: any) =>
+            e.id === effectId ? { ...e, enabled: !e.enabled } : e
+          ) : [];
+          return { ...c, appliedEffects };
+        }
+        return c;
+      })
+    );
+    commitTransaction(getProjectState());
+  }, [beginTransaction, commitTransaction, getProjectState]);
+
+  const handleUpdateAppliedEffect = useCallback((clipId: string, effectId: string, updates: Partial<AppliedEffect>) => {
+    setTimelineClipsState((prev) =>
+      prev.map((c) => {
+        if (c.id === clipId) {
+          const appliedEffects = c.appliedEffects ? c.appliedEffects.map((e: any) =>
+            e.id === effectId ? { ...e, ...updates } : e
+          ) : [];
+          return { ...c, appliedEffects };
+        }
+        return c;
+      })
+    );
+    if (!isInTransactionRef.current) {
+      commitStateChange('Adjust effect parameters', getProjectStateRef.current(), { ...getProjectStateRef.current() });
+    }
+  }, []);
+
+  const handleDuplicateAppliedEffect = useCallback((clipId: string, effectId: string) => {
+    const clip = timelineClipsRef.current.find(c => c.id === clipId);
+    handleDuplicateEffect(clip, effectId);
+  }, [handleDuplicateEffect]);
+
+  const handleReorderAppliedEffects = useCallback((clipId: string, startIndex: number, endIndex: number) => {
+    beginTransaction('Reorder effects', getProjectState());
+    setTimelineClipsState((prev) =>
+      prev.map((c) => {
+        if (c.id === clipId && c.appliedEffects) {
+          const result = Array.from(c.appliedEffects);
+          const [removed] = result.splice(startIndex, 1);
+          result.splice(endIndex, 0, removed);
+          return { ...c, appliedEffects: result };
+        }
+        return c;
+      })
+    );
+    commitTransaction(getProjectState());
+  }, [beginTransaction, commitTransaction, getProjectState]);
+
+  const handleAddAppliedEffect = useCallback((presetId: string) => {
+    const preset = EFFECT_PRESETS.find(p => p.id === presetId);
+    if (!preset) return;
+
+    const totalDur = timelineClipsRef.current.reduce((acc, c) => acc + c.duration, 0) || 5;
+    const curTime = currentTimeRef.current;
+    const activeClip = timelineClipsRef.current.find(c => curTime >= c.timelineStart && curTime < c.timelineStart + c.duration) ||
+      (curTime >= totalDur ? timelineClipsRef.current[timelineClipsRef.current.length - 1] : timelineClipsRef.current[0]);
+
+    if (activeClip) {
+      const existingEffect = activeClip.appliedEffects?.find(
+        (e: AppliedEffect) => e.presetId === presetId || e.presetId === preset.id || e.name === preset.name
+      );
+
+      beginTransaction(existingEffect ? 'Remove effect' : 'Apply effect', getProjectState());
+
+      if (existingEffect) {
+        setTimelineClipsState((prev) =>
+          prev.map((c) => {
+            if (c.id === activeClip.id) {
+              const appliedEffects = c.appliedEffects ? c.appliedEffects.filter((e: any) => e.id !== existingEffect.id) : [];
+              return { ...c, appliedEffects };
+            }
+            return c;
+          })
+        );
+        if (activeAppliedEffectId === existingEffect.id) {
+          setActiveAppliedEffectId(null);
+        }
+        commitTransaction(getProjectState());
+        showToast(`Effect "${preset.name}" removed from clip`);
+        return;
+      }
+
+      const newEffect: AppliedEffect = {
+        id: `effect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        presetId: preset.id,
+        name: preset.name,
+        category: preset.category,
+        enabled: true,
+        intensity: preset.defaultIntensity,
+        opacity: preset.defaultOpacity,
+        speed: preset.defaultSpeed,
+        angle: preset.defaultAngle,
+        direction: preset.defaultDirection,
+        blendMode: preset.defaultBlendMode,
+        keyframes: []
+      };
+
+      setTimelineClipsState((prev) =>
+        prev.map((c) => {
+          if (c.id === activeClip.id) {
+            return { ...c, appliedEffects: [newEffect] };
+          }
+          return c;
+        })
+      );
+      setActiveAppliedEffectId(newEffect.id);
+      commitTransaction(getProjectState());
+      showToast(`Effect "${preset.name}" applied to active clip`);
+    } else {
+      showToast('No active clip found to apply effect');
+    }
+  }, [activeAppliedEffectId, beginTransaction, commitTransaction, getProjectState, showToast]);
+
   const applyProjectState = useCallback((state: ProjectState) => {
     setTimelineClipsState(state.timelineClips);
     setAspectRatioState(state.aspectRatio);
@@ -1258,38 +1288,190 @@ function EditorMainScreenContent() {
     });
   }, []);
 
+  // Atomic Filter Application Handlers (Single-Phase History Transactions)
+  const handleSelectFilter = useCallback((id: string | null) => {
+    const targetClip = activeSelectedClipId
+      ? timelineClips.find(c => c.id === activeSelectedClipId)
+      : activeSelectedClip;
+
+    beginTransaction('Apply filter', getProjectState());
+
+    const filterObj = id ? SAMPLE_FILTERS.find((f: any) => f.id === id) : null;
+    const defaultIntensity = filterObj ? (filterObj.defaultIntensity ?? 80) : filterIntensity;
+
+    setActiveFilterIdState(id);
+    if (id) {
+      setFilterIntensityState(defaultIntensity);
+      setFilterEnabledState(true);
+    }
+
+    if (targetClip) {
+      setTimelineClipsState((prev) =>
+        prev.map((c) => {
+          if (c.id === targetClip.id) {
+            if (id) {
+              const newFilter = { id, intensity: defaultIntensity, opacity: filterOpacity, blendMode: filterBlendMode };
+              return {
+                ...c,
+                filterId: id,
+                filterIntensity: defaultIntensity,
+                filterOpacity,
+                filterBlendMode,
+                filters: [newFilter],
+                appliedFilters: [newFilter],
+              };
+            } else {
+              return {
+                ...c,
+                filterId: null,
+                filterIntensity: undefined,
+                filterOpacity: undefined,
+                filterBlendMode: undefined,
+                filters: [],
+                appliedFilters: [],
+              };
+            }
+          }
+          return c;
+        })
+      );
+    }
+
+    commitTransaction(getProjectState());
+
+    if (id) {
+      showToast('Filter applied');
+    } else {
+      showToast('Filter cleared');
+    }
+  }, [activeSelectedClipId, activeSelectedClip, timelineClips, filterIntensity, filterOpacity, filterBlendMode, beginTransaction, commitTransaction, getProjectState, showToast]);
+
+  const handleFilterIntensityChange = useCallback((intensity: number) => {
+    const targetClip = activeSelectedClipId
+      ? timelineClips.find(c => c.id === activeSelectedClipId)
+      : activeSelectedClip;
+
+    beginTransaction('Adjust filter intensity', getProjectState());
+    setFilterIntensityState(intensity);
+
+    if (targetClip && targetClip.filterId) {
+      setTimelineClipsState((prev) =>
+        prev.map((c) => {
+          if (c.id === targetClip.id && c.filterId) {
+            const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, intensity }));
+            return {
+              ...c,
+              filterIntensity: intensity,
+              filters: updatedFilters,
+              appliedFilters: updatedFilters,
+            };
+          }
+          return c;
+        })
+      );
+    }
+
+    commitTransaction(getProjectState());
+  }, [activeSelectedClipId, activeSelectedClip, timelineClips, beginTransaction, commitTransaction, getProjectState]);
+
+  const handleFilterOpacityChange = useCallback((opacity: number) => {
+    const targetClip = activeSelectedClipId
+      ? timelineClips.find(c => c.id === activeSelectedClipId)
+      : activeSelectedClip;
+
+    beginTransaction('Adjust filter opacity', getProjectState());
+    setFilterOpacityState(opacity);
+
+    if (targetClip && targetClip.filterId) {
+      setTimelineClipsState((prev) =>
+        prev.map((c) => {
+          if (c.id === targetClip.id && c.filterId) {
+            const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, opacity }));
+            return {
+              ...c,
+              filterOpacity: opacity,
+              filters: updatedFilters,
+              appliedFilters: updatedFilters,
+            };
+          }
+          return c;
+        })
+      );
+    }
+
+    commitTransaction(getProjectState());
+  }, [activeSelectedClipId, activeSelectedClip, timelineClips, beginTransaction, commitTransaction, getProjectState]);
+
+  const handleFilterBlendModeChange = useCallback((blendMode: string) => {
+    const targetClip = activeSelectedClipId
+      ? timelineClips.find(c => c.id === activeSelectedClipId)
+      : activeSelectedClip;
+
+    beginTransaction('Adjust filter blend mode', getProjectState());
+    setFilterBlendModeState(blendMode);
+
+    if (targetClip && targetClip.filterId) {
+      setTimelineClipsState((prev) =>
+        prev.map((c) => {
+          if (c.id === targetClip.id && c.filterId) {
+            const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, blendMode }));
+            return {
+              ...c,
+              filterBlendMode: blendMode,
+              filters: updatedFilters,
+              appliedFilters: updatedFilters,
+            };
+          }
+          return c;
+        })
+      );
+    }
+
+    commitTransaction(getProjectState());
+  }, [activeSelectedClipId, activeSelectedClip, timelineClips, beginTransaction, commitTransaction, getProjectState]);
+
+  // Sync inspector filter controls with active selected clip model
+  useEffect(() => {
+    if (activeSelectedClip) {
+      setActiveFilterIdState(activeSelectedClip.filterId || null);
+      if (activeSelectedClip.filterIntensity !== undefined) {
+        setFilterIntensityState(activeSelectedClip.filterIntensity);
+      }
+      if (activeSelectedClip.filterOpacity !== undefined) {
+        setFilterOpacityState(activeSelectedClip.filterOpacity);
+      }
+      if (activeSelectedClip.filterBlendMode !== undefined) {
+        setFilterBlendModeState(activeSelectedClip.filterBlendMode);
+      }
+    }
+  }, [activeSelectedClip?.id]);
+
   const setActiveEffectId = useCallback((val: string | null | ((prev: string | null) => string | null)) => {
     const before = getProjectStateRef.current();
-    setActiveEffectIdState((prev) => {
-      const resolved = typeof val === 'function' ? val(prev) : val;
-      if (!isInTransactionRef.current) {
-        commitStateChange('Apply effect', before, { ...before, activeEffectId: resolved });
-      }
-      return resolved;
-    });
-  }, []);
+    const resolved = typeof val === 'function' ? val(activeEffectId) : val;
+    setActiveEffectIdState(resolved);
+    if (!isInTransactionRef.current) {
+      commitStateChange('Apply effect', before, { ...before, activeEffectId: resolved });
+    }
+  }, [activeEffectId]);
 
   const setEffectStrength = useCallback((val: number | ((prev: number) => number)) => {
     const before = getProjectStateRef.current();
-    setEffectStrengthState((prev) => {
-      const resolved = typeof val === 'function' ? val(prev) : val;
-      if (!isInTransactionRef.current) {
-        commitStateChange('Adjust effect strength', before, { ...before, effectStrength: resolved });
-      }
-      return resolved;
-    });
-  }, []);
+    const resolved = typeof val === 'function' ? val(effectStrength) : val;
+    setEffectStrengthState(resolved);
+    if (!isInTransactionRef.current) {
+      commitStateChange('Adjust effect strength', before, { ...before, effectStrength: resolved });
+    }
+  }, [effectStrength]);
 
   const setEffectSpeed = useCallback((val: number | ((prev: number) => number)) => {
     const before = getProjectStateRef.current();
-    setEffectSpeedState((prev) => {
-      const resolved = typeof val === 'function' ? val(prev) : val;
-      if (!isInTransactionRef.current) {
-        commitStateChange('Adjust effect speed', before, { ...before, effectSpeed: resolved });
-      }
-      return resolved;
-    });
-  }, []);
+    const resolved = typeof val === 'function' ? val(effectSpeed) : val;
+    setEffectSpeedState(resolved);
+    if (!isInTransactionRef.current) {
+      commitStateChange('Adjust effect speed', before, { ...before, effectSpeed: resolved });
+    }
+  }, [effectSpeed]);
 
   const getTransitionStatesForClips = useCallback(() => {
     const videoClipsOnly = timelineClips.filter(
@@ -1643,15 +1825,36 @@ function EditorMainScreenContent() {
       return;
     }
 
-    const beforeState = getProjectState();
+    beginTransaction('Replace Media', getProjectState());
 
     try {
+      const newBaseDuration = newMedia.duration || targetClip.baseDuration || targetClip.duration || 5;
+
       setTimelineClipsState((prevClips) => {
-        const newBaseDuration = newMedia.duration || targetClip.baseDuration || targetClip.duration || 5;
-        const updatedClips = prevClips.map((clip) => {
+        return prevClips.map((clip) => {
+          const isAudioClip = clip.trackId === 'audio' || clip.trackId === 'music' || clip.type === 'audio' || clip.isDetachedAudio;
+
           if (clip.id === targetClip.id) {
+            if (isAudioClip) {
+              // Audio clip replacement: preserve audio type/trackId, never copy visual thumbnails/poster
+              const { thumbnails, thumbnailUrl, posterFrame, previewFrame, videoFrame, videoMetadata, ...rest } = clip;
+              return {
+                ...rest,
+                type: 'audio',
+                trackId: clip.trackId || 'audio',
+                mediaId: newMedia.mediaId,
+                url: newMedia.url,
+                name: newMedia.name,
+                baseDuration: newBaseDuration,
+                duration: Math.min(clip.duration, newBaseDuration)
+              };
+            }
+
+            // Video clip replacement: update media, duration, thumbnails on video clip ONLY
             return {
               ...clip,
+              type: clip.type || 'video',
+              trackId: clip.trackId || 'video',
               mediaId: newMedia.mediaId,
               url: newMedia.url,
               name: newMedia.name,
@@ -1660,35 +1863,26 @@ function EditorMainScreenContent() {
               duration: Math.min(clip.duration, newBaseDuration)
             };
           }
-          // Synchronize linked audio clip if media is replaced
-          const isLinkedAudio = clip.sourceVideoId === targetClip.id || clip.id === `detached-audio-${targetClip.id}` || (clip.mediaId === targetClip.mediaId && clip.isDetachedAudio);
-          if (isLinkedAudio) {
+
+          // For all audio clips on the timeline, ensure visual thumbnail fields are strictly omitted/purged
+          if (isAudioClip) {
+            const { thumbnails, thumbnailUrl, posterFrame, previewFrame, videoFrame, videoMetadata, ...cleanAudioClip } = clip;
             return {
-              ...clip,
-              mediaId: newMedia.mediaId,
-              url: newMedia.url,
-              name: `Audio - ${newMedia.name}`,
-              baseDuration: newBaseDuration,
-              duration: Math.min(clip.duration, newBaseDuration)
+              ...cleanAudioClip,
+              type: 'audio',
+              trackId: clip.trackId || 'audio'
             };
           }
+
           return clip;
         });
-        return updatedClips;
       });
 
       setActiveMediaId(newMedia.mediaId);
-
-      const afterState = {
-        ...beforeState,
-        timelineClips: timelineClips.map(c => c.id === targetClip.id ? { ...c, mediaId: newMedia.mediaId, url: newMedia.url, name: newMedia.name } : c)
-      };
-
-      commitStateChange(`Replace media source for ${targetClip.name}`, beforeState, afterState);
+      commitTransaction(getProjectState());
       showToast(`Replaced media source for "${targetClip.name}"`);
     } catch (err) {
       console.error('Failed to replace media:', err);
-      setTimelineClipsState(beforeState.timelineClips);
       showToast('Failed to replace media. Original clip restored.');
     }
   };
@@ -1963,7 +2157,7 @@ function EditorMainScreenContent() {
           const video = videoRefs.current[activeClip.id];
 
           // UNIFIED PLAYBACK ENGINE (Supports forward and physically reversed media files)
-          const isFreezeOrImage = activeClip.isFreezeFrame || activeClip.type === 'image' || activeClip.type === 'freeze' || (activeClip.url && (activeClip.url.startsWith('data:image/') || activeClip.url.endsWith('.png') || activeClip.url.endsWith('.jpg') || activeClip.url.endsWith('.jpeg') || activeClip.url.endsWith('.webp')));
+          const isFreezeOrImage = activeClip.isFreezeFrame || activeClip.type === 'freeze_frame' || activeClip.type === 'image' || activeClip.type === 'freeze' || (activeClip.url && (activeClip.url.startsWith('data:image/') || activeClip.url.endsWith('.png') || activeClip.url.endsWith('.jpg') || activeClip.url.endsWith('.jpeg') || activeClip.url.endsWith('.webp')));
 
             if (isFreezeOrImage || !video) {
               // STILL IMAGE / FREEZE CLIP PLAYBACK ENGINE - Advance time using deltaSec
@@ -2003,7 +2197,7 @@ function EditorMainScreenContent() {
                   if (nextVideo) {
                     const nextTarget = timelineTimeToSourceTime(nextClip, nextClip.timelineStart);
                     nextVideo.currentTime = nextTarget;
-                    if (!nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
+                    if (!nextClip.isFreezeFrame && nextClip.type !== 'freeze_frame' && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
                       const nextMuted = isMuted || !!mutedClips[nextClip.id] || !!nextClip.isMuted || !!nextClip.isAudioDetached;
                       nextVideo.muted = nextMuted;
                       nextVideo.play().catch(() => { });
@@ -2083,7 +2277,7 @@ function EditorMainScreenContent() {
 
                 // Overlap & Multi-Layer Video Playback & Audio Crossfade Synchronization
                 clipsToUse.forEach((c) => {
-                  if (c.type === 'image' || c.type === 'freeze' || c.isFreezeFrame) return;
+                  if (c.type === 'image' || c.type === 'freeze' || c.type === 'freeze_frame' || c.isFreezeFrame) return;
                   const v = videoRefs.current[c.id];
                   if (!v) return;
 
@@ -2138,7 +2332,7 @@ function EditorMainScreenContent() {
                   const timeUntilEnd = (activeClip.timelineStart + activeClip.duration) - absoluteTime;
 
                   // Pre-warm next video element 0.4s in advance without re-seeking if already playing
-                  if (nextVideo && timeUntilEnd <= 0.4 && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
+                  if (nextVideo && timeUntilEnd <= 0.4 && !nextClip.isFreezeFrame && nextClip.type !== 'freeze_frame' && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
                     if (nextVideo.paused && !nextVideo.seeking) {
                       const nextTarget = timelineTimeToSourceTime(nextClip, nextClip.timelineStart);
                       if (Math.abs(nextVideo.currentTime - nextTarget) > 0.05) {
@@ -2174,7 +2368,7 @@ function EditorMainScreenContent() {
                         if (Math.abs(nextVideo.currentTime - nextTarget) > 0.05 && !nextVideo.seeking) {
                           nextVideo.currentTime = nextTarget;
                         }
-                        if (nextVideo.paused && !nextClip.isFreezeFrame && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
+                        if (nextVideo.paused && !nextClip.isFreezeFrame && nextClip.type !== 'freeze_frame' && nextClip.type !== 'image' && nextClip.type !== 'freeze') {
                           nextVideo.play().catch(() => {});
                         }
                       }
@@ -2365,57 +2559,6 @@ function EditorMainScreenContent() {
               duration: validDuration,
               keyframes: kfs
             };
-          }
-
-          // If target is video, synchronize any linked/detached audio clips
-          if (isTargetVideo) {
-            const isAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
-            if (isAudio) {
-              const isLinked = c.sourceVideoId === clipId ||
-                               c.id === `detached-audio-${clipId}` ||
-                               (c.mediaId === targetClip.mediaId && Math.abs((c.timelineStart ?? c.start ?? 0) - (targetClip.timelineStart ?? targetClip.start ?? 0)) < 0.5);
-              if (isLinked) {
-                const delta = newTimelineStart - c.timelineStart;
-                let kfs = c.keyframes || [];
-                if (delta !== 0) {
-                  kfs = kfs.map((k: any) => ({ ...k, time: k.time - delta }));
-                }
-                kfs = KeyframeManager.trimClipKeyframes(kfs, validDuration);
-                return {
-                  ...c,
-                  timelineStart: newTimelineStart,
-                  start: newTimelineStart,
-                  startOffset: newSourceStart,
-                  duration: validDuration,
-                  keyframes: kfs
-                };
-              }
-            }
-          }
-
-          // If target is audio, synchronize any linked video clip
-          if (!isTargetVideo) {
-            const isVideo = c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio;
-            if (isVideo) {
-              const isLinked = c.id === targetClip.sourceVideoId ||
-                               (c.mediaId === targetClip.mediaId && Math.abs((c.timelineStart ?? c.start ?? 0) - (targetClip.timelineStart ?? targetClip.start ?? 0)) < 0.5);
-              if (isLinked) {
-                const delta = newTimelineStart - c.timelineStart;
-                let kfs = c.keyframes || [];
-                if (delta !== 0) {
-                  kfs = kfs.map((k: any) => ({ ...k, time: k.time - delta }));
-                }
-                kfs = KeyframeManager.trimClipKeyframes(kfs, validDuration);
-                return {
-                  ...c,
-                  timelineStart: newTimelineStart,
-                  start: newTimelineStart,
-                  startOffset: newSourceStart,
-                  duration: validDuration,
-                  keyframes: kfs
-                };
-              }
-            }
           }
 
           return c;
@@ -3106,13 +3249,47 @@ function EditorMainScreenContent() {
                 }}
                 onApplyFilter={(targetId, filterName) => {
                   const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
-                  const filterObj = SAMPLE_FILTERS.find(f => f.id === filterName || f.name.toLowerCase() === filterName.toLowerCase());
+                  const filterObj = SAMPLE_FILTERS.find(f => f.id === filterName || f.name.toLowerCase() === filterName.toLowerCase() || (f.category && f.category.toLowerCase() === filterName.toLowerCase()));
                   if (targetClip && filterObj) {
+                    const defaultIntensity = filterObj.defaultIntensity ?? 80;
                     beginTransaction('Apply filter', getProjectState());
-                    setTimelineClips(prev => prev.map(c => {
+                    setActiveFilterIdState(filterObj.id);
+                    setFilterIntensityState(defaultIntensity);
+                    setFilterEnabledState(true);
+                    setTimelineClipsState(prev => prev.map(c => {
                       if (c.id === targetClip.id) {
-                        const newFilter = { id: filterObj.id, intensity: 1, opacity: 1, blendMode: 'normal' };
-                        return { ...c, filterId: filterObj.id, filters: [newFilter], appliedFilters: [newFilter] };
+                        const newFilter = { id: filterObj.id, intensity: defaultIntensity, opacity: 100, blendMode: 'normal' };
+                        return {
+                          ...c,
+                          filterId: filterObj.id,
+                          filterIntensity: defaultIntensity,
+                          filterOpacity: 100,
+                          filterBlendMode: 'normal',
+                          filters: [newFilter],
+                          appliedFilters: [newFilter]
+                        };
+                      }
+                      return c;
+                    }));
+                    commitTransaction(getProjectState());
+                  }
+                }}
+                onRemoveFilter={(targetId) => {
+                  const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                  if (targetClip) {
+                    beginTransaction('Remove filter', getProjectState());
+                    setActiveFilterIdState(null);
+                    setTimelineClipsState(prev => prev.map(c => {
+                      if (c.id === targetClip.id) {
+                        return {
+                          ...c,
+                          filterId: null,
+                          filterIntensity: undefined,
+                          filterOpacity: undefined,
+                          filterBlendMode: undefined,
+                          filters: [],
+                          appliedFilters: []
+                        };
                       }
                       return c;
                     }));
@@ -3260,84 +3437,20 @@ function EditorMainScreenContent() {
             {activeTab === 'filters' && (
               <Filters
                 activeFilterId={activeFilterId}
-                onSelectFilter={(id) => {
-                  setActiveFilterId(id);
-                  if (activeSelectedClipId || activeSelectedClip?.id) {
-                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
-                    setTimelineClips((prev) =>
-                      prev.map((c) => {
-                        if (c.id === targetId) {
-                          if (id) {
-                            const newFilter = { id, intensity: filterIntensity, opacity: filterOpacity, blendMode: filterBlendMode };
-                            return { ...c, filterId: id, filters: [newFilter], appliedFilters: [newFilter] };
-                          } else {
-                            return { ...c, filterId: null, filters: [], appliedFilters: [] };
-                          }
-                        }
-                        return c;
-                      })
-                    );
-                  }
-                  if (id) {
-                    setFilterEnabled(true);
-                    showToast('Filter applied');
-                  } else {
-                    showToast('Filter cleared');
-                  }
-                }}
+                onSelectFilter={handleSelectFilter}
                 filterIntensity={filterIntensity}
-                onFilterIntensityChange={(intensity) => {
-                  setFilterIntensity(intensity);
-                  if (activeSelectedClipId || activeSelectedClip?.id) {
-                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
-                    setTimelineClips((prev) =>
-                      prev.map((c) => {
-                        if (c.id === targetId && c.filterId) {
-                          const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, intensity }));
-                          return { ...c, filterIntensity: intensity, filters: updatedFilters, appliedFilters: updatedFilters };
-                        }
-                        return c;
-                      })
-                    );
-                  }
-                }}
+                onFilterIntensityChange={handleFilterIntensityChange}
                 filterOpacity={filterOpacity}
-                onFilterOpacityChange={(opacity) => {
-                  setFilterOpacity(opacity);
-                  if (activeSelectedClipId || activeSelectedClip?.id) {
-                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
-                    setTimelineClips((prev) =>
-                      prev.map((c) => {
-                        if (c.id === targetId && c.filterId) {
-                          const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, opacity }));
-                          return { ...c, filterOpacity: opacity, filters: updatedFilters, appliedFilters: updatedFilters };
-                        }
-                        return c;
-                      })
-                    );
-                  }
-                }}
+                onFilterOpacityChange={handleFilterOpacityChange}
                 filterBlendMode={filterBlendMode}
-                onFilterBlendModeChange={(blendMode) => {
-                  setFilterBlendMode(blendMode);
-                  if (activeSelectedClipId || activeSelectedClip?.id) {
-                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
-                    setTimelineClips((prev) =>
-                      prev.map((c) => {
-                        if (c.id === targetId && c.filterId) {
-                          const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, blendMode }));
-                          return { ...c, filterBlendMode: blendMode, filters: updatedFilters, appliedFilters: updatedFilters };
-                        }
-                        return c;
-                      })
-                    );
-                  }
-                }}
+                onFilterBlendModeChange={handleFilterBlendModeChange}
                 filterEnabled={filterEnabled}
                 onFilterEnabledChange={setFilterEnabled}
                 showBeforeOnly={showBeforeOnly}
                 onShowBeforeOnlyChange={setShowBeforeOnly}
                 onHoverFilter={setPreviewFilterId}
+                onStartSliderDrag={handleStartSliderDrag}
+                onEndSliderDrag={handleEndSliderDrag}
               />
             )}
 
@@ -3348,79 +3461,13 @@ function EditorMainScreenContent() {
                 activeTransitionId={activeTransitionId}
                 onSelectTransition={handleSelectTransition}
                 activeFilterId={activeFilterId}
-                onSelectFilter={(id) => {
-                  setActiveFilterId(id);
-                  if (activeSelectedClipId || activeSelectedClip?.id) {
-                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
-                    setTimelineClips((prev) =>
-                      prev.map((c) => {
-                        if (c.id === targetId) {
-                          if (id) {
-                            const newFilter = { id, intensity: filterIntensity, opacity: filterOpacity, blendMode: filterBlendMode };
-                            return { ...c, filterId: id, filters: [newFilter], appliedFilters: [newFilter] };
-                          } else {
-                            return { ...c, filterId: null, filters: [], appliedFilters: [] };
-                          }
-                        }
-                        return c;
-                      })
-                    );
-                  }
-                  if (id) {
-                    setFilterEnabled(true);
-                    showToast('Filter applied');
-                  } else {
-                    showToast('Filter cleared');
-                  }
-                }}
+                onSelectFilter={handleSelectFilter}
                 filterIntensity={filterIntensity}
-                onFilterIntensityChange={(intensity) => {
-                  setFilterIntensity(intensity);
-                  if (activeSelectedClipId || activeSelectedClip?.id) {
-                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
-                    setTimelineClips((prev) =>
-                      prev.map((c) => {
-                        if (c.id === targetId && c.filterId) {
-                          const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, intensity }));
-                          return { ...c, filterIntensity: intensity, filters: updatedFilters, appliedFilters: updatedFilters };
-                        }
-                        return c;
-                      })
-                    );
-                  }
-                }}
+                onFilterIntensityChange={handleFilterIntensityChange}
                 filterOpacity={filterOpacity}
-                onFilterOpacityChange={(opacity) => {
-                  setFilterOpacity(opacity);
-                  if (activeSelectedClipId || activeSelectedClip?.id) {
-                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
-                    setTimelineClips((prev) =>
-                      prev.map((c) => {
-                        if (c.id === targetId && c.filterId) {
-                          const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, opacity }));
-                          return { ...c, filterOpacity: opacity, filters: updatedFilters, appliedFilters: updatedFilters };
-                        }
-                        return c;
-                      })
-                    );
-                  }
-                }}
+                onFilterOpacityChange={handleFilterOpacityChange}
                 filterBlendMode={filterBlendMode}
-                onFilterBlendModeChange={(blendMode) => {
-                  setFilterBlendMode(blendMode);
-                  if (activeSelectedClipId || activeSelectedClip?.id) {
-                    const targetId = activeSelectedClipId || activeSelectedClip?.id;
-                    setTimelineClips((prev) =>
-                      prev.map((c) => {
-                        if (c.id === targetId && c.filterId) {
-                          const updatedFilters = (c.filters || [{ id: c.filterId }]).map((f: any) => ({ ...f, blendMode }));
-                          return { ...c, filterBlendMode: blendMode, filters: updatedFilters, appliedFilters: updatedFilters };
-                        }
-                        return c;
-                      })
-                    );
-                  }
-                }}
+                onFilterBlendModeChange={handleFilterBlendModeChange}
                 filterEnabled={filterEnabled}
                 onFilterEnabledChange={setFilterEnabled}
                 showBeforeOnly={showBeforeOnly}
@@ -3436,6 +3483,8 @@ function EditorMainScreenContent() {
                 onReorderAppliedEffects={handleReorderAppliedEffects}
                 onAddEffectKeyframe={handleAddEffectKeyframe}
                 onDeleteEffectKeyframe={handleDeleteEffectKeyframe}
+                onStartSliderDrag={handleStartSliderDrag}
+                onEndSliderDrag={handleEndSliderDrag}
               />
             )}
 
@@ -4179,7 +4228,7 @@ function EditorMainScreenContent() {
 
                         const finalTransform = `translate(-50%, -50%) translate(${effectivePosX}px, ${effectivePosY}px) scale(${effectiveScale * clipScaleX}, ${effectiveScale * clipScaleY}) rotate(${clipRotation}deg) ${renderedCSS.transformStr} ${tState.transform}`;
 
-                        const isImageOrFreeze = clip.isFreezeFrame || clip.type === 'image' || clip.type === 'freeze' || (clip.url && (clip.url.startsWith('data:image/') || clip.url.endsWith('.png') || clip.url.endsWith('.jpg') || clip.url.endsWith('.jpeg') || clip.url.endsWith('.webp')));
+                        const isImageOrFreeze = clip.isFreezeFrame || clip.type === 'freeze_frame' || clip.type === 'image' || clip.type === 'freeze' || (clip.url && (clip.url.startsWith('data:image/') || clip.url.endsWith('.png') || clip.url.endsWith('.jpg') || clip.url.endsWith('.jpeg') || clip.url.endsWith('.webp')));
 
                         return (
                           <div
@@ -4211,7 +4260,7 @@ function EditorMainScreenContent() {
                           >
                             {isImageOrFreeze ? (
                               <img
-                                src={clip.url || clip.media_url || clip.src || clip.thumbnails?.[0] || (mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id)?.url) || (mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id)?.thumbnails?.[0]) || ''}
+                                src={clip.frozenFrameImage || clip.url || clip.media_url || clip.src || clip.thumbnailUrl || clip.thumbnails?.[0] || (mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id)?.url) || (mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id)?.thumbnails?.[0]) || ''}
                                 alt={clip.name}
                                 className="h-full w-full object-cover pointer-events-none transition-all duration-150 absolute inset-0"
                                 style={{
@@ -4229,18 +4278,6 @@ function EditorMainScreenContent() {
                                     const isVideoMuted = isMuted || !!mutedClips[clip.id] || !!clip.isMuted || !!clip.isAudioDetached || !!clip.audioDetached || clip.embeddedAudioEnabled === false;
                                     el.muted = isVideoMuted;
                                     el.volume = isVideoMuted ? 0 : Math.min(1, Math.max(0, volume * (clip.volume ?? 1) * (hasKeyframeForProperty(clip.keyframes, 'volume') ? interpolatePropertyValue(clip.keyframes, 'volume', clipRelTime, 1) : 1)));
-                                    if (isPlayingRef.current) {
-                                      const curTime = currentTimeRef.current;
-                                      if (curTime >= clip.timelineStart && curTime < clip.timelineStart + clip.duration) {
-                                        const targetLocalTime = timelineTimeToSourceTime(clip, curTime);
-                                        if (Math.abs(el.currentTime - targetLocalTime) > 0.05) {
-                                          el.currentTime = targetLocalTime;
-                                        }
-                                        if (el.paused && !clip.isFreezeFrame && clip.type !== 'image' && clip.type !== 'freeze') {
-                                          el.play().catch(() => {});
-                                        }
-                                      }
-                                    }
                                   }
                                 }}
                                 src={clip.url || clip.media_url || clip.src || (mediaFiles.find(m => m.id === clip.mediaId || m.id === clip.id)?.url) || ''}
@@ -4683,13 +4720,47 @@ function EditorMainScreenContent() {
                   }}
                   onApplyFilter={(targetId, filterName) => {
                     const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
-                    const filterObj = SAMPLE_FILTERS.find(f => f.id === filterName || f.name.toLowerCase() === filterName.toLowerCase());
+                    const filterObj = SAMPLE_FILTERS.find(f => f.id === filterName || f.name.toLowerCase() === filterName.toLowerCase() || (f.category && f.category.toLowerCase() === filterName.toLowerCase()));
                     if (targetClip && filterObj) {
+                      const defaultIntensity = filterObj.defaultIntensity ?? 80;
                       beginTransaction('Apply filter', getProjectState());
-                      setTimelineClips(prev => prev.map(c => {
+                      setActiveFilterIdState(filterObj.id);
+                      setFilterIntensityState(defaultIntensity);
+                      setFilterEnabledState(true);
+                      setTimelineClipsState(prev => prev.map(c => {
                         if (c.id === targetClip.id) {
-                          const newFilter = { id: filterObj.id, intensity: 1, opacity: 1, blendMode: 'normal' };
-                          return { ...c, filterId: filterObj.id, filters: [newFilter], appliedFilters: [newFilter] };
+                          const newFilter = { id: filterObj.id, intensity: defaultIntensity, opacity: 100, blendMode: 'normal' };
+                          return {
+                            ...c,
+                            filterId: filterObj.id,
+                            filterIntensity: defaultIntensity,
+                            filterOpacity: 100,
+                            filterBlendMode: 'normal',
+                            filters: [newFilter],
+                            appliedFilters: [newFilter]
+                          };
+                        }
+                        return c;
+                      }));
+                      commitTransaction(getProjectState());
+                    }
+                  }}
+                  onRemoveFilter={(targetId) => {
+                    const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
+                    if (targetClip) {
+                      beginTransaction('Remove filter', getProjectState());
+                      setActiveFilterIdState(null);
+                      setTimelineClipsState(prev => prev.map(c => {
+                        if (c.id === targetClip.id) {
+                          return {
+                            ...c,
+                            filterId: null,
+                            filterIntensity: undefined,
+                            filterOpacity: undefined,
+                            filterBlendMode: undefined,
+                            filters: [],
+                            appliedFilters: []
+                          };
                         }
                         return c;
                       }));
@@ -5332,7 +5403,7 @@ function EditorMainScreenContent() {
                                     ? 'border-sky-400 ring-2 ring-sky-400/80 bg-slate-900 z-30 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
                                     : isSelected
                                       ? 'border-sky-400 ring-2 ring-sky-400/50 bg-slate-900 z-20 shadow-lg'
-                                      : clip.isFreezeFrame
+                                      : (clip.isFreezeFrame || clip.type === 'freeze_frame')
                                         ? 'border-cyan-500/60 bg-cyan-500/10 hover:border-cyan-400/80 z-10'
                                         : 'border-slate-800 bg-slate-900 hover:border-sky-400/50 z-10'
                                   } ${isLocked ? 'opacity-70 border-dashed border-amber-500/30' : ''}`}
@@ -5372,11 +5443,11 @@ function EditorMainScreenContent() {
 
                                 {/* SUBTLE TOP-LEFT METADATA BADGE */}
                                 <div className="absolute top-1 left-2 z-20 pointer-events-none flex items-center gap-1.5 max-w-[90%] truncate">
-                                  <span className={`px-1.5 py-0.5 rounded font-mono text-[9px] text-white font-semibold truncate flex items-center gap-1 backdrop-blur-md shadow-sm ${clip.isFreezeFrame ? 'bg-cyan-950/90' : 'bg-black/70'}`}>
+                                  <span className={`px-1.5 py-0.5 rounded font-mono text-[9px] text-white font-semibold truncate flex items-center gap-1 backdrop-blur-md shadow-sm ${(clip.isFreezeFrame || clip.type === 'freeze_frame') ? 'bg-cyan-950/90' : 'bg-black/70'}`}>
                                     {isLocked && <Lock className="h-2.5 w-2.5 text-amber-400 flex-shrink-0" />}
                                     {isMuted && <VolumeX className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />}
                                     {clip.isReversed && <span className="text-sky-400 font-bold text-[8.5px]">⏪</span>}
-                                    {clip.isFreezeFrame && <span className="text-cyan-400 font-bold text-[8.5px]">❄️</span>}
+                                    {(clip.isFreezeFrame || clip.type === 'freeze_frame') && <span className="text-cyan-400 font-bold text-[8.5px]">❄️</span>}
                                     <span className="truncate">{clip.name}</span>
                                     <span className="text-slate-400 text-[8.5px] font-normal">({formatTimecode(clip.duration)})</span>
                                   </span>

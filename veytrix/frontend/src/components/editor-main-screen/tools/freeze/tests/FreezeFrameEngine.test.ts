@@ -412,7 +412,7 @@ describe('FreezeFrameGenerator', () => {
     expect(freeze.duration).toBe(2.0);
     expect(freeze.baseDuration).toBe(2.0);
     expect(freeze.freezeSourceTime).toBe(3.5);
-    expect(freeze.type).toBe('image');
+    expect(freeze.type).toBe('freeze_frame');
     expect(freeze.mediaType).toBe('image');
     expect(freeze.url).toBe('data:image/png;base64,abc');
     expect(freeze.thumbnails).toEqual(['data:image/png;base64,abc']);

@@ -63,7 +63,7 @@ export class AudioDetachService implements IAudioDetachService {
     }
 
     const detachedAudioClip: TimelineClipRef = {
-      ...videoClip,
+      ...JSON.parse(JSON.stringify(videoClip)),
       id: audioId,
       name: audioName,
       start: clipStart,
@@ -81,8 +81,10 @@ export class AudioDetachService implements IAudioDetachService {
       isMuted: false,
       isLocked: false,
       isDetachedAudio: true,
+      linkedToVideo: false,
+      sourceVideoClipId: videoClip.id,
       sourceVideoId: videoClip.id,
-      mediaId: videoClip.mediaId ?? videoClip.id,
+      mediaId: `extracted-audio-${videoClip.mediaId || videoClip.id}-${Date.now()}`,
       url: extractedUrl || videoClip.url,
       waveformData,
       appliedEffects: [],
@@ -106,7 +108,7 @@ export class AudioDetachService implements IAudioDetachService {
     const audioColor = getAudioTrackColor();
 
     const detachedAudioClip: TimelineClipRef = {
-      ...videoClip,
+      ...JSON.parse(JSON.stringify(videoClip)),
       id: audioId,
       name: audioName,
       start: clipStart,
@@ -124,8 +126,10 @@ export class AudioDetachService implements IAudioDetachService {
       isMuted: false,
       isLocked: false,
       isDetachedAudio: true,
+      linkedToVideo: false,
+      sourceVideoClipId: videoClip.id,
       sourceVideoId: videoClip.id,
-      mediaId: videoClip.mediaId ?? videoClip.id,
+      mediaId: `extracted-audio-${videoClip.mediaId || videoClip.id}-${Date.now()}`,
       url: videoClip.url,
       appliedEffects: [],
       filters: [],

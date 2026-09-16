@@ -22,26 +22,7 @@ export class ClipReorderUtils {
       return updated;
     });
 
-    // 2. Align audio clips to their corresponding parent videos ONLY if explicitly linked
-    return updatedClips.map((c) => {
-      const isAudio = c.trackId === 'audio' || c.trackId === 'music' || c.type === 'audio' || c.isDetachedAudio;
-      if (!isAudio) return c;
-
-      const parentVideo = updatedClips.find(
-        (v: any) => (v.trackId !== 'audio' && v.trackId !== 'music' && v.type !== 'audio' && !v.isDetachedAudio && v.trackId !== 'overlay') &&
-               (v.id === c.sourceVideoId || c.id === `detached-audio-${v.id}`)
-      );
-
-      if (parentVideo) {
-        return {
-          ...c,
-          timelineStart: parentVideo.timelineStart,
-          start: parentVideo.timelineStart,
-          startOffset: parentVideo.startOffset ?? 0,
-          duration: parentVideo.duration
-        };
-      }
-      return c;
-    });
+    // Audio and Overlay clips preserve their own independent timeline positions and durations
+    return updatedClips;
   }
 }

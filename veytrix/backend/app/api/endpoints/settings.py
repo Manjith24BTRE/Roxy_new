@@ -142,3 +142,121 @@ async def get_storage_summary(current_user: UserProfile = Depends(get_current_us
             },
         },
     }
+
+
+# --- 5. EXPORT PREFERENCES ---
+DEFAULT_EXPORT_PREFERENCES = {
+    "resolution": "1080p (1920x1080)",
+    "fps": "60 fps",
+    "codec": "H.264 / AVC",
+    "bitrate": "High (15 Mbps)",
+    "audioQuality": "Stereo (320 kbps)",
+    "audio_codec": "Stereo (320 kbps)",
+    "exportFolder": "/users/veytrix/exports",
+    "export_folder": "/users/veytrix/exports",
+}
+
+
+def _get_local_preferences_store_path(user_id: str):
+    from pathlib import Path
+    storage_dir = Path(__file__).resolve().parent.parent.parent.parent / "storage" / "user_settings"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    return storage_dir / f"export_prefs_{user_id}.json"
+
+
+@router.get("/export-preferences", status_code=200)
+async def get_export_preferences(current_user: UserProfile = Depends(get_current_user)) -> Dict[str, Any]:
+    """Retrieve export preferences for the authenticated user."""
+    import json
+    client = init_supabase_client()
+    prefs = dict(DEFAULT_EXPORT_PREFERENCES)
+
+    if client:
+        try:
+            res = client.table("export_preferences").select("*").eq("user_id", current_user.id).execute()
+            if res.data and len(res.data) > 0:
+                row = res.data[0]
+                prefs = {
+                    "resolution": row.get("resolution", prefs["resolution"]),
+                    "fps": row.get("fps", prefs["fps"]),
+                    "codec": row.get("codec", prefs["codec"]),
+                    "bitrate": row.get("bitrate", prefs["bitrate"]),
+                    "audioQuality": row.get("audio_codec", row.get("audioQuality", prefs["audioQuality"])),
+                    "audio_codec": row.get("audio_codec", row.get("audioQuality", prefs["audio_codec"])),
+                    "exportFolder": row.get("export_folder", row.get("exportFolder", prefs["exportFolder"])),
+                    "export_folder": row.get("export_folder", row.get("exportFolder", prefs["export_folder"])),
+                }
+                return {"success": True, "data": prefs}
+        except Exception:
+            pass
+
+    # Fallback to local storage store if Supabase table is not yet migrated
+    local_path = _get_local_preferences_store_path(current_user.id)
+    if local_path.exists():
+        try:
+            with open(local_path, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+                prefs.update(saved)
+        except Exception:
+            pass
+
+    return {"success": True, "data": prefs}
+
+
+@router.post("/export-preferences", status_code=200)
+@router.put("/export-preferences", status_code=200)
+async def save_export_preferences(
+    payload: Dict[str, Any],
+    current_user: UserProfile = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Save or update export preferences for the authenticated user."""
+    import json
+    resolution = payload.get("resolution", "1080p (1920x1080)")
+    fps = payload.get("fps", "60 fps")
+    codec = payload.get("codec", "H.264 / AVC")
+    bitrate = payload.get("bitrate", "High (15 Mbps)")
+    audio_quality = payload.get("audioQuality") or payload.get("audio_codec") or "Stereo (320 kbps)"
+    export_folder = payload.get("exportFolder") or payload.get("export_folder") or "/users/veytrix/exports"
+
+    prefs = {
+        "resolution": resolution,
+        "fps": fps,
+        "codec": codec,
+        "bitrate": bitrate,
+        "audioQuality": audio_quality,
+        "audio_codec": audio_quality,
+        "exportFolder": export_folder,
+        "export_folder": export_folder,
+    }
+
+    # 1. Save to Supabase export_preferences table
+    client = init_supabase_client()
+    if client:
+        try:
+            db_payload = {
+                "user_id": current_user.id,
+                "resolution": resolution,
+                "fps": fps,
+                "codec": codec,
+                "bitrate": bitrate,
+                "audio_codec": audio_quality,
+                "export_folder": export_folder,
+            }
+            client.table("export_preferences").upsert(db_payload, on_conflict="user_id").execute()
+        except Exception:
+            pass
+
+    # 2. Always save copy to disk store
+    try:
+        local_path = _get_local_preferences_store_path(current_user.id)
+        with open(local_path, "w", encoding="utf-8") as f:
+            json.dump(prefs, f, indent=2)
+    except Exception:
+        pass
+
+    return {
+        "success": True,
+        "message": "Export preferences saved successfully.",
+        "data": prefs,
+    }
+

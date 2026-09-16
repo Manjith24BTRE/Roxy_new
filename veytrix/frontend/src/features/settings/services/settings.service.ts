@@ -10,6 +10,7 @@ import {
   NotificationSettingsData,
   StorageSummaryData,
   SettingsSaveResult,
+  ExportPreferencesData,
 } from '../types/settings.types';
 
 // --- 1. ACCOUNT SETTINGS ---
@@ -256,4 +257,120 @@ export async function fetchStorageSummary(): Promise<StorageSummaryData> {
       exportRendersBytes: 0,
     },
   };
+}
+
+// --- 5. EXPORT PREFERENCES ---
+const EXPORT_PREFS_STORAGE_KEY = 'veytrix_export_preferences_v1';
+
+export const DEFAULT_EXPORT_PREFERENCES: ExportPreferencesData = {
+  resolution: '1080p (1920x1080)',
+  fps: '60 fps',
+  codec: 'H.264 / AVC',
+  bitrate: 'High (15 Mbps)',
+  audioQuality: 'Stereo (320 kbps)',
+  exportFolder: '/users/veytrix/exports',
+};
+
+export async function fetchExportPreferences(): Promise<ExportPreferencesData> {
+  // 1. Try fetching from Backend API
+  try {
+    const res = await apiRequest<{ success: boolean; data: any }>('/settings/export-preferences');
+    if (res?.success && res.data) {
+      const data = res.data;
+      const parsed: ExportPreferencesData = {
+        resolution: data.resolution || DEFAULT_EXPORT_PREFERENCES.resolution,
+        fps: data.fps || DEFAULT_EXPORT_PREFERENCES.fps,
+        codec: data.codec || DEFAULT_EXPORT_PREFERENCES.codec,
+        bitrate: data.bitrate || DEFAULT_EXPORT_PREFERENCES.bitrate,
+        audioQuality: data.audioQuality || data.audio_codec || DEFAULT_EXPORT_PREFERENCES.audioQuality,
+        exportFolder: data.exportFolder || data.export_folder || DEFAULT_EXPORT_PREFERENCES.exportFolder,
+      };
+      try {
+        localStorage.setItem(EXPORT_PREFS_STORAGE_KEY, JSON.stringify(parsed));
+      } catch {}
+      return parsed;
+    }
+  } catch {}
+
+  // 2. Try fetching from Supabase table directly
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: row } = await supabase
+        .from('export_preferences')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (row) {
+        const parsed: ExportPreferencesData = {
+          resolution: row.resolution || DEFAULT_EXPORT_PREFERENCES.resolution,
+          fps: row.fps || DEFAULT_EXPORT_PREFERENCES.fps,
+          codec: row.codec || DEFAULT_EXPORT_PREFERENCES.codec,
+          bitrate: row.bitrate || DEFAULT_EXPORT_PREFERENCES.bitrate,
+          audioQuality: row.audio_codec || DEFAULT_EXPORT_PREFERENCES.audioQuality,
+          exportFolder: row.export_folder || DEFAULT_EXPORT_PREFERENCES.exportFolder,
+        };
+        try {
+          localStorage.setItem(EXPORT_PREFS_STORAGE_KEY, JSON.stringify(parsed));
+        } catch {}
+        return parsed;
+      }
+    }
+  } catch {}
+
+  // 3. Try reading from localStorage fallback
+  try {
+    const stored = localStorage.getItem(EXPORT_PREFS_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return { ...DEFAULT_EXPORT_PREFERENCES, ...parsed };
+    }
+  } catch {}
+
+  return DEFAULT_EXPORT_PREFERENCES;
+}
+
+export async function updateExportPreferences(data: ExportPreferencesData): Promise<SettingsSaveResult> {
+  let savedLocally = false;
+  // 1. Save to localStorage immediately
+  try {
+    localStorage.setItem(EXPORT_PREFS_STORAGE_KEY, JSON.stringify(data));
+    savedLocally = true;
+  } catch {}
+
+  // 2. Save via Backend API
+  try {
+    const res = await apiRequest<{ success: boolean; message?: string }>('/settings/export-preferences', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (res?.success) {
+      return { success: true, message: 'Export preferences saved successfully.' };
+    }
+  } catch {}
+
+  // 3. Save via Supabase direct table upsert
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from('export_preferences').upsert({
+        user_id: user.id,
+        resolution: data.resolution,
+        fps: data.fps,
+        codec: data.codec,
+        bitrate: data.bitrate,
+        audio_codec: data.audioQuality,
+        export_folder: data.exportFolder,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+    }
+    return { success: true, message: 'Export preferences saved successfully.' };
+  } catch {}
+
+  if (savedLocally) {
+    return { success: true, message: 'Export preferences saved to local store.' };
+  }
+
+  return { success: false, error: 'Failed to save export preferences.' };
 }

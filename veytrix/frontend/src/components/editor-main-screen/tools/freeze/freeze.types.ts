@@ -10,9 +10,14 @@ export interface TimelineClipRef {
   playbackRate?: number;
   speed?: number;
   trackId?: string;
-  type?: string;
+  type?: 'freeze_frame' | 'video' | 'image' | 'audio' | string;
   mediaType?: string;
   mediaId?: string;
+  sourceMediaId?: string;
+  sourceClipId?: string;
+  freezeTimestamp?: number;
+  thumbnailUrl?: string;
+  frozenFrameImage?: string;
   thumbnails?: string[];
   isLocked?: boolean;
   isMuted?: boolean;
@@ -25,6 +30,17 @@ export interface TimelineClipRef {
   transitions?: any[];
   transforms?: Record<string, any>;
   [key: string]: any;
+}
+
+export interface FreezeFrameClip extends TimelineClipRef {
+  id: string;
+  type: 'freeze_frame';
+  sourceMediaId: string;
+  sourceClipId: string;
+  freezeTimestamp: number;
+  duration: number;
+  thumbnailUrl?: string;
+  frozenFrameImage?: string;
 }
 
 export interface FreezeOptions {

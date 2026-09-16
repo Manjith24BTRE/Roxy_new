@@ -84,8 +84,8 @@ class VideoBuilder:
         # Freeze frame
         freeze_val = clip.metadata.get("freeze_duration") or clip.metadata.get("freeze_frame_duration") or 0.0
         freeze_duration = float(freeze_val)
-        if clip.metadata.get("freeze_frame", False) or freeze_duration > 0:
-            dur = freeze_duration if freeze_duration > 0 else 2.0
+        if clip.metadata.get("freeze_frame", False) or clip.metadata.get("is_freeze_frame", False) or clip.asset_type == AssetType.FREEZE_FRAME or freeze_duration > 0:
+            dur = freeze_duration if freeze_duration > 0 else clip.duration
             filters.append(f"tpad=stop_mode=clone:stop_duration={dur:.2f}")
 
         # Crop / Sizing mode & Scale

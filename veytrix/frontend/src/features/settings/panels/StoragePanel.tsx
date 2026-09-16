@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Database, Trash2, ShieldAlert, Loader2 } from 'lucide-react';
-import { supabase } from '../../../lib/supabase';
+import { supabase, supabaseAdmin } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
 import { syncService } from '../../../services/sync.service';
 
 export function StoragePanel() {
-  const { user } = useAuth();
+  const { user, updateUserProfile } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -16,41 +16,81 @@ export function StoragePanel() {
     percent: 0,
   });
 
-  const STORAGE_LIMIT_BYTES = 50 * 1024 * 1024; // 50MB for free tier, custom limit
+  const STORAGE_LIMIT_BYTES = 50 * 1024 * 1024; // 50MB standard allocation
+
+  const getLocalDraftCount = (): number => {
+    let count = 0;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (
+          key &&
+          (key.startsWith('veytrix_project_backup_') ||
+            key.startsWith('veytrix_recent_') ||
+            key.startsWith('veytrix_draft_') ||
+            key.startsWith('veytrix_favorite_') ||
+            key.startsWith('veytrix_gallery_'))
+        ) {
+          count++;
+        }
+      }
+    } catch {}
+    return count;
+  };
 
   const fetchStorageStats = async () => {
     if (!user) return;
     setLoading(true);
     try {
-      // 1. Fetch remote projects count
-      const projects = await syncService.fetchRemoteProjects();
-      const pCount = projects.length;
+      // 1. Count actual local draft backup cache entries
+      const localDraftCount = getLocalDraftCount();
+      const remoteProjects = await syncService.fetchRemoteProjects().catch(() => []);
+      const totalProjects = Math.max(localDraftCount, remoteProjects.length);
 
-      // 2. Fetch avatar size in avatars/{user.id}/
+      // 2. Fetch user's avatar size in avatars/{user.id}/
       let avatarBytes = 0;
-      const { data: fileList } = await supabase.storage
-        .from('avatars')
-        .list(user.id);
-      
-      if (fileList && fileList.length > 0) {
-        fileList.forEach(file => {
-          avatarBytes += file.metadata?.size || 0;
-        });
+      try {
+        const { data: avatarFiles } = await supabaseAdmin.storage
+          .from('avatars')
+          .list(user.id);
+        
+        if (avatarFiles && avatarFiles.length > 0) {
+          avatarFiles.forEach((file) => {
+            avatarBytes += (file.metadata as any)?.size || 0;
+          });
+        }
+      } catch (e) {
+        console.warn('Could not query avatars storage size:', e);
       }
 
-      // Sum everything
-      // Note: timeline_json size is small, but we can estimate 5KB per project
-      const estimatedProjectsBytes = pCount * 5 * 1024;
-      const totalBytes = avatarBytes + estimatedProjectsBytes;
+      // 3. Fetch sizes across all user storage buckets (exports, images, videos, audio, thumbnails, assets)
+      let otherBucketsBytes = 0;
+      const bucketNames = ['exports', 'images', 'videos', 'audio', 'thumbnails', 'assets'];
+
+      await Promise.all(
+        bucketNames.map(async (bucket) => {
+          try {
+            const { data: files } = await supabaseAdmin.storage.from(bucket).list(user.id);
+            if (files && files.length > 0) {
+              files.forEach((file) => {
+                otherBucketsBytes += (file.metadata as any)?.size || 0;
+              });
+            }
+          } catch {}
+        })
+      );
+
+      // Total used bytes calculation from real objects
+      const totalBytes = avatarBytes + otherBucketsBytes;
       const totalMb = (totalBytes / (1024 * 1024)).toFixed(2);
-      const calculatedPercent = Math.min(100, Math.max(1, Math.round((totalBytes / STORAGE_LIMIT_BYTES) * 100)));
+      const calculatedPercent = Math.min(100, Math.max(0, Math.round((totalBytes / STORAGE_LIMIT_BYTES) * 100)));
 
       setStats({
-        projectsCount: pCount,
+        projectsCount: totalProjects,
         avatarSizeKb: Math.round(avatarBytes / 1024),
         totalUsedBytes: totalBytes,
         totalUsedMb: `${totalMb} MB`,
-        percent: calculatedPercent
+        percent: calculatedPercent,
       });
     } catch (err) {
       console.warn('Could not load storage stats:', err);
@@ -66,26 +106,41 @@ export function StoragePanel() {
   const handleClearCache = async (type: 'projects' | 'avatars') => {
     if (!user) return;
     if (type === 'projects') {
-      if (window.confirm('This will delete all your local cached draft projects. Remote database projects will remain safe. Continue?')) {
-        // Clear local storage keys
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('veytrix_project_backup_')) {
-            localStorage.removeItem(key);
+      if (window.confirm('This will clear all your local cached project backups. Database records remain safe. Continue?')) {
+        try {
+          const keysToRemove: string[] = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (
+              key &&
+              (key.startsWith('veytrix_project_backup_') ||
+                key.startsWith('veytrix_recent_') ||
+                key.startsWith('veytrix_draft_') ||
+                key.startsWith('veytrix_favorite_') ||
+                key.startsWith('veytrix_gallery_'))
+            ) {
+              keysToRemove.push(key);
+            }
           }
+          keysToRemove.forEach((k) => localStorage.removeItem(k));
+        } catch (e) {
+          console.warn('Error clearing local project cache:', e);
         }
-        alert('Local project cache cleared.');
-        fetchStorageStats();
+        await fetchStorageStats();
       }
     } else if (type === 'avatars') {
       if (window.confirm('Delete all cached profile image backups in storage?')) {
-        const { data: fileList } = await supabase.storage.from('avatars').list(user.id);
-        if (fileList && fileList.length > 0) {
-          const paths = fileList.map(f => `${user.id}/${f.name}`);
-          await supabase.storage.from('avatars').remove(paths);
+        try {
+          const { data: fileList } = await supabaseAdmin.storage.from('avatars').list(user.id);
+          if (fileList && fileList.length > 0) {
+            const paths = fileList.map((f) => `${user.id}/${f.name}`);
+            await supabaseAdmin.storage.from('avatars').remove(paths);
+          }
+          await updateUserProfile({ avatar_url: null });
+        } catch (e) {
+          console.warn('Error purging avatars storage cache:', e);
         }
-        alert('Avatar cache deleted from cloud storage.');
-        fetchStorageStats();
+        await fetchStorageStats();
       }
     }
   };

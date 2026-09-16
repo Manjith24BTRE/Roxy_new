@@ -39,6 +39,8 @@ interface EffectsProps {
   onReorderAppliedEffects: (clipId: string, startIndex: number, endIndex: number) => void;
   onAddEffectKeyframe?: (clipId: string, effectId: string, time: number, properties: any) => void;
   onDeleteEffectKeyframe?: (clipId: string, effectId: string, keyframeId: string) => void;
+  onStartSliderDrag?: (actionName?: string) => void;
+  onEndSliderDrag?: () => void;
 }
 
 const CATEGORIES = [
@@ -72,7 +74,7 @@ const BLEND_MODES = [
   { value: 'color-burn', label: 'Color Burn' }
 ];
 
-export function Effects({
+export function EffectsComponent({
   timelineClips,
   currentTime,
   activeTransitionId,
@@ -104,7 +106,9 @@ export function Effects({
   onDuplicateAppliedEffect,
   onReorderAppliedEffects,
   onAddEffectKeyframe,
-  onDeleteEffectKeyframe
+  onDeleteEffectKeyframe,
+  onStartSliderDrag,
+  onEndSliderDrag
 }: EffectsProps) {
   const [activeSubTab, setActiveSubTab] = useState<'transitions' | 'filters' | 'effects'>(effectsSubTab || 'effects');
   const [searchQuery, setSearchQuery] = useState('');
@@ -418,7 +422,13 @@ export function Effects({
                       min="0"
                       max="100"
                       value={activeAppliedEffect.intensity}
+                      onPointerDown={() => onStartSliderDrag?.('Adjust Effect Intensity')}
+                      onMouseDown={() => onStartSliderDrag?.('Adjust Effect Intensity')}
+                      onTouchStart={() => onStartSliderDrag?.('Adjust Effect Intensity')}
                       onChange={(e) => onUpdateAppliedEffect(activeClip.id, activeAppliedEffect.id, { intensity: Number(e.target.value) })}
+                      onPointerUp={() => onEndSliderDrag?.()}
+                      onMouseUp={() => onEndSliderDrag?.()}
+                      onTouchEnd={() => onEndSliderDrag?.()}
                       className="w-full accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
                     />
                   </div>
@@ -434,7 +444,13 @@ export function Effects({
                       min="0"
                       max="100"
                       value={activeAppliedEffect.opacity}
+                      onPointerDown={() => onStartSliderDrag?.('Adjust Effect Opacity')}
+                      onMouseDown={() => onStartSliderDrag?.('Adjust Effect Opacity')}
+                      onTouchStart={() => onStartSliderDrag?.('Adjust Effect Opacity')}
                       onChange={(e) => onUpdateAppliedEffect(activeClip.id, activeAppliedEffect.id, { opacity: Number(e.target.value) })}
+                      onPointerUp={() => onEndSliderDrag?.()}
+                      onMouseUp={() => onEndSliderDrag?.()}
+                      onTouchEnd={() => onEndSliderDrag?.()}
                       className="w-full accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
                     />
                   </div>
@@ -450,7 +466,13 @@ export function Effects({
                       min="0"
                       max="100"
                       value={activeAppliedEffect.speed}
+                      onPointerDown={() => onStartSliderDrag?.('Adjust Effect Speed')}
+                      onMouseDown={() => onStartSliderDrag?.('Adjust Effect Speed')}
+                      onTouchStart={() => onStartSliderDrag?.('Adjust Effect Speed')}
                       onChange={(e) => onUpdateAppliedEffect(activeClip.id, activeAppliedEffect.id, { speed: Number(e.target.value) })}
+                      onPointerUp={() => onEndSliderDrag?.()}
+                      onMouseUp={() => onEndSliderDrag?.()}
+                      onTouchEnd={() => onEndSliderDrag?.()}
                       className="w-full accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
                     />
                   </div>
@@ -466,7 +488,13 @@ export function Effects({
                       min="0"
                       max="360"
                       value={activeAppliedEffect.angle}
+                      onPointerDown={() => onStartSliderDrag?.('Adjust Effect Angle')}
+                      onMouseDown={() => onStartSliderDrag?.('Adjust Effect Angle')}
+                      onTouchStart={() => onStartSliderDrag?.('Adjust Effect Angle')}
                       onChange={(e) => onUpdateAppliedEffect(activeClip.id, activeAppliedEffect.id, { angle: Number(e.target.value) })}
+                      onPointerUp={() => onEndSliderDrag?.()}
+                      onMouseUp={() => onEndSliderDrag?.()}
+                      onTouchEnd={() => onEndSliderDrag?.()}
                       className="w-full accent-sky-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
                     />
                   </div>
@@ -7666,4 +7694,6 @@ export function Effects({
     </div>
   );
 }
+
+export const Effects = React.memo(EffectsComponent);
 export default Effects;

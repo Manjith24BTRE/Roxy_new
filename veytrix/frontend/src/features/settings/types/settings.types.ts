@@ -64,3 +64,12 @@ export interface SettingsSaveResult {
   message?: string;
   error?: string;
 }
+
+export interface ExportPreferencesData {
+  resolution: string;
+  fps: string;
+  codec: string;
+  bitrate: string;
+  audioQuality: string;
+  exportFolder: string;
+}

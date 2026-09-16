@@ -50,6 +50,7 @@ class AssetType(str, Enum):
     IMAGE = "IMAGE"
     VIDEO = "VIDEO"
     AUDIO = "AUDIO"
+    FREEZE_FRAME = "FREEZE_FRAME"
     THUMBNAIL = "THUMBNAIL"
     EFFECT = "EFFECT"
     FILTER = "FILTER"
