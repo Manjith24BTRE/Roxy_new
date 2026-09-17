@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import ai_commands, assets, auth, exports, health, projects, settings, subscriptions, workspaces
+from app.api.endpoints import ai_commands, announcements, assets, auth, exports, health, projects, settings, subscriptions, workspaces
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["Health"])
@@ -11,4 +11,7 @@ api_router.include_router(subscriptions.router, prefix="/subscriptions", tags=["
 api_router.include_router(assets.router, prefix="/assets", tags=["Assets"])
 api_router.include_router(exports.router, prefix="/exports", tags=["Exports"])
 api_router.include_router(ai_commands.router, prefix="/ai-commands", tags=["AI Command Engine"])
+api_router.include_router(announcements.router, prefix="/admin/announcements", tags=["Announcements"])
+api_router.include_router(announcements.router, prefix="/v1/admin/announcements", tags=["Announcements V1"])
+
 

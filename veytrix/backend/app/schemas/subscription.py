@@ -47,3 +47,11 @@ class ConsumeCreditsRequest(BaseModel):
         if v <= 0:
             raise ValueError("Credit consume amount must be positive.")
         return v
+
+
+class AdminCreditActionRequest(BaseModel):
+    """Schema for admin credit operations."""
+
+    user_id: str = Field(description="Target user UUID")
+    amount: int = Field(gt=0, description="Amount of credits")
+    reason: Optional[str] = Field(default="Admin Action", description="Reason for action")

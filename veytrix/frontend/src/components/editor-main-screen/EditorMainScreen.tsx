@@ -58,10 +58,12 @@ import {
 import { ClipTrimHandles, TrimToolbar, useTrimMode } from './tools/trim';
 import { ClipActionsPanel } from './clip-actions/ClipActionsPanel';
 import { EditorHistoryProvider, useEditorHistory, ProjectState } from './history';
+import frontendLogger from '../../services/frontendLogger';
 import { OverlapUtils } from './tools/overlap/overlapUtils';
 import { ClipReorderUtils } from './tools/overlap/clipReorderUtils';
 import { OverlapEngine } from './tools/overlap/OverlapEngine';
 import { OverlapControlPanel } from './tools/overlap/OverlapControlPanel';
+import { OverlayPickerModal } from './tools/overlap/OverlayPickerModal';
 import { OverlapData } from './tools/overlap/overlap.types';
 
 const getProjectTotalDuration = (clips: any[]): number => {
@@ -243,6 +245,50 @@ function EditorMainScreenContent() {
   });
 
   const [activeSelectedClipId, setActiveSelectedClipId] = useState<string | null>(null);
+  const [isOverlayPickerOpen, setIsOverlayPickerOpen] = useState(false);
+
+  const handleAddMediaToOverlay = (mediaId: string) => {
+    const mediaItem = mediaFiles.find((m) => m.id === mediaId);
+    if (!mediaItem) return;
+
+    beginTransaction('Add Overlay', getProjectState());
+    frontendLogger.info('Overlay Added', `Added ${mediaItem.name} as overlay layer`, { mediaId, name: mediaItem.name });
+
+    const newOverlayClip: any = {
+      id: `overlay-${Date.now()}`,
+      mediaId: mediaItem.id,
+      name: `${mediaItem.name} (Overlay)`,
+      type: mediaItem.type === 'image' ? 'image' : 'video',
+      asset_type: mediaItem.type === 'image' ? 'IMAGE' : 'VIDEO',
+      trackId: 'overlay',
+      url: mediaItem.url,
+      sourceUrl: mediaItem.url,
+      duration: mediaItem.duration || (mediaItem.type === 'image' ? 5 : 5),
+      baseDuration: mediaItem.duration || 5,
+      timelineStart: currentTimeRef.current || 0,
+      start: currentTimeRef.current || 0,
+      startOffset: 0,
+      scale: 0.75,
+      posX: 0,
+      posY: 0,
+      rotation: 0,
+      opacity: 100,
+      mixBlendMode: 'normal',
+      isMuted: false,
+      volume: 1,
+      speed: 1,
+      playbackRate: 1,
+      keyframes: [],
+      appliedEffects: [],
+      filters: []
+    };
+
+    const updatedClips = [...timelineClips, newOverlayClip];
+    setTimelineClipsState(updatedClips);
+    setActiveSelectedClipId(newOverlayClip.id);
+    commitTransaction(getProjectState());
+    showToast(`Added ${mediaItem.name} as Overlay`);
+  };
 
   const activeSelectedClip = activeSelectedClipId
     ? (timelineClips.find(c => c.id === activeSelectedClipId) || null)
@@ -1779,7 +1825,10 @@ function EditorMainScreenContent() {
       }
       case 'overlap': {
         const targetClip = timelineClips.find((c) => c.id === clipId) || clip;
-        if (!targetClip) return;
+        if (!targetClip) {
+          setIsOverlayPickerOpen(true);
+          return;
+        }
         beginTransaction('Toggle overlap track', getProjectState());
         
         const nextTrackId = targetClip.trackId === 'overlay' ? 'video' : 'overlay';
@@ -1833,6 +1882,11 @@ function EditorMainScreenContent() {
       setTimelineClipsState((prevClips) => {
         return prevClips.map((clip) => {
           const isAudioClip = clip.trackId === 'audio' || clip.trackId === 'music' || clip.type === 'audio' || clip.isDetachedAudio;
+          const isLinkedAudio = isAudioClip && (
+            (clip as any).sourceVideoId === targetClip.id ||
+            (clip as any).sourceVideoClipId === targetClip.id ||
+            (targetClip as any).detachedAudioId === clip.id
+          );
 
           if (clip.id === targetClip.id) {
             if (isAudioClip) {
@@ -1844,6 +1898,8 @@ function EditorMainScreenContent() {
                 trackId: clip.trackId || 'audio',
                 mediaId: newMedia.mediaId,
                 url: newMedia.url,
+                sourceUrl: newMedia.url,
+                waveformSource: newMedia.url,
                 name: newMedia.name,
                 baseDuration: newBaseDuration,
                 duration: Math.min(clip.duration, newBaseDuration)
@@ -1857,6 +1913,7 @@ function EditorMainScreenContent() {
               trackId: clip.trackId || 'video',
               mediaId: newMedia.mediaId,
               url: newMedia.url,
+              sourceUrl: newMedia.url,
               name: newMedia.name,
               thumbnails: newMedia.thumbnails && newMedia.thumbnails.length > 0 ? newMedia.thumbnails : clip.thumbnails,
               baseDuration: newBaseDuration,
@@ -1864,7 +1921,24 @@ function EditorMainScreenContent() {
             };
           }
 
-          // For all audio clips on the timeline, ensure visual thumbnail fields are strictly omitted/purged
+          if (isLinkedAudio) {
+            // Linked audio clip replacement: update media source & waveformUrl, maintain strict audio/no-thumbnail isolation
+            const { thumbnails, thumbnailUrl, posterFrame, previewFrame, videoFrame, videoMetadata, ...cleanAudioClip } = clip;
+            return {
+              ...cleanAudioClip,
+              type: 'audio',
+              trackId: clip.trackId || 'audio',
+              mediaId: newMedia.mediaId,
+              url: newMedia.url,
+              sourceUrl: newMedia.url,
+              waveformSource: newMedia.url,
+              name: `${newMedia.name} (Audio)`,
+              baseDuration: newBaseDuration,
+              duration: Math.min(clip.duration, newBaseDuration)
+            };
+          }
+
+          // For all other audio clips on the timeline, ensure visual thumbnail fields are strictly omitted/purged
           if (isAudioClip) {
             const { thumbnails, thumbnailUrl, posterFrame, previewFrame, videoFrame, videoMetadata, ...cleanAudioClip } = clip;
             return {
@@ -6052,6 +6126,17 @@ function EditorMainScreenContent() {
         }}
         isSaving={isSaving}
         lastSavedTime={lastSavedTime}
+      />
+
+      {/* OVERLAY PICKER MODAL */}
+      <OverlayPickerModal
+        isOpen={isOverlayPickerOpen}
+        onClose={() => setIsOverlayPickerOpen(false)}
+        mediaFiles={mediaFiles}
+        timelineClips={timelineClips}
+        onAddMediaAsOverlay={(mediaId) => handleAddMediaToOverlay(mediaId)}
+        onConvertClipToOverlay={(clipId) => handleMenuAction('overlap', clipId)}
+        onImportFileToOverlay={() => handleImportButtonClick()}
       />
     </div>
   );

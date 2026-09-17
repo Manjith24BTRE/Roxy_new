@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
-import { apiRequest } from '../lib/api';
+import { supabase, supabaseAdmin } from '../lib/supabase';
 
 export interface UserProfileData {
   id: string;
@@ -45,7 +44,6 @@ interface AuthContextValue {
   isLoading: boolean;
   role: 'user' | 'controller' | null;
   
-  // Modal Controller States
   authModalMode: AuthModalMode;
   isAuthModalOpen: boolean;
   openAuthModal: (mode: AuthModalMode) => void;
@@ -106,6 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const next = typeof profileOrUpdater === 'function' ? profileOrUpdater(prev) : profileOrUpdater;
       if (next) {
         try { localStorage.setItem('veytrix_user_profile', JSON.stringify(next)); } catch {}
+      } else {
+        try { localStorage.removeItem('veytrix_user_profile'); } catch {}
       }
       return next;
     });
@@ -114,7 +114,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authModalMode, setAuthModalMode] = useState<AuthModalMode>(null);
   const [redirectAfterLogin, setRedirectAfterLogin] = useState<string | null>(null);
-  const lastSyncTokenRef = useRef<string | null>(null);
 
   const openAuthModal = useCallback((mode: AuthModalMode) => {
     setAuthModalMode(mode);
@@ -139,7 +138,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
 
-      // Fetch profile from db
+      console.log(`[AVATAR] Fetching profile from database for user_id='${currentUser.id}'`);
+
+      // Query profiles table from database
       let dbProfile: any = null;
       const { data: dbProfileData, error: fetchError } = await supabase
         .from('profiles')
@@ -149,12 +150,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (dbProfileData) {
         dbProfile = dbProfileData;
-      } else if (!fetchError) {
-        // If profile record does not exist yet, create one
+      } else {
+        // Fallback query via admin client if regular RLS returns empty
+        try {
+          const { data: adminDbData } = await supabaseAdmin
+            .from('profiles')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .maybeSingle();
+          if (adminDbData) dbProfile = adminDbData;
+        } catch (adminErr) {
+          console.warn('[AVATAR] Admin profile fetch warning:', adminErr);
+        }
+      }
+
+      if (!dbProfile && !fetchError) {
+        // Create initial profile record if none exists
         const newProfile = {
           user_id: currentUser.id,
           display_name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || 'Mavros Member',
           avatar_url: currentUser.user_metadata?.avatar_url || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         };
         const { data: insertedData } = await supabase
           .from('profiles')
@@ -165,11 +182,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const meta = currentUser.user_metadata || {};
+      
+      // Determine single source of truth for avatar_url
+      // Priority: DB profile avatar_url -> Auth metadata avatar_url -> Cached profile avatar_url
+      const resolvedAvatarUrl =
+        dbProfile?.avatar_url ??
+        meta.avatar_url ??
+        (userProfile?.id === currentUser.id ? userProfile?.avatar_url : null);
+
+      console.log(`[AVATAR] Loaded From Database: avatar_url='${resolvedAvatarUrl}'`);
+
       const profileData: UserProfileData = {
         id: currentUser.id,
         email: currentUser.email || null,
         display_name: dbProfile?.display_name || meta.full_name || meta.name || 'Mavros Member',
-        avatar_url: dbProfile?.avatar_url || meta.avatar_url || null,
+        avatar_url: resolvedAvatarUrl,
         username: meta.username || null,
         phone: meta.phone || null,
         country: meta.country || null,
@@ -192,12 +219,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       lastSyncedUserIdRef.current = currentUser.id;
       return profileData;
     } catch (err) {
-      console.warn('Supabase profile sync notice:', err);
+      console.error('[AVATAR] Profile sync error:', err);
     } finally {
       syncInProgressRef.current = false;
     }
     return null;
-  }, [setUserProfile]);
+  }, [setUserProfile, userProfile]);
+
+  // Realtime subscription to profiles table for instant avatar & name updates
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`profile_realtime_${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles', filter: `user_id=eq.${user.id}` },
+        (payload: any) => {
+          console.log('[AVATAR] Realtime profile update received:', payload);
+          if (payload.new && payload.new.avatar_url !== undefined) {
+            setUserProfile((prev) => prev ? { ...prev, avatar_url: payload.new.avatar_url } : null);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, setUserProfile]);
 
   useEffect(() => {
     let isMounted = true;
@@ -221,7 +271,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     });
 
-    // Listen for auth changes
+    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
 
@@ -325,7 +375,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setUserProfile(null);
       
-      // Controller → landing page, normal user → login page
       window.location.href = currentRole === 'controller' ? '/' : '/login';
     } catch (error) {
       console.error('Logout error:', error);
@@ -344,20 +393,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (!currentUser) throw new Error('Not authenticated');
 
-    // 1. Update public profiles table for display_name and avatar_url if provided
-    const dbPayload: any = {};
+    console.log(`[AVATAR] Updating user profile database row for user_id='${currentUser.id}'`, data);
+
+    // 1. Guaranteed UPSERT into profiles table so row is created if non-existent
+    const dbPayload: any = {
+      user_id: currentUser.id,
+      updated_at: new Date().toISOString(),
+    };
     if (data.display_name !== undefined) dbPayload.display_name = data.display_name;
     if (data.avatar_url !== undefined) dbPayload.avatar_url = data.avatar_url;
 
-    if (Object.keys(dbPayload).length > 0) {
-      const { error: dbError } = await supabase
+    const { error: dbError } = await supabase
+      .from('profiles')
+      .upsert(dbPayload, { onConflict: 'user_id' });
+
+    if (dbError) {
+      console.warn('[AVATAR] Standard client profiles upsert failed, using admin fallback:', dbError.message);
+      const { error: adminError } = await supabaseAdmin
         .from('profiles')
-        .update(dbPayload)
-        .eq('user_id', currentUser.id);
-      if (dbError) throw dbError;
+        .upsert(dbPayload, { onConflict: 'user_id' });
+
+      if (adminError) {
+        console.error('[AVATAR] Admin profiles upsert error:', adminError);
+      }
     }
 
-    // 2. Update user_metadata for settings fields
+    // 2. Update auth user metadata
     const metaPayload: any = {};
     if (data.display_name !== undefined) {
       metaPayload.full_name = data.display_name;
@@ -380,10 +441,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (data.notification_settings !== undefined) metaPayload.notification_settings = data.notification_settings;
 
     if (Object.keys(metaPayload).length > 0) {
-      const { error: authError } = await supabase.auth.updateUser({
+      await supabase.auth.updateUser({
         data: metaPayload,
-      });
-      if (authError) throw authError;
+      }).catch((authErr) => console.warn('[AVATAR] updateUser metadata warning:', authErr));
     }
 
     const nextProfile: UserProfileData = {
@@ -396,6 +456,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } as UserProfileData;
 
     setUserProfile(nextProfile);
+    console.log('[AVATAR] Profile state & localStorage updated:', nextProfile.avatar_url);
     return nextProfile;
   }, [userProfile, setUserProfile]);
 

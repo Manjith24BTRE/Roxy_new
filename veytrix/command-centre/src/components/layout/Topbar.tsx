@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
-import { Menu, Search, Bell, User } from 'lucide-react';
-import { useAuth } from '../../../../frontend/src/context/AuthContext';
+import { Menu, Search, Bell } from 'lucide-react';
+import { useControlCentreAuth } from '../../context/ControlCentreAuthContext';
 
 export const Topbar = ({ onMenuClick }: { onMenuClick: () => void }) => {
-  const { signOut, user } = useAuth();
+  const { logout, user } = useControlCentreAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
-    await signOut();
-    // No need to set false — signOut redirects via window.location.href
+    await logout();
   };
 
   return (
@@ -51,7 +50,7 @@ export const Topbar = ({ onMenuClick }: { onMenuClick: () => void }) => {
           <button 
             onClick={handleLogout}
             disabled={isLoggingOut}
-            className={`text-xs font-semibold px-2 ${isLoggingOut ? 'text-gray-400' : 'text-red-500 hover:text-red-700'}`}
+            className={`text-xs font-semibold px-2 cursor-pointer ${isLoggingOut ? 'text-gray-400' : 'text-red-500 hover:text-red-700'}`}
           >
             {isLoggingOut ? 'Logging out...' : 'Logout'}
           </button>

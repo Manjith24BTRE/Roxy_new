@@ -13,6 +13,8 @@ export interface User {
   joinedAt: string;
   lastLoginAt: string;
   avatarUrl?: string;
+  projectsCount?: number;
+  exportsCount?: number;
 }
 
 export interface Session {
@@ -134,14 +136,31 @@ export interface FeatureFlag {
   lastUpdated: string;
 }
 
+export type AnnouncementType = 'System Update' | 'Offer' | 'Promotion' | 'Maintenance' | 'Feature Release' | 'Security Alert' | 'General';
+export type AnnouncementPriority = 'Low' | 'Medium' | 'High' | 'Critical';
+export type AnnouncementStatus = 'Draft' | 'Scheduled' | 'Active' | 'Expired' | 'Archived';
+export type TargetAudience = 'All Users' | 'Free Users' | 'Pro Users' | 'Premium Users' | 'Admins Only';
+
 export interface Announcement {
   id: string;
   title: string;
   message: string;
-  audience: 'All Users' | 'Pro Users' | 'Free Users';
-  status: 'Draft' | 'Scheduled' | 'Published' | 'Expired';
-  publishedDate?: string;
-  expiryDate?: string;
+  announcementType: AnnouncementType;
+  priority: AnnouncementPriority;
+  status: AnnouncementStatus;
+  targetAudience: TargetAudience;
+  ctaText?: string;
+  ctaUrl?: string;
+  bannerColor?: string;
+  icon?: string;
+  startsAt?: string;
+  expiresAt?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  viewsCount?: number;
+  clicksCount?: number;
+  dismissalsCount?: number;
 }
 
 export interface Backup {

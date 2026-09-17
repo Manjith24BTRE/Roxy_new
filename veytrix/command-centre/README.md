@@ -17,7 +17,6 @@ veytrix/command centre/
 │   ├── mock/             # Hardcoded JSON/JS mock data
 │   ├── styles/           # Global CSS and theme tokens
 │   └── assets/           # Images, icons, logos
-├── tester/               # Tester Control Centre module
 ├── developer/            # Developer Control Centre module
 └── public/               # Public static assets
 ```

@@ -1,10 +1,10 @@
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 from fastapi import HTTPException, status
 from app.core.logging import logger
 from app.core.plans import get_plan_config
-from app.core.supabase import init_supabase_client
+from app.core.supabase import init_supabase_client, init_supabase_admin_client
 from app.models.credit import CreditModel
 from app.models.profile import utc_now
 from app.services.entitlement_service import entitlement_service
@@ -15,7 +15,7 @@ _credits_store: Dict[str, CreditModel] = {}
 
 
 class CreditService:
-    """Central Credit Service managing AI credit allocation, consumption, and resets."""
+    """Central Credit Service managing AI credit allocation, consumption, resets, and ledger history."""
 
     @staticmethod
     def get_credit_balance(user_id: UUID | str) -> CreditModel:
@@ -58,11 +58,27 @@ class CreditService:
             )
             _credits_store[u_id] = credits_obj
 
+            # Persist default credit balance to Supabase
+            if client := init_supabase_client():
+                try:
+                    payload = {
+                        "user_id": u_id,
+                        "balance": credits_obj.balance,
+                        "current_balance": credits_obj.balance,
+                        "total_credits_issued": credits_obj.balance,
+                        "total_credits_consumed": 0,
+                        "last_reset": now.isoformat(),
+                        "credit_mode": "standard",
+                    }
+                    client.table("credits").upsert(payload, on_conflict="user_id").execute()
+                except Exception as exc:
+                    logger.warning(f"Supabase DB initial credit insert notice: {exc}")
+
         return credits_obj
 
     @staticmethod
-    def consume_credits(user_id: UUID | str, amount: int) -> CreditModel:
-        """Deduct AI credits from user balance with validation."""
+    def consume_credits(user_id: UUID | str, amount: int, reason: str = "Video Export") -> CreditModel:
+        """Deduct AI credits from user balance with validation and atomic transaction logging."""
         if amount <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -85,21 +101,89 @@ class CreditService:
         u_id = str(parse_uuid(user_id))
         _credits_store[u_id] = credits_obj
 
-        client = init_supabase_client()
+        client = init_supabase_admin_client() or init_supabase_client()
         if client:
             try:
+                # 1. Update credits table
                 payload = {
                     "balance": credits_obj.balance,
+                    "current_balance": credits_obj.balance,
                     "updated_at": credits_obj.updated_at.isoformat(),
+                    "last_updated": credits_obj.updated_at.isoformat(),
                 }
                 client.table("credits").update(payload).eq("user_id", u_id).execute()
+
+                # 2. Insert transaction ledger row
+                tx_payload = {
+                    "user_id": u_id,
+                    "amount": -amount,
+                    "transaction_type": "debit",
+                    "reason": reason,
+                    "created_by": "System",
+                }
+                client.table("credit_transactions").insert(tx_payload).execute()
             except Exception as exc:
-                logger.warning(f"Supabase DB credit update notice: {exc}")
+                logger.warning(f"Supabase DB credit consume logging notice: {exc}")
 
         return credits_obj
 
     @staticmethod
-    def reset_credits(user_id: UUID | str, amount: Optional[int] = None) -> CreditModel:
+    def assign_credits(user_id: UUID | str, amount: int, reason: str = "Admin Grant", admin_user: str = "Admin") -> CreditModel:
+        """Assign/Add credits to a user balance with audit logging."""
+        u_id = str(parse_uuid(user_id))
+        client = init_supabase_admin_client() or init_supabase_client()
+
+        if client:
+            try:
+                res = client.rpc("assign_user_credits", {
+                    "p_user_id": u_id,
+                    "p_amount": amount,
+                    "p_reason": reason,
+                    "p_admin_identifier": admin_user,
+                }).execute()
+                if res.data:
+                    new_bal = res.data.get("new_balance")
+                    credits_obj = CreditService.get_credit_balance(user_id)
+                    credits_obj.balance = new_bal
+                    _credits_store[u_id] = credits_obj
+                    return credits_obj
+            except Exception as exc:
+                logger.warning(f"RPC assign_user_credits notice, executing fallback: {exc}")
+
+        # Fallback manual calculation
+        credits_obj = CreditService.get_credit_balance(user_id)
+        credits_obj.balance += amount
+        credits_obj.updated_at = utc_now()
+        _credits_store[u_id] = credits_obj
+        return credits_obj
+
+    @staticmethod
+    def deduct_credits(user_id: UUID | str, amount: int, reason: str = "Manual Deduction", admin_user: str = "Admin") -> CreditModel:
+        """Deduct credits from a user balance with audit logging."""
+        u_id = str(parse_uuid(user_id))
+        client = init_supabase_admin_client() or init_supabase_client()
+
+        if client:
+            try:
+                res = client.rpc("deduct_user_credits", {
+                    "p_user_id": u_id,
+                    "p_amount": amount,
+                    "p_reason": reason,
+                    "p_admin_identifier": admin_user,
+                }).execute()
+                if res.data:
+                    new_bal = res.data.get("new_balance")
+                    credits_obj = CreditService.get_credit_balance(user_id)
+                    credits_obj.balance = new_bal
+                    _credits_store[u_id] = credits_obj
+                    return credits_obj
+            except Exception as exc:
+                logger.warning(f"RPC deduct_user_credits notice: {exc}")
+
+        return CreditService.consume_credits(user_id, amount, reason)
+
+    @staticmethod
+    def reset_credits(user_id: UUID | str, amount: Optional[int] = None, reason: str = "Subscription Reset", admin_user: str = "System") -> CreditModel:
         """Reset user credit balance to default allocation or specified amount."""
         credits_obj = CreditService.get_credit_balance(user_id)
 
@@ -108,14 +192,26 @@ class CreditService:
             plan_config = get_plan_config(effective_plan)
             amount = plan_config.initial_credits
 
+        u_id = str(parse_uuid(user_id))
+        client = init_supabase_admin_client() or init_supabase_client()
+
+        if client:
+            try:
+                client.rpc("reset_user_credits", {
+                    "p_user_id": u_id,
+                    "p_target_balance": amount,
+                    "p_reason": reason,
+                    "p_admin_identifier": admin_user,
+                }).execute()
+            except Exception as exc:
+                logger.warning(f"RPC reset_user_credits notice: {exc}")
+
         credits_obj.balance = amount
         now = utc_now()
         credits_obj.last_reset = now
         credits_obj.updated_at = now
 
-        u_id = str(parse_uuid(user_id))
         _credits_store[u_id] = credits_obj
-
         return credits_obj
 
 

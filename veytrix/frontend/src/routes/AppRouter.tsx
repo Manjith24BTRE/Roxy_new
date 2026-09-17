@@ -51,8 +51,6 @@ const Announcements = React.lazy(() => import('@command-centre/src/pages/setting
 const PlatformSettings = React.lazy(() => import('@command-centre/src/pages/settings/PlatformSettings').then(m => ({ default: m.PlatformSettings })));
 const FeatureFlags = React.lazy(() => import('@command-centre/src/pages/settings/FeatureFlags').then(m => ({ default: m.FeatureFlags })));
 const Backups = React.lazy(() => import('@command-centre/src/pages/settings/Backups').then(m => ({ default: m.Backups })));
-const TesterDashboard = React.lazy(() => import('@command-centre/tester/TesterDashboard').then(m => ({ default: m.TesterDashboard })));
-const DeveloperDashboard = React.lazy(() => import('@command-centre/developer/DeveloperDashboard').then(m => ({ default: m.DeveloperDashboard })));
 
 const SuspenseLoader = () => (
   <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC]">
@@ -133,11 +131,12 @@ const router = createBrowserRouter([
           { path: 'platform-settings', element: <PlatformSettings /> },
           { path: 'feature-flags', element: <FeatureFlags /> },
           { path: 'backups', element: <Backups /> },
-          // Zones
-          { path: 'tester/dashboard', element: <TesterDashboard /> },
-          { path: 'developer/dashboard', element: <DeveloperDashboard /> },
+          // Command Centre Fallback
+          { path: '*', element: <Navigate to="/command-centre/dashboard" replace /> },
         ],
       },
+      // Root Fallback
+      { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
 ]);

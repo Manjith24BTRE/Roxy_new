@@ -33,9 +33,6 @@ import { PlatformSettings } from './pages/settings/PlatformSettings';
 import { FeatureFlags } from './pages/settings/FeatureFlags';
 import { Backups } from './pages/settings/Backups';
 
-import { TesterDashboard } from '../tester/TesterDashboard';
-import { DeveloperDashboard } from '../developer/DeveloperDashboard';
-
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
@@ -106,10 +103,6 @@ const AppRouter = () => {
         <Route path="platform-settings" element={<PlatformSettings />} />
         <Route path="feature-flags" element={<FeatureFlags />} />
         <Route path="backups" element={<Backups />} />
-
-        {/* Zones */}
-        <Route path="tester/dashboard" element={<TesterDashboard />} />
-        <Route path="developer/dashboard" element={<DeveloperDashboard />} />
       </Route>
 
       {/* Fallback */}

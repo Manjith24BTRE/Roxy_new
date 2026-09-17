@@ -1,16 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { Database, Trash2, ShieldAlert, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Database, Trash2, ShieldAlert, Loader2, HardDrive, RefreshCw } from 'lucide-react';
 import { supabase, supabaseAdmin } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
-import { syncService } from '../../../services/sync.service';
+import { ProjectDB } from '../../../components/editor-main-screen/tools/project-save/ProjectDB';
 
 export function StoragePanel() {
   const { user, updateUserProfile } = useAuth();
   
   const [loading, setLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
   const [stats, setStats] = useState({
     projectsCount: 0,
+    projectsCacheMb: '0.00 MB',
     avatarSizeKb: 0,
+    avatarFileCount: 0,
     totalUsedBytes: 0,
     totalUsedMb: '0.00 MB',
     percent: 0,
@@ -18,8 +23,27 @@ export function StoragePanel() {
 
   const STORAGE_LIMIT_BYTES = 50 * 1024 * 1024; // 50MB standard allocation
 
-  const getLocalDraftCount = (): number => {
+  const showNotification = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const calculateLocalDraftStats = async (): Promise<{ count: number; bytes: number }> => {
     let count = 0;
+    let bytes = 0;
+
+    // 1. Calculate from IndexedDB ProjectDB
+    try {
+      const localProjects = await ProjectDB.getLocalCachedProjectsOnly();
+      count = localProjects.length;
+      if (localProjects.length > 0) {
+        bytes += new Blob([JSON.stringify(localProjects)]).size;
+      }
+    } catch (e) {
+      console.warn('Could not read IndexedDB projects for storage stats:', e);
+    }
+
+    // 2. Calculate from localStorage keys
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
@@ -29,26 +53,32 @@ export function StoragePanel() {
             key.startsWith('veytrix_recent_') ||
             key.startsWith('veytrix_draft_') ||
             key.startsWith('veytrix_favorite_') ||
-            key.startsWith('veytrix_gallery_'))
+            key.startsWith('veytrix_gallery_') ||
+            key.startsWith('veytrix_export_cache_'))
         ) {
-          count++;
+          const item = localStorage.getItem(key);
+          if (item) {
+            bytes += new Blob([key, item]).size;
+          }
         }
       }
-    } catch {}
-    return count;
+    } catch (e) {
+      console.warn('Could not read localStorage for storage stats:', e);
+    }
+
+    return { count, bytes };
   };
 
-  const fetchStorageStats = async () => {
+  const fetchStorageStats = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      // 1. Count actual local draft backup cache entries
-      const localDraftCount = getLocalDraftCount();
-      const remoteProjects = await syncService.fetchRemoteProjects().catch(() => []);
-      const totalProjects = Math.max(localDraftCount, remoteProjects.length);
+      // 1. Fetch real local draft backup cache metrics
+      const { count: draftCount, bytes: draftBytes } = await calculateLocalDraftStats();
 
-      // 2. Fetch user's avatar size in avatars/{user.id}/
+      // 2. Fetch user's profile image storage from Supabase 'avatars' bucket
       let avatarBytes = 0;
+      let avatarCount = 0;
       try {
         const { data: avatarFiles } = await supabaseAdmin.storage
           .from('avatars')
@@ -57,13 +87,14 @@ export function StoragePanel() {
         if (avatarFiles && avatarFiles.length > 0) {
           avatarFiles.forEach((file) => {
             avatarBytes += (file.metadata as any)?.size || 0;
+            avatarCount++;
           });
         }
       } catch (e) {
         console.warn('Could not query avatars storage size:', e);
       }
 
-      // 3. Fetch sizes across all user storage buckets (exports, images, videos, audio, thumbnails, assets)
+      // 3. Fetch sizes across all user storage buckets
       let otherBucketsBytes = 0;
       const bucketNames = ['exports', 'images', 'videos', 'audio', 'thumbnails', 'assets'];
 
@@ -80,15 +111,18 @@ export function StoragePanel() {
         })
       );
 
-      // Total used bytes calculation from real objects
-      const totalBytes = avatarBytes + otherBucketsBytes;
-      const totalMb = (totalBytes / (1024 * 1024)).toFixed(2);
-      const calculatedPercent = Math.min(100, Math.max(0, Math.round((totalBytes / STORAGE_LIMIT_BYTES) * 100)));
+      // Total cloud & local storage metrics calculation
+      const totalCloudBytes = avatarBytes + otherBucketsBytes;
+      const totalMb = (totalCloudBytes / (1024 * 1024)).toFixed(2);
+      const calculatedPercent = Math.min(100, Math.max(0, Math.round((totalCloudBytes / STORAGE_LIMIT_BYTES) * 100)));
+      const projectsCacheMb = (draftBytes / (1024 * 1024)).toFixed(2);
 
       setStats({
-        projectsCount: totalProjects,
+        projectsCount: draftCount,
+        projectsCacheMb: `${projectsCacheMb} MB`,
         avatarSizeKb: Math.round(avatarBytes / 1024),
-        totalUsedBytes: totalBytes,
+        avatarFileCount: avatarCount,
+        totalUsedBytes: totalCloudBytes,
         totalUsedMb: `${totalMb} MB`,
         percent: calculatedPercent,
       });
@@ -97,118 +131,194 @@ export function StoragePanel() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchStorageStats();
-  }, [user]);
+  }, [fetchStorageStats]);
 
   const handleClearCache = async (type: 'projects' | 'avatars') => {
     if (!user) return;
+    const previousStats = { ...stats };
+
     if (type === 'projects') {
-      if (window.confirm('This will clear all your local cached project backups. Database records remain safe. Continue?')) {
-        try {
-          const keysToRemove: string[] = [];
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (
-              key &&
-              (key.startsWith('veytrix_project_backup_') ||
-                key.startsWith('veytrix_recent_') ||
-                key.startsWith('veytrix_draft_') ||
-                key.startsWith('veytrix_favorite_') ||
-                key.startsWith('veytrix_gallery_'))
-            ) {
-              keysToRemove.push(key);
-            }
-          }
-          keysToRemove.forEach((k) => localStorage.removeItem(k));
-        } catch (e) {
-          console.warn('Error clearing local project cache:', e);
-        }
+      if (!window.confirm('This will purge all local project backup caches and temporary editor states. Proceed?')) {
+        return;
+      }
+
+      setIsDeleting('projects');
+
+      // Optimistic UI update: instantly update state to 0
+      setStats((prev) => ({
+        ...prev,
+        projectsCount: 0,
+        projectsCacheMb: '0.00 MB',
+      }));
+
+      try {
+        await ProjectDB.clearAllCache();
+        showNotification('Local project backup cache purged successfully.');
         await fetchStorageStats();
+      } catch (err) {
+        console.error('Failed to purge project cache:', err);
+        setStats(previousStats);
+        showNotification('Failed to purge local cache. Restored previous values.');
+      } finally {
+        setIsDeleting(null);
       }
     } else if (type === 'avatars') {
-      if (window.confirm('Delete all cached profile image backups in storage?')) {
-        try {
-          const { data: fileList } = await supabaseAdmin.storage.from('avatars').list(user.id);
-          if (fileList && fileList.length > 0) {
-            const paths = fileList.map((f) => `${user.id}/${f.name}`);
-            await supabaseAdmin.storage.from('avatars').remove(paths);
-          }
-          await updateUserProfile({ avatar_url: null });
-        } catch (e) {
-          console.warn('Error purging avatars storage cache:', e);
+      if (!window.confirm('Delete all cached profile pictures from storage bucket?')) {
+        return;
+      }
+
+      setIsDeleting('avatars');
+
+      // Optimistic UI update: instantly set avatar size & count to 0 and recalculate percent
+      setStats((prev) => {
+        const newTotalCloudBytes = Math.max(0, prev.totalUsedBytes - prev.avatarSizeKb * 1024);
+        const newTotalMb = (newTotalCloudBytes / (1024 * 1024)).toFixed(2);
+        const newPercent = Math.min(100, Math.max(0, Math.round((newTotalCloudBytes / STORAGE_LIMIT_BYTES) * 100)));
+
+        return {
+          ...prev,
+          avatarSizeKb: 0,
+          avatarFileCount: 0,
+          totalUsedBytes: newTotalCloudBytes,
+          totalUsedMb: `${newTotalMb} MB`,
+          percent: newPercent,
+        };
+      });
+
+      try {
+        const { data: fileList } = await supabaseAdmin.storage.from('avatars').list(user.id);
+        if (fileList && fileList.length > 0) {
+          const paths = fileList.map((f) => `${user.id}/${f.name}`);
+          await supabaseAdmin.storage.from('avatars').remove(paths);
         }
+        await updateUserProfile({ avatar_url: null });
+        showNotification('Profile image storage purged successfully.');
         await fetchStorageStats();
+      } catch (err) {
+        console.error('Failed to purge avatar storage:', err);
+        setStats(previousStats);
+        showNotification('Failed to purge profile image storage. Restored state.');
+      } finally {
+        setIsDeleting(null);
       }
     }
   };
 
   return (
     <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-left-4 duration-200">
-      <div>
-        <h2 className="text-lg font-display font-bold text-[#1D2B64]">Storage & Cache Management</h2>
-        <p className="text-xs text-[#1D2B64]/50 font-medium">Monitor your usage, clear active media caches, and purge temporary file exports.</p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h2 className="text-lg font-display font-bold text-[#1D2B64]">Storage & Cache Management</h2>
+          <p className="text-xs text-[#1D2B64]/50 font-medium">Monitor real-time storage metrics, purge temporary editor caches, and optimize disk usage.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => fetchStorageStats()}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#1D2B64] bg-[#FAFAFC] hover:bg-[#1D2B64]/5 border border-[#1D2B64]/10 rounded-xl transition cursor-pointer"
+          title="Refresh Storage Metrics"
+        >
+          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+          <span>Refresh</span>
+        </button>
       </div>
 
+      {toastMessage && (
+        <div className="p-3 bg-sky-50 border border-sky-200 text-sky-800 rounded-xl text-xs font-semibold animate-in fade-in">
+          {toastMessage}
+        </div>
+      )}
+
       {loading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="animate-spin text-[#1D2B64]/50" size={24} />
+        <div className="flex justify-center py-10">
+          <Loader2 className="animate-spin text-[#3B6CE7]" size={28} />
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           {/* Storage Bar Indicator */}
-          <div className="p-4 bg-[#FAFAFC] border border-[#1D2B64]/5 rounded-2xl flex flex-col gap-2">
+          <div className="p-5 bg-[#FAFAFC] border border-[#1D2B64]/10 rounded-2xl flex flex-col gap-3 shadow-sm">
             <div className="flex justify-between items-center text-xs font-bold text-[#1D2B64]">
-              <span className="flex items-center gap-1.5"><Database size={14} /> Cloud Storage Allocation</span>
-              <span>{stats.totalUsedMb} / 50.00 MB ({stats.percent}%)</span>
+              <span className="flex items-center gap-1.5 text-sm"><Database size={16} className="text-[#3B6CE7]" /> Cloud Storage Allocation</span>
+              <span className="font-mono text-xs">{stats.totalUsedMb} / 50.00 MB ({stats.percent}%)</span>
             </div>
             
-            <div className="w-full bg-[#1D2B64]/5 rounded-full h-2.5 overflow-hidden">
-              <div className="bg-[#3B6CE7] h-full rounded-full" style={{ width: `${stats.percent}%` }} />
+            <div className="w-full bg-[#1D2B64]/10 rounded-full h-3 overflow-hidden p-0.5">
+              <div 
+                className="bg-gradient-to-r from-sky-500 to-indigo-600 h-full rounded-full transition-all duration-300" 
+                style={{ width: `${stats.percent}%` }} 
+              />
             </div>
             
-            <span className="text-[9px] text-[#1D2B64]/40 font-medium">Upgrade to Premium to get up to 100 GB cloud space.</span>
+            <div className="flex justify-between items-center text-[10px] text-[#1D2B64]/50 font-medium pt-1 border-t border-[#1D2B64]/5">
+              <span>Standard Free Plan</span>
+              <span>Upgrade for up to 100 GB cloud space</span>
+            </div>
           </div>
 
           {/* Cache items list */}
-          <div className="flex flex-col gap-2 mt-2">
-            <h4 className="text-xs font-bold text-[#1D2B64] border-b border-[#1D2B64]/5 pb-1 font-bold">Temporary Caches & Logs</h4>
+          <div className="flex flex-col gap-3 mt-1">
+            <h4 className="text-xs font-bold text-[#1D2B64] uppercase tracking-wider text-[11px]">Storage & Active Caches</h4>
 
-            <div className="flex flex-col gap-2 mt-1">
-              <div className="flex justify-between items-center p-3 bg-[#FAFAFC] border border-[#1D2B64]/5 rounded-xl text-xs text-[#1D2B64] font-medium">
-                <div className="flex flex-col gap-0.5">
-                  <span>Profile Image Storage</span>
-                  <span className="text-[9px] text-[#1D2B64]/40">Active profile and avatar pictures in bucket</span>
-                </div>
+            <div className="flex flex-col gap-2.5">
+              {/* Profile Image Storage */}
+              <div className="flex justify-between items-center p-3.5 bg-[#FAFAFC] border border-[#1D2B64]/10 rounded-xl text-xs text-[#1D2B64] font-medium transition hover:border-[#1D2B64]/20">
                 <div className="flex items-center gap-3">
-                  <span className="font-bold text-[#1D2B64]/70">{stats.avatarSizeKb} KB</span>
+                  <div className="p-2 bg-sky-500/10 text-sky-600 rounded-lg">
+                    <Database size={16} />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-bold">Profile Image Storage</span>
+                    <span className="text-[10px] text-[#1D2B64]/50">
+                      {stats.avatarFileCount} file{stats.avatarFileCount !== 1 ? 's' : ''} in Supabase avatar bucket
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="font-mono font-bold text-[#1D2B64]">{stats.avatarSizeKb} KB</span>
                   <button
                     type="button"
                     onClick={() => handleClearCache('avatars')}
-                    className="text-red-500 hover:text-red-700 transition cursor-pointer"
+                    disabled={isDeleting === 'avatars' || stats.avatarSizeKb === 0}
+                    className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-500/10 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
                     title="Purge Avatar Storage"
                   >
-                    <Trash2 size={14} />
+                    {isDeleting === 'avatars' ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                   </button>
                 </div>
               </div>
 
-              <div className="flex justify-between items-center p-3 bg-[#FAFAFC] border border-[#1D2B64]/5 rounded-xl text-xs text-[#1D2B64] font-medium">
-                <div className="flex flex-col gap-0.5">
-                  <span>Local Draft Backup Cache</span>
-                  <span className="text-[9px] text-[#1D2B64]/40">Cached project timeline edits</span>
-                </div>
+              {/* Local Draft Backup Cache */}
+              <div className="flex justify-between items-center p-3.5 bg-[#FAFAFC] border border-[#1D2B64]/10 rounded-xl text-xs text-[#1D2B64] font-medium transition hover:border-[#1D2B64]/20">
                 <div className="flex items-center gap-3">
-                  <span className="font-bold text-[#1D2B64]/70">{stats.projectsCount} saved projects</span>
+                  <div className="p-2 bg-indigo-500/10 text-indigo-600 rounded-lg">
+                    <HardDrive size={16} />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-bold">Local Draft Backup Cache</span>
+                    <span className="text-[10px] text-[#1D2B64]/50">
+                      Cached project timelines & IndexedDB backups
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-col items-end text-[11px] font-mono font-bold">
+                    <span className="text-[#1D2B64]">{stats.projectsCount} draft project{stats.projectsCount !== 1 ? 's' : ''}</span>
+                    <span className="text-[9px] text-[#1D2B64]/40 font-normal">({stats.projectsCacheMb})</span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => handleClearCache('projects')}
-                    className="text-red-500 hover:text-red-700 transition cursor-pointer"
+                    disabled={isDeleting === 'projects' || stats.projectsCount === 0}
+                    className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-500/10 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
                     title="Purge Local Projects Cache"
                   >
-                    <Trash2 size={14} />
+                    {isDeleting === 'projects' ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                   </button>
                 </div>
               </div>
@@ -216,9 +326,11 @@ export function StoragePanel() {
           </div>
 
           {/* Warning info */}
-          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl flex gap-2 items-start text-[10px] text-yellow-800 leading-relaxed font-semibold">
-            <ShieldAlert size={16} className="text-yellow-600 shrink-0" />
-            <span>Purging temporary file caches is safe. Your main database records and projects remain untouched.</span>
+          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex gap-2.5 items-start text-[10.5px] text-amber-900 leading-relaxed font-semibold">
+            <ShieldAlert size={16} className="text-amber-600 shrink-0 mt-0.5" />
+            <span>
+              Purging temporary storage & local project caches is completely safe. Your cloud project database records remain fully preserved.
+            </span>
           </div>
         </div>
       )}
@@ -227,3 +339,4 @@ export function StoragePanel() {
 }
 
 export default StoragePanel;
+

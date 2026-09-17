@@ -30,6 +30,11 @@ export function replaceMediaInClips(
 
   return timelineClips.map((clip) => {
     const isAudioClip = clip.trackId === 'audio' || clip.trackId === 'music' || clip.type === 'audio' || clip.isDetachedAudio;
+    const isLinkedAudio = isAudioClip && (
+      (clip as any).sourceVideoId === targetClip.id ||
+      (clip as any).sourceVideoClipId === targetClip.id ||
+      (targetClip as any).detachedAudioId === clip.id
+    );
 
     if (clip.id === targetClip.id) {
       if (isAudioClip) {
@@ -54,6 +59,20 @@ export function replaceMediaInClips(
         url: newMedia.url,
         name: newMedia.name,
         thumbnails: newMedia.thumbnails && newMedia.thumbnails.length > 0 ? newMedia.thumbnails : clip.thumbnails,
+        baseDuration: newBaseDuration,
+        duration: Math.min(clip.duration, newBaseDuration)
+      };
+    }
+
+    if (isLinkedAudio) {
+      const { thumbnails, thumbnailUrl, posterFrame, previewFrame, videoFrame, videoMetadata, ...cleanAudioClip } = clip;
+      return {
+        ...cleanAudioClip,
+        type: 'audio',
+        trackId: clip.trackId || 'audio',
+        mediaId: newMedia.mediaId,
+        url: newMedia.url,
+        name: `${newMedia.name} (Audio)`,
         baseDuration: newBaseDuration,
         duration: Math.min(clip.duration, newBaseDuration)
       };
@@ -87,7 +106,7 @@ describe('Media Replacement Isolation', () => {
       },
       {
         id: 'clip-audio-1',
-        mediaId: 'media-v1', // originally extracted from video 1
+        mediaId: 'media-v1',
         type: 'audio',
         trackId: 'audio',
         url: 'blob:audio1',
@@ -124,6 +143,47 @@ describe('Media Replacement Isolation', () => {
     expect(audioClip.posterFrame).toBeUndefined();
   });
 
+  it('should update linked extracted audio clip mediaId and url when parent video is replaced', () => {
+    const initialClips: TimelineClip[] = [
+      {
+        id: 'clip-video-1',
+        mediaId: 'media-v1',
+        type: 'video',
+        trackId: 'video',
+        url: 'blob:video1',
+        name: 'Video 1.mp4',
+        duration: 10
+      },
+      {
+        id: 'clip-audio-1',
+        mediaId: 'media-v1',
+        type: 'audio',
+        trackId: 'audio',
+        url: 'blob:video1',
+        name: 'Video 1.mp4 (Audio)',
+        isDetachedAudio: true,
+        sourceVideoId: 'clip-video-1',
+        duration: 10
+      }
+    ];
+
+    const replacementMedia = {
+      mediaId: 'media-v2',
+      url: 'blob:video2',
+      name: 'New Source.mp4',
+      thumbnails: ['thumb.jpg'],
+      duration: 12
+    };
+
+    const updatedClips = replaceMediaInClips(initialClips, 'clip-video-1', replacementMedia);
+    const audioClip = updatedClips.find(c => c.id === 'clip-audio-1')!;
+
+    expect(audioClip.mediaId).toBe('media-v2');
+    expect(audioClip.url).toBe('blob:video2');
+    expect(audioClip.type).toBe('audio');
+    expect(audioClip.thumbnails).toBeUndefined();
+  });
+
   it('should strictly preserve audio type if audio clip itself is replaced', () => {
     const initialClips: TimelineClip[] = [
       {
@@ -141,7 +201,7 @@ describe('Media Replacement Isolation', () => {
       mediaId: 'media-a2',
       url: 'blob:audio2',
       name: 'Song 2.mp3',
-      thumbnails: ['accidental_video_thumb.jpg'], // replacement payload might carry thumbnails from multi-track media
+      thumbnails: ['accidental_video_thumb.jpg'],
       duration: 25
     };
 

@@ -219,6 +219,51 @@ export class ProjectDB {
   }
 
   /**
+   * Retrieves ONLY locally cached projects from IndexedDB & LocalStorage without querying Supabase cloud.
+   */
+  public static async getLocalCachedProjectsOnly(): Promise<ProjectSavePayload[]> {
+    const projectsMap = new Map<string, ProjectSavePayload>();
+
+    // 1. Fetch from IndexedDB
+    try {
+      const db = await this.getDB();
+      const idbProjects = await new Promise<ProjectSavePayload[]>((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+
+      for (const p of idbProjects) {
+        if (p && p.id) {
+          projectsMap.set(p.id, p);
+        }
+      }
+    } catch (err) {
+      console.warn('IndexedDB getLocalCachedProjectsOnly failed:', err);
+    }
+
+    // 2. Scan LocalStorage fallback keys
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(LOCAL_STORAGE_KEY_PREFIX)) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const p = JSON.parse(raw) as ProjectSavePayload;
+            if (p && p.id && !projectsMap.has(p.id)) {
+              projectsMap.set(p.id, p);
+            }
+          }
+        }
+      }
+    } catch (e) {}
+
+    return Array.from(projectsMap.values());
+  }
+
+  /**
    * Deletes a project by ID from IndexedDB, LocalStorage, and Supabase cloud.
    */
   public static async deleteProject(projectId: string): Promise<boolean> {
@@ -248,6 +293,59 @@ export class ProjectDB {
       await syncService.deleteRemoteProject(projectId);
     } catch (e) {
       console.warn('Supabase remote project delete warning:', e);
+    }
+
+    return true;
+  }
+
+  /**
+   * Clears all local project backup caches from IndexedDB, LocalStorage, and CacheStorage.
+   */
+  public static async clearAllCache(): Promise<boolean> {
+    // 1. Clear IndexedDB store
+    try {
+      const db = await this.getDB();
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const req = store.clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    } catch (err) {
+      console.warn('IndexedDB clear error:', err);
+    }
+
+    // 2. Clear LocalStorage backup keys
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (
+          key &&
+          (key.startsWith(LOCAL_STORAGE_KEY_PREFIX) ||
+            key.startsWith('veytrix_recent_') ||
+            key.startsWith('veytrix_draft_') ||
+            key.startsWith('veytrix_favorite_') ||
+            key.startsWith('veytrix_gallery_') ||
+            key.startsWith('veytrix_export_cache_'))
+        ) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch (e) {
+      console.warn('LocalStorage clear error:', e);
+    }
+
+    // 3. Clear CacheStorage if available
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch (e) {
+      console.warn('CacheStorage clear error:', e);
     }
 
     return true;

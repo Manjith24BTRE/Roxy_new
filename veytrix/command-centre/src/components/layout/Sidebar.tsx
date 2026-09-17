@@ -5,8 +5,7 @@ import {
   Users, UserCircle, Key, ShieldAlert,
   BrainCircuit, Database, LineChart, 
   CreditCard, Banknote, Coins,
-  Ticket, MessageSquare, Megaphone, Settings, ToggleLeft, Save,
-  TestTube, Code
+  Ticket, MessageSquare, Megaphone, Settings, ToggleLeft, Save
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -71,13 +70,6 @@ const navGroups = [
       { label: 'Platform Settings', path: '/command-centre/platform-settings', icon: Settings },
       { label: 'Feature Flags', path: '/command-centre/feature-flags', icon: ToggleLeft },
       { label: 'Backups', path: '/command-centre/backups', icon: Save },
-    ]
-  },
-  {
-    title: 'ZONES',
-    items: [
-      { label: 'Tester Area', path: '/command-centre/tester/dashboard', icon: TestTube },
-      { label: 'Developer Area', path: '/command-centre/developer/dashboard', icon: Code },
     ]
   }
 ];

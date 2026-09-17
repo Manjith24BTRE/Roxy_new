@@ -23,25 +23,41 @@ export function useUsers(initialOptions: UsersFetchOptions = {}) {
         search: searchTerm,
         page,
         limit,
+        statusFilter,
+        planFilter,
       });
 
       setUsers(res.users);
       setTotalCount(res.totalCount);
+      if (res.metrics) {
+        setMetrics(res.metrics);
+      }
     } catch (err: any) {
       console.error('Failed to fetch users:', err);
       setError(err.message || 'Failed to fetch platform users');
     } finally {
       setIsLoading(false);
     }
-  }, [searchTerm, page, limit]);
+  }, [searchTerm, page, limit, statusFilter, planFilter]);
 
-  // Debounced search effect
+  // Debounced search and filter effect
   useEffect(() => {
     const handler = setTimeout(() => {
       fetchUsers();
     }, 300);
 
     return () => clearTimeout(handler);
+  }, [fetchUsers]);
+
+  // Real-time synchronization
+  useEffect(() => {
+    const unsubscribe = usersService.subscribeToUserChanges(() => {
+      fetchUsers();
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, [fetchUsers]);
 
   return {
@@ -53,17 +69,22 @@ export function useUsers(initialOptions: UsersFetchOptions = {}) {
     searchTerm,
     setSearchTerm: (term: string) => {
       setSearchTerm(term);
-      setPage(1); // Reset to first page on search
+      setPage(1);
     },
     page,
     setPage,
     limit,
     setLimit,
     statusFilter,
-    setStatusFilter,
+    setStatusFilter: (status: string) => {
+      setStatusFilter(status);
+      setPage(1);
+    },
     planFilter,
-    setPlanFilter,
+    setPlanFilter: (plan: string) => {
+      setPlanFilter(plan);
+      setPage(1);
+    },
     refresh: fetchUsers,
   };
 }
-

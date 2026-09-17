@@ -40,10 +40,10 @@ export const Models = () => {
           <span>Loading AI Models Catalog...</span>
         </div>
       ) : models.length === 0 ? (
-        <div className="bg-white p-12 rounded-2xl border border-[#E2E8F0] text-center max-w-lg mx-auto my-12">
+        <div className="bg-white p-12 rounded-2xl border border-[#E2E8F0] text-center max-w-lg mx-auto my-12 shadow-sm">
           <Cpu className="mx-auto text-[#64748B] mb-3" size={36} />
-          <h3 className="font-bold text-[#1D2B64] text-lg">Default Motion Engine Active</h3>
-          <p className="text-sm text-[#64748B] mt-1">No custom external AI model assets have been published to the catalog.</p>
+          <h3 className="font-bold text-[#1D2B64] text-lg">No AI Engines Available</h3>
+          <p className="text-sm text-[#64748B] mt-1">No AI generation engines or custom models are currently registered in the catalog.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

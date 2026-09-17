@@ -3,7 +3,7 @@ import { supabase, supabaseAdmin } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
 
 export function useProfileAvatar() {
-  const { user, userProfile, updateUserProfile } = useAuth();
+  const { user, updateUserProfile } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,12 +29,13 @@ export function useProfileAvatar() {
 
     setIsUploading(true);
     setError(null);
+    console.log(`[AVATAR] Upload Started for user_id='${user.id}', filename='${file.name}'`);
 
     try {
-      const fileExt = file.name.split('.').pop() || 'png';
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
       const filePath = `${user.id}/avatar.${fileExt}`;
 
-      // 1. Delete any existing old avatar files in user's directory first
+      // 1. Clean up existing old avatar files in user's directory first
       try {
         const { data: existingFiles } = await supabaseAdmin.storage.from('avatars').list(user.id);
         if (existingFiles && existingFiles.length > 0) {
@@ -42,24 +43,23 @@ export function useProfileAvatar() {
           await supabaseAdmin.storage.from('avatars').remove(deletePaths);
         }
       } catch (cleanupErr) {
-        console.warn('Could not clean up old avatars prior to upload:', cleanupErr);
+        console.warn('[AVATAR] Old file cleanup warning:', cleanupErr);
       }
 
       // 2. Upload image to Supabase Storage 'avatars' bucket
       let { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(filePath, file, {
-          cacheControl: '0', // No cache to allow immediate updates
+          cacheControl: '3600',
           upsert: true,
         });
 
-      // If standard upload fails (e.g. RLS policy restriction), use admin client fallback
       if (uploadError) {
-        console.warn('Standard client avatar upload failed, using admin storage client fallback:', uploadError.message);
+        console.warn('[AVATAR] Standard client upload failed, using admin storage fallback:', uploadError.message);
         const { error: adminUploadError } = await supabaseAdmin.storage
           .from('avatars')
           .upload(filePath, file, {
-            cacheControl: '0',
+            cacheControl: '3600',
             upsert: true,
           });
 
@@ -68,22 +68,29 @@ export function useProfileAvatar() {
         }
       }
 
-      // 3. Get public URL
+      console.log('[AVATAR] Upload Success to storage path:', filePath);
+
+      // 3. Obtain stable public URL
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
         .getPublicUrl(filePath);
 
-      // Add cache-busting query parameter
-      const cacheBustUrl = `${publicUrl}?t=${Date.now()}`;
+      // Versioned cache buster for instant component update
+      const versionedUrl = `${publicUrl}?v=${Date.now()}`;
 
-      // 4. Update user profile record
-      await updateUserProfile({
-        avatar_url: cacheBustUrl,
+      // 4. Update user profile database row and auth metadata
+      const updatedProfile = await updateUserProfile({
+        avatar_url: versionedUrl,
       });
 
-      return cacheBustUrl;
+      if (!updatedProfile) {
+        throw new Error('Failed to persist avatar_url to database profile.');
+      }
+
+      console.log('[AVATAR] URL Saved permanently to database:', versionedUrl);
+      return versionedUrl;
     } catch (err: any) {
-      console.error('Failed to upload avatar:', err);
+      console.error('[AVATAR] Upload Failed:', err);
       setError(err.message || 'An error occurred during avatar upload.');
       return null;
     } finally {
@@ -95,9 +102,10 @@ export function useProfileAvatar() {
     if (!user) return false;
     setIsUploading(true);
     setError(null);
+    console.log(`[AVATAR] Remove Avatar requested for user_id='${user.id}'`);
 
     try {
-      // Delete all avatar files for user from avatars bucket
+      // 1. Delete all storage files for user from avatars bucket
       try {
         const { data: existingFiles } = await supabaseAdmin.storage.from('avatars').list(user.id);
         if (existingFiles && existingFiles.length > 0) {
@@ -105,17 +113,18 @@ export function useProfileAvatar() {
           await supabaseAdmin.storage.from('avatars').remove(deletePaths);
         }
       } catch (e) {
-        console.warn('Could not remove avatar files from storage:', e);
+        console.warn('[AVATAR] Storage remove warning:', e);
       }
 
-      // Reset avatar_url to null in database & auth context
+      // 2. Set avatar_url = null in profiles table & auth metadata
       await updateUserProfile({
         avatar_url: null,
       });
 
+      console.log('[AVATAR] Avatar Removed successfully');
       return true;
     } catch (err: any) {
-      console.error('Failed to remove avatar:', err);
+      console.error('[AVATAR] Remove Avatar error:', err);
       setError(err.message || 'An error occurred while removing the avatar.');
       return false;
     } finally {
