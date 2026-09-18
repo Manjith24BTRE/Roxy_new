@@ -1,6 +1,6 @@
 import React from 'react';
 import { Menu } from 'lucide-react';
-
+import { NotificationCenterWidget } from './NotificationCenterWidget';
 
 interface HomeTopbarProps {
   onMobileMenuClick: () => void;
@@ -9,7 +9,6 @@ interface HomeTopbarProps {
 export function HomeTopbar({ onMobileMenuClick }: HomeTopbarProps) {
   return (
     <header className="h-14 flex-shrink-0 flex items-center justify-between px-4 md:px-6 bg-[#FAFAFC] border-b border-[#1D2B64]/[0.03]">
-      
       <div className="flex items-center gap-3">
         {/* Mobile menu trigger */}
         <button
@@ -21,8 +20,10 @@ export function HomeTopbar({ onMobileMenuClick }: HomeTopbarProps) {
         </button>
       </div>
 
-
-      
+      {/* Right side controls: Realtime Notifications */}
+      <div className="flex items-center gap-3">
+        <NotificationCenterWidget />
+      </div>
     </header>
   );
 }

@@ -63,43 +63,20 @@ export class AudioTrackManager implements IAudioTrackManager {
     }
 
     let targetStart = Math.max(0, playheadTime);
-    let targetMaxDuration: number | undefined;
 
-    if (selectedVideoClip) {
-      const clipStart =
-        selectedVideoClip.timelineStart ?? (selectedVideoClip as any).start ?? 0;
-      const clipLength = selectedVideoClip.duration ?? 0;
-
-      // Keep audio clip exactly aligned with the selected video clip
-      targetStart = clipStart;
-
-      // Audio Duration = Minimum(Audio Length, Selected Clip Length)
-      targetMaxDuration = clipLength;
-    } else if (clips.length > 0) {
-      // Calculate max end time of existing timeline to prevent extending timeline
-      const maxTimelineEnd = Math.max(
-        0,
-        ...clips.map(
-          (c) => (c.timelineStart ?? (c as any).start ?? 0) + (c.duration ?? 0)
-        )
-      );
-
-      if (maxTimelineEnd > 0) {
-        targetStart = Math.min(targetStart, maxTimelineEnd);
-        targetMaxDuration = Math.max(0, maxTimelineEnd - targetStart);
-      }
+    // If playheadTime is 0 and there is a selected video clip, default to selected clip start,
+    // otherwise use the playheadTime directly without truncating audio asset duration.
+    if (playheadTime === 0 && selectedVideoClip) {
+      targetStart = selectedVideoClip.timelineStart ?? (selectedVideoClip as any).start ?? 0;
     }
 
     const newClip = this.createAudioClipFromAsset(
       asset,
-      targetStart,
-      targetMaxDuration
+      targetStart
     ) as T;
 
     newClip.timelineStart = targetStart;
-    if ('start' in newClip) {
-      (newClip as any).start = targetStart;
-    }
+    (newClip as any).start = targetStart;
 
     // Do NOT shift, move, or push any existing clips
     const updatedClips = [...clips, newClip];

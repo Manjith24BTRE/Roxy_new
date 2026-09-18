@@ -111,7 +111,7 @@ export const announcementsService = {
         targetAudience: r.target_audience || 'All Users',
         ctaText: r.cta_text,
         ctaUrl: r.cta_url,
-        bannerColor: r.banner_style || r.banner_color || 'blue',
+        bannerColor: r.banner_color || 'blue',
         icon: r.icon || 'bell',
         startsAt: r.starts_at || r.start_date,
         expiresAt: r.expires_at || r.end_date,
@@ -128,7 +128,7 @@ export const announcementsService = {
   },
 
   /**
-   * Inserts row into public.platform_announcements.
+   * Inserts row into public.platform_announcements AND public.notifications.
    */
   async createAnnouncement(payload: Partial<Announcement>): Promise<Announcement> {
     console.log('[ANNOUNCEMENT DIAGNOSTIC] Executing Insert into public.platform_announcements:', payload);
@@ -201,6 +201,23 @@ export const announcementsService = {
         }
 
         const created = await res.json();
+
+        // Also push notification entry into public.notifications
+        try {
+          await db.from('notifications').insert([{
+            title: titleStr,
+            message: contentStr,
+            type: 'announcement',
+            priority: payload.priority || 'Medium',
+            action_url: payload.ctaUrl || null,
+            is_read: false,
+            created_at: nowIso,
+            metadata: { reference_id: created.id },
+          }]);
+        } catch (nErr) {
+          console.warn('[ANNOUNCEMENT DIAGNOSTIC] Notification mirror notice:', nErr);
+        }
+
         return {
           id: created.id,
           title: created.title,
@@ -221,6 +238,22 @@ export const announcementsService = {
     }
 
     console.log(`[ANNOUNCEMENT DIAGNOSTIC] Inserted successfully row ID='${data.id}'`);
+
+    // Insert mirror into public.notifications
+    try {
+      await db.from('notifications').insert([{
+        title: titleStr,
+        message: contentStr,
+        type: 'announcement',
+        priority: payload.priority || 'Medium',
+        action_url: payload.ctaUrl || null,
+        is_read: false,
+        created_at: nowIso,
+        metadata: { reference_id: data.id },
+      }]);
+    } catch (nErr) {
+      console.warn('[ANNOUNCEMENT DIAGNOSTIC] Notification mirror notice:', nErr);
+    }
 
     return {
       id: data.id,

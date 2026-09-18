@@ -1,7 +1,8 @@
 // src/components/editor-main-screen/tools/transitions/TransitionsPanel.tsx
 import React, { useState, useEffect } from 'react';
-import { SlidersHorizontal, Check, RotateCcw, Zap } from 'lucide-react';
+import { SlidersHorizontal, Check, RotateCcw, Zap, Compass } from 'lucide-react';
 import { assetRegistry, AssetRecord } from '../../../../services/AssetRegistry';
+import { AssetInteractionState, TransitionInstanceParameters } from '../../../../types/assetInteraction';
 import { dissolveTransitionEngine } from './engines/dissolve/DissolveTransitionEngine';
 import { cameraTransitionEngine } from './engines/camera/CameraTransitionEngine';
 import { zoomTransitionEngine } from './engines/zoom/ZoomTransitionEngine';
@@ -10,16 +11,30 @@ import { slideTransitionEngine } from './engines/slide/SlideTransitionEngine';
 interface TransitionsPanelProps {
   activeTransitionId: string | number | null;
   transitionDuration?: number;
-  onSelectTransition: (transitionId: string | number | null) => void;
+  interactionState?: AssetInteractionState;
+  transitionParams?: TransitionInstanceParameters;
+  onSelectTransition: (transitionId: string | number | null, nextState?: AssetInteractionState) => void;
   onDurationChange?: (duration: number) => void;
+  onTransitionParamsChange?: (params: Partial<TransitionInstanceParameters>) => void;
   onResetTransition?: () => void;
 }
 
 export function TransitionsPanel({
   activeTransitionId,
   transitionDuration = 1.0,
+  interactionState = activeTransitionId ? 'applied-selected' : 'not-applied',
+  transitionParams = {
+    id: String(activeTransitionId || ''),
+    assetId: activeTransitionId || '',
+    assetName: String(activeTransitionId || ''),
+    engineKey: 'DissolveTransitionEngine',
+    duration: transitionDuration,
+    direction: 'left',
+    amount: 100,
+  },
   onSelectTransition,
   onDurationChange,
+  onTransitionParamsChange,
   onResetTransition,
 }: TransitionsPanelProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('Basic');
@@ -59,8 +74,34 @@ export function TransitionsPanel({
       : dissolveTransitionEngine.getDefinition(activeAsset.name)
     : undefined;
 
+  /**
+   * Deterministic 3-Click Cycle Handler for Transitions:
+   * Click 1 -> Apply / Select ('applied-selected')
+   * Click 2 -> Open Settings ('settings-open')
+   * Click 3 -> Remove transition ('not-applied')
+   */
+  const handleAssetClick = (asset: AssetRecord) => {
+    const isThisAssetActive =
+      String(asset.id) === String(activeTransitionId) ||
+      asset.name === activeTransitionId ||
+      String(activeTransitionId).trim().toLowerCase() === asset.name.trim().toLowerCase();
 
-
+    if (!isThisAssetActive) {
+      // CLICK 1: APPLY / SELECT
+      onSelectTransition(asset.name, 'applied-selected');
+    } else {
+      if (interactionState === 'applied-selected') {
+        // CLICK 2: OPEN SETTINGS
+        onSelectTransition(asset.name, 'settings-open');
+      } else if (interactionState === 'settings-open') {
+        // CLICK 3: REMOVE TRANSITION
+        onSelectTransition(null, 'not-applied');
+      } else {
+        // Reset fallback
+        onSelectTransition(asset.name, 'applied-selected');
+      }
+    }
+  };
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-background/95 text-foreground select-none p-3 overflow-hidden">
@@ -91,7 +132,7 @@ export function TransitionsPanel({
             )}
             <button
               type="button"
-              onClick={() => onSelectTransition(null)}
+              onClick={() => onSelectTransition(null, 'not-applied')}
               className="flex items-center space-x-1 px-2 py-1 text-[10px] font-medium text-destructive hover:bg-destructive/10 rounded transition cursor-pointer"
               title="Remove active transition"
             >
@@ -122,7 +163,7 @@ export function TransitionsPanel({
         })}
       </div>
 
-      {/* Fixed Active Transition Control Bar */}
+      {/* Fixed Active Transition Control Bar & Click 2 Settings */}
       {activeAsset && (
         <div className="flex-shrink-0 p-2.5 rounded-lg bg-surface border border-sky-500/30 space-y-2 mb-2">
           <div className="flex items-center justify-between text-xs">
@@ -130,9 +171,14 @@ export function TransitionsPanel({
               <Zap className="w-3.5 h-3.5" />
               <span>{activeAsset.name}</span>
             </span>
-            <span className="text-[10px] font-mono text-muted-foreground">
-              {activeDef?.engineKey || activeAsset.engineKey}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono text-muted-foreground">
+                {activeDef?.engineKey || activeAsset.engineKey}
+              </span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded font-mono uppercase bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                {interactionState}
+              </span>
+            </div>
           </div>
 
           {onDurationChange && (
@@ -152,6 +198,42 @@ export function TransitionsPanel({
               />
             </div>
           )}
+
+          {/* CLICK 2 TRANSITION ADJUSTMENT SETTINGS PANEL (Exposed only when interactionState === 'settings-open') */}
+          {interactionState === 'settings-open' && (
+            <div className="pt-2 border-t border-sky-500/20 space-y-2 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between text-[10px] font-bold text-sky-300 uppercase tracking-wider">
+                <span className="flex items-center gap-1">
+                  <SlidersHorizontal className="w-3 h-3 text-sky-400" /> Transition Fine-Tuning
+                </span>
+                <span className="text-[9px] font-mono text-sky-400/80">Click 2 Active</span>
+              </div>
+
+              {/* Direction selector */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1"><Compass className="w-3 h-3" /> Direction</span>
+                  <span className="capitalize">{transitionParams.direction || 'Left'}</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1">
+                  {['left', 'right', 'up', 'down'].map((dir) => (
+                    <button
+                      key={dir}
+                      type="button"
+                      onClick={() => onTransitionParamsChange?.({ direction: dir })}
+                      className={`py-1 text-[9px] font-semibold rounded capitalize transition ${
+                        (transitionParams.direction || 'left') === dir
+                          ? 'bg-sky-500 text-white font-bold'
+                          : 'bg-surface-hover text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {dir}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -167,7 +249,7 @@ export function TransitionsPanel({
             return (
               <div
                 key={asset.id}
-                onClick={() => onSelectTransition(asset.name)}
+                onClick={() => handleAssetClick(asset)}
                 className={`group relative p-2.5 rounded-lg border transition-all cursor-pointer flex flex-col justify-between ${
                   isSelected
                     ? 'bg-sky-500/10 border-sky-500 ring-1 ring-sky-500/50 shadow-glow'
@@ -198,6 +280,11 @@ export function TransitionsPanel({
 
                 <div className="flex items-center justify-between text-[9px] text-muted-foreground border-t border-border/50 pt-1.5">
                   <span className="truncate">{asset.engineKey || 'DissolveEngine'}</span>
+                  {isSelected && (
+                    <span className="text-[8px] font-bold text-sky-400">
+                      {interactionState === 'applied-selected' ? 'Click 2' : 'Click 3'}
+                    </span>
+                  )}
                 </div>
               </div>
             );

@@ -1,20 +1,39 @@
 // src/components/editor-main-screen/tools/effects/EffectsPanel.tsx
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Check, RotateCcw, Zap } from 'lucide-react';
+import { Sparkles, Check, RotateCcw, Zap, SlidersHorizontal, Clock, Gauge } from 'lucide-react';
 import { assetRegistry, AssetRecord } from '../../../../services/AssetRegistry';
+import { AssetInteractionState, EffectInstanceParameters } from '../../../../types/assetInteraction';
 
 interface EffectsPanelProps {
   activeEffectId: string | number | null;
   effectIntensity: number; // 0.0 to 1.0 or 0 to 100
-  onSelectEffect: (effectId: string | number | null) => void;
+  interactionState?: AssetInteractionState;
+  effectParams?: EffectInstanceParameters;
+  onSelectEffect: (effectId: string | number | null, nextState?: AssetInteractionState) => void;
   onIntensityChange: (intensity: number) => void;
+  onEffectParamsChange?: (params: Partial<EffectInstanceParameters>) => void;
 }
 
 export function EffectsPanel({
   activeEffectId,
   effectIntensity = 1.0,
+  interactionState = activeEffectId ? 'applied-selected' : 'not-applied',
+  effectParams = {
+    id: String(activeEffectId || ''),
+    assetId: activeEffectId || '',
+    assetName: String(activeEffectId || ''),
+    engineKey: 'BasicAnimationEngine',
+    enabled: true,
+    startTime: 0,
+    endTime: 5,
+    duration: 5,
+    intensity: 1.0,
+    speed: 1.0,
+    amount: 50,
+  },
   onSelectEffect,
   onIntensityChange,
+  onEffectParamsChange,
 }: EffectsPanelProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('Basic Effects');
   const [categories, setCategories] = useState<string[]>([]);
@@ -43,8 +62,36 @@ export function EffectsPanel({
       a.name.trim().toLowerCase() === String(activeEffectId).trim().toLowerCase()
   );
 
-  // Normalize intensity to 0..1 for UI calculation
   const normIntensity = effectIntensity > 1.0 ? Math.min(1.0, effectIntensity / 100) : Math.max(0, effectIntensity);
+
+  /**
+   * Deterministic 3-Click Cycle Handler for Effects:
+   * Click 1 -> Apply / Select ('applied-selected')
+   * Click 2 -> Open Settings ('settings-open')
+   * Click 3 -> Remove effect ('not-applied')
+   */
+  const handleAssetClick = (asset: AssetRecord) => {
+    const isThisAssetActive =
+      String(asset.id) === String(activeEffectId) ||
+      asset.name === activeEffectId ||
+      asset.name.trim().toLowerCase() === String(activeEffectId).trim().toLowerCase();
+
+    if (!isThisAssetActive) {
+      // CLICK 1: APPLY / SELECT
+      onSelectEffect(asset.name, 'applied-selected');
+    } else {
+      if (interactionState === 'applied-selected') {
+        // CLICK 2: OPEN SETTINGS
+        onSelectEffect(asset.name, 'settings-open');
+      } else if (interactionState === 'settings-open') {
+        // CLICK 3: REMOVE EFFECT
+        onSelectEffect(null, 'not-applied');
+      } else {
+        // Reset fallback
+        onSelectEffect(asset.name, 'applied-selected');
+      }
+    }
+  };
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-background/95 text-foreground select-none p-3 overflow-hidden">
@@ -63,7 +110,7 @@ export function EffectsPanel({
         {activeEffectId && (
           <button
             type="button"
-            onClick={() => onSelectEffect(null)}
+            onClick={() => onSelectEffect(null, 'not-applied')}
             className="flex items-center space-x-1 px-2 py-1 text-[10px] font-medium text-destructive hover:bg-destructive/10 rounded transition cursor-pointer"
             title="Remove active effect"
           >
@@ -94,17 +141,22 @@ export function EffectsPanel({
         })}
       </div>
 
-      {/* Fixed Active Control Bar */}
+      {/* Fixed Active Control Bar & Click 2 Settings Panel */}
       {activeAsset && (
-        <div className="flex-shrink-0 p-2.5 rounded-lg bg-surface border border-sky-500/30 space-y-2 mb-2">
+        <div className="flex-shrink-0 p-2.5 rounded-lg bg-surface border border-sky-500/30 space-y-2.5 mb-2">
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-sky-400 flex items-center gap-1.5">
               <Zap className="w-3.5 h-3.5" />
               {activeAsset.name}
             </span>
-            <span className="text-[10px] text-muted-foreground font-mono">
-              {Math.round(normIntensity * 100)}%
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted-foreground font-mono">
+                {Math.round(normIntensity * 100)}%
+              </span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded font-mono uppercase bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                {interactionState}
+              </span>
+            </div>
           </div>
 
           <div className="space-y-1">
@@ -122,6 +174,97 @@ export function EffectsPanel({
               className="w-full h-1.5 bg-surface-hover rounded-lg appearance-none cursor-pointer accent-sky-500"
             />
           </div>
+
+          {/* CLICK 2 EFFECT ADJUSTMENT SETTINGS PANEL (Exposed only when interactionState === 'settings-open') */}
+          {interactionState === 'settings-open' && (
+            <div className="pt-2.5 border-t border-sky-500/20 space-y-2.5 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between text-[10px] font-bold text-sky-300 uppercase tracking-wider">
+                <span className="flex items-center gap-1">
+                  <SlidersHorizontal className="w-3 h-3 text-sky-400" /> Effect Timing & Controls
+                </span>
+                <span className="text-[9px] font-mono text-sky-400/80">Click 2 Active</span>
+              </div>
+
+              {/* Start Time & End Time Controls */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Start</span>
+                    <span>{(effectParams.startTime ?? 0).toFixed(1)}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="60"
+                    step="0.5"
+                    value={effectParams.startTime ?? 0}
+                    onChange={(e) => {
+                      const newStart = parseFloat(e.target.value);
+                      const currentEnd = effectParams.endTime ?? 5;
+                      const validEnd = Math.max(newStart + 0.5, currentEnd);
+                      onEffectParamsChange?.({ startTime: newStart, endTime: validEnd, duration: validEnd - newStart });
+                    }}
+                    className="w-full h-1 bg-surface-hover rounded-lg appearance-none cursor-pointer accent-sky-400"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> End</span>
+                    <span>{(effectParams.endTime ?? 5).toFixed(1)}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="60"
+                    step="0.5"
+                    value={effectParams.endTime ?? 5}
+                    onChange={(e) => {
+                      const newEnd = parseFloat(e.target.value);
+                      const currentStart = effectParams.startTime ?? 0;
+                      const validStart = Math.min(newEnd - 0.5, currentStart);
+                      onEffectParamsChange?.({ startTime: validStart, endTime: newEnd, duration: newEnd - validStart });
+                    }}
+                    className="w-full h-1 bg-surface-hover rounded-lg appearance-none cursor-pointer accent-sky-400"
+                  />
+                </div>
+              </div>
+
+              {/* Effect Speed Slider */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1"><Gauge className="w-3 h-3" /> Effect Speed</span>
+                  <span>{(effectParams.speed ?? 1.0).toFixed(1)}x</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.1"
+                  max="3.0"
+                  step="0.1"
+                  value={effectParams.speed ?? 1.0}
+                  onChange={(e) => onEffectParamsChange?.({ speed: parseFloat(e.target.value) })}
+                  className="w-full h-1 bg-surface-hover rounded-lg appearance-none cursor-pointer accent-sky-400"
+                />
+              </div>
+
+              {/* Effect Amount / Scale Slider */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>Effect Amount</span>
+                  <span>{Math.round(effectParams.amount ?? 50)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={effectParams.amount ?? 50}
+                  onChange={(e) => onEffectParamsChange?.({ amount: parseFloat(e.target.value) })}
+                  className="w-full h-1 bg-surface-hover rounded-lg appearance-none cursor-pointer accent-sky-400"
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -131,7 +274,7 @@ export function EffectsPanel({
           {/* None / Remove Effect Card */}
           <button
             type="button"
-            onClick={() => onSelectEffect(null)}
+            onClick={() => onSelectEffect(null, 'not-applied')}
             className={`flex flex-col items-center justify-center p-3 rounded-lg border text-center transition-all cursor-pointer ${
               !activeEffectId
                 ? 'border-sky-500 bg-sky-500/10 text-sky-400 font-semibold'
@@ -155,7 +298,7 @@ export function EffectsPanel({
               <button
                 key={asset.id}
                 type="button"
-                onClick={() => onSelectEffect(asset.name)}
+                onClick={() => handleAssetClick(asset)}
                 className={`relative flex flex-col items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer ${
                   isSelected
                     ? 'border-sky-500 bg-sky-500/15 text-white font-semibold ring-1 ring-sky-500/50 shadow-md'
@@ -176,7 +319,12 @@ export function EffectsPanel({
                   {asset.name}
                 </span>
 
-                {asset.plan === 'Pro' && (
+                {isSelected && (
+                  <span className="mt-1 px-1 py-0.2 text-[8px] font-bold bg-sky-500 text-white rounded">
+                    {interactionState === 'applied-selected' ? 'Click 2: Adjust' : 'Click 3: Remove'}
+                  </span>
+                )}
+                {!isSelected && asset.plan === 'Pro' && (
                   <span className="mt-1 px-1 py-0.2 text-[8px] font-bold bg-amber-500/20 text-amber-400 rounded">
                     PRO
                   </span>

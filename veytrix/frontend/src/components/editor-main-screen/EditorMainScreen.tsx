@@ -1,6 +1,7 @@
 import './theme/editorTheme.css';
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { getTrackSpec, calculateCenteredClipTop } from './tools/layout/TimelineTrackLayoutEngine';
 import {
   ArrowLeft, Save, Download, Film, Type, AudioWaveform,
   Wand2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
@@ -43,6 +44,7 @@ import { blurTransitionEngine } from './tools/transitions/engines/blur/BlurTrans
 
 
 import { assetRegistry } from '../../services/AssetRegistry';
+import { AssetInteractionState, FilterInstanceParameters, EffectInstanceParameters, TransitionInstanceParameters, ClipAdjustments, getDefaultClipAdjustments } from '../../types/assetInteraction';
 import { Captions, CaptionItem } from './tools/captions/Captions';
 import { SpeedTool, clampPlaybackRate, getSourceDuration, getEffectiveDuration, timelineTimeToSourceTime, sourceTimeToTimelineTime } from './tools/speed';
 import { ReplaceTool, ReplaceMediaPayload } from './tools/replace';
@@ -55,7 +57,8 @@ import { ProjectDB, useProjectSave, SaveModal } from './tools/project-save';
 import { useDetach } from './tools/Extract';
 import { useLock } from './tools/lock';
 import { useFreeze } from './tools/freeze';
-import { useAudio } from './tools/audio';
+import { useAudio, waveformGenerator } from './tools/audio';
+import { cacheManager, thumbnailGenerator } from './tools/media-processing';
 import {
   KeyframeInspector,
   KeyframeTimelineOverlay,
@@ -854,6 +857,9 @@ function EditorMainScreenContent() {
   const [activeOverlayId, setActiveOverlayId] = useState<string | null>(null);
   const [captions, setCaptionsState] = useState<CaptionItem[]>([]);
   const [activeFilterId, setActiveFilterIdState] = useState<string | null>(null);
+  const [clipAdjustments, setClipAdjustmentsState] = useState<ClipAdjustments>(getDefaultClipAdjustments());
+  const [filterInteractionState, setFilterInteractionState] = useState<AssetInteractionState>('not-applied');
+  const [filterParams, setFilterParams] = useState<FilterInstanceParameters>({ intensity: 1.0, contrast: 0, exposure: 0, saturation: 1.0, temperature: 0 });
   const [previewFilterId, setPreviewFilterId] = useState<string | null>(null);
   const [filterIntensity, setFilterIntensityState] = useState(1.0);
   const [filterOpacity, setFilterOpacityState] = useState(100);
@@ -861,10 +867,14 @@ function EditorMainScreenContent() {
   const [filterEnabled, setFilterEnabledState] = useState(true);
   const [showBeforeOnly, setShowBeforeOnly] = useState(false);
   const [activeEffectId, setActiveEffectIdState] = useState<string | null>(null);
+  const [effectInteractionState, setEffectInteractionState] = useState<AssetInteractionState>('not-applied');
+  const [effectParams, setEffectParams] = useState<EffectInstanceParameters>({ id: '', assetId: '', assetName: '', engineKey: '', enabled: true, startTime: 0, endTime: 5, duration: 5, intensity: 1.0, speed: 1.0, amount: 50 });
   const [activeAppliedEffectId, setActiveAppliedEffectId] = useState<string | null>(null);
   const [effectStrength, setEffectStrengthState] = useState(60);
   const [effectSpeed, setEffectSpeedState] = useState(50);
   const [activeTransitionId, setActiveTransitionId] = useState<string | null>(null);
+  const [transitionInteractionState, setTransitionInteractionState] = useState<AssetInteractionState>('not-applied');
+  const [transitionParams, setTransitionParams] = useState<TransitionInstanceParameters>({ id: '', assetId: '', assetName: '', engineKey: '', duration: 1.0, direction: 'left', amount: 100 });
   const [transitionDuration, setTransitionDuration] = useState<number>(1.0);
   const [captionStyle, setCaptionStyle] = useState({
     font: 'Outfit',
@@ -1855,7 +1865,7 @@ function EditorMainScreenContent() {
     }
   };
 
-  const handleReplaceMedia = (
+  const handleReplaceMedia = async (
     clipId: string,
     newMedia: ReplaceMediaPayload
   ) => {
@@ -1865,71 +1875,147 @@ function EditorMainScreenContent() {
       return;
     }
 
+    const oldMediaId = targetClip.mediaId;
+    const oldUrl = targetClip.url || targetClip.sourceUrl || targetClip.source;
+    const oldClipId = targetClip.id;
+
     beginTransaction('Replace Media', getProjectState());
 
     try {
       const newBaseDuration = newMedia.duration || targetClip.baseDuration || targetClip.duration || 5;
 
+      // 1. Purge cached thumbnails & waveforms associated with the old media source
+      if (oldClipId) {
+        cacheManager.delete(`thumbnails_${oldClipId}_8`);
+        cacheManager.delete(`thumbnails_${oldClipId}_4`);
+      }
+      if (oldMediaId) {
+        cacheManager.delete(`thumbnails_${oldMediaId}_8`);
+        cacheManager.delete(`thumbnails_${oldMediaId}_4`);
+      }
+      if (oldUrl) {
+        cacheManager.delete(`thumbnails_${oldUrl}_8`);
+        cacheManager.delete(`thumbnails_${oldUrl}_4`);
+      }
+
+      // 2. Asynchronously generate fresh waveform data for the replacement media
+      let newWaveformData: number[] = [];
+      try {
+        newWaveformData = await waveformGenerator.generateWaveform(newMedia.url, 40);
+      } catch (e) {
+        console.warn('Waveform generation fallback during replace media:', e);
+      }
+
+      // 3. Asynchronously generate fresh filmstrip thumbnails if missing
+      let newThumbnails = newMedia.thumbnails;
+      if (!newThumbnails || newThumbnails.length === 0 || (newThumbnails.length === 1 && newThumbnails[0] === newMedia.url)) {
+        try {
+          const generated = await thumbnailGenerator.generateThumbnails({
+            id: newMedia.mediaId,
+            url: newMedia.url,
+            duration: newBaseDuration
+          }, 4);
+          if (generated && generated.length > 0) {
+            newThumbnails = generated;
+          }
+        } catch (e) {
+          console.warn('Thumbnail generation fallback during replace media:', e);
+        }
+      }
+
       setTimelineClipsState((prevClips) => {
         return prevClips.map((clip) => {
           const isAudioClip = clip.trackId === 'audio' || clip.trackId === 'music' || clip.type === 'audio' || clip.isDetachedAudio;
+          const isTarget = clip.id === targetClip.id;
+
           const isLinkedAudio = isAudioClip && (
             (clip as any).sourceVideoId === targetClip.id ||
             (clip as any).sourceVideoClipId === targetClip.id ||
-            (targetClip as any).detachedAudioId === clip.id
+            (clip as any).parentClipId === targetClip.id ||
+            (targetClip as any).detachedAudioId === clip.id ||
+            (clip as any).linkedMediaId === oldMediaId ||
+            (clip as any).linkedMediaId === targetClip.id ||
+            (clip as any).mediaId === oldMediaId ||
+            ((clip as any).mediaId && String((clip as any).mediaId).includes(oldMediaId)) ||
+            ((clip as any).mediaId && String((clip as any).mediaId).includes(targetClip.id)) ||
+            (clip.isDetachedAudio && (clip.sourceUrl === oldUrl || clip.url === oldUrl || clip.source === oldUrl))
           );
 
-          if (clip.id === targetClip.id) {
+          if (isTarget) {
             if (isAudioClip) {
-              // Audio clip replacement: preserve audio type/trackId, never copy visual thumbnails/poster
               const { thumbnails, thumbnailUrl, posterFrame, previewFrame, videoFrame, videoMetadata, ...rest } = clip;
               return {
                 ...rest,
                 type: 'audio',
                 trackId: clip.trackId || 'audio',
                 mediaId: newMedia.mediaId,
+                linkedMediaId: newMedia.mediaId,
                 url: newMedia.url,
+                source: newMedia.url,
                 sourceUrl: newMedia.url,
                 waveformSource: newMedia.url,
+                thumbnailSource: undefined,
+                waveformData: newWaveformData.length > 0 ? newWaveformData : clip.waveformData,
                 name: newMedia.name,
                 baseDuration: newBaseDuration,
-                duration: Math.min(clip.duration, newBaseDuration)
+                duration: Math.min(clip.duration, newBaseDuration),
+                metadata: {
+                  ...clip.metadata,
+                  duration: newBaseDuration,
+                  url: newMedia.url
+                }
               };
             }
 
-            // Video clip replacement: update media, duration, thumbnails on video clip ONLY
             return {
               ...clip,
               type: clip.type || 'video',
               trackId: clip.trackId || 'video',
               mediaId: newMedia.mediaId,
+              linkedMediaId: newMedia.mediaId,
               url: newMedia.url,
+              source: newMedia.url,
               sourceUrl: newMedia.url,
               name: newMedia.name,
-              thumbnails: newMedia.thumbnails && newMedia.thumbnails.length > 0 ? newMedia.thumbnails : clip.thumbnails,
+              thumbnail: newThumbnails && newThumbnails.length > 0 ? newThumbnails[0] : clip.thumbnail,
+              thumbnails: newThumbnails && newThumbnails.length > 0 ? newThumbnails : clip.thumbnails,
+              previewFrame: newThumbnails && newThumbnails.length > 0 ? newThumbnails[0] : clip.previewFrame,
+              posterFrame: newThumbnails && newThumbnails.length > 0 ? newThumbnails[0] : clip.posterFrame,
               baseDuration: newBaseDuration,
-              duration: Math.min(clip.duration, newBaseDuration)
+              duration: Math.min(clip.duration, newBaseDuration),
+              metadata: {
+                ...clip.metadata,
+                duration: newBaseDuration,
+                url: newMedia.url
+              }
             };
           }
 
           if (isLinkedAudio) {
-            // Linked audio clip replacement: update media source & waveformUrl, maintain strict audio/no-thumbnail isolation
             const { thumbnails, thumbnailUrl, posterFrame, previewFrame, videoFrame, videoMetadata, ...cleanAudioClip } = clip;
             return {
               ...cleanAudioClip,
               type: 'audio',
               trackId: clip.trackId || 'audio',
-              mediaId: newMedia.mediaId,
+              mediaId: `extracted-audio-${newMedia.mediaId}-${Date.now()}`,
+              linkedMediaId: newMedia.mediaId,
               url: newMedia.url,
+              source: newMedia.url,
               sourceUrl: newMedia.url,
               waveformSource: newMedia.url,
+              thumbnailSource: undefined,
+              waveformData: newWaveformData.length > 0 ? newWaveformData : cleanAudioClip.waveformData,
               name: `${newMedia.name} (Audio)`,
               baseDuration: newBaseDuration,
-              duration: Math.min(clip.duration, newBaseDuration)
+              duration: Math.min(clip.duration, newBaseDuration),
+              metadata: {
+                ...cleanAudioClip.metadata,
+                duration: newBaseDuration,
+                url: newMedia.url
+              }
             };
           }
 
-          // For all other audio clips on the timeline, ensure visual thumbnail fields are strictly omitted/purged
           if (isAudioClip) {
             const { thumbnails, thumbnailUrl, posterFrame, previewFrame, videoFrame, videoMetadata, ...cleanAudioClip } = clip;
             return {
@@ -2699,11 +2785,25 @@ function EditorMainScreenContent() {
         const totalDur = timelineClips.reduce((acc, c) => acc + c.duration, 0) || 5;
         e.preventDefault();
         handleSeek(Math.min(totalDur, currentTime + 1));
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        const target = e.target as HTMLElement;
+        if (
+          target?.tagName === 'INPUT' ||
+          target?.tagName === 'TEXTAREA' ||
+          target?.isContentEditable
+        ) {
+          return;
+        }
+        const targetClipId = activeSelectedClipId || activeSelectedClip?.id;
+        if (targetClipId) {
+          e.preventDefault();
+          handleDeleteClip(targetClipId);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentTime, timelineClips, isPlaying]);
+  }, [currentTime, timelineClips, isPlaying, activeSelectedClipId, activeSelectedClip, handleDeleteClip]);
 
 
 
@@ -3471,20 +3571,52 @@ function EditorMainScreenContent() {
               <FiltersPanel
                 activeFilterId={activeFilterId}
                 filterIntensity={filterIntensity}
+                adjustments={clipAdjustments}
                 onSelectFilter={(filterId) => {
                   const filterIdStr = filterId !== null ? String(filterId) : null;
-                  beginTransaction('Apply filter', getProjectState());
+                  beginTransaction('Select Filter', getProjectState());
                   setActiveFilterIdState(filterIdStr);
                   setFilterEnabledState(!!filterIdStr);
+                  
+                  if (activeSelectedClip) {
+                    setTimelineClipsState(prev => prev.map(c => {
+                      if (c.id === activeSelectedClip.id) {
+                        return { ...c, filterId: filterIdStr };
+                      }
+                      return c;
+                    }));
+                  }
+                  
                   commitTransaction(getProjectState());
                   if (filterIdStr) {
-                    showToast(`Applied filter`);
+                    showToast(`Applied filter: ${filterIdStr}`);
                   } else {
                     showToast('Filter removed');
                   }
                 }}
                 onIntensityChange={(intensity) => {
                   setFilterIntensityState(intensity);
+                }}
+                onAdjustmentChange={(key, value) => {
+                  beginTransaction(`Adjust ${key}`, getProjectState());
+                  setClipAdjustmentsState(prev => {
+                    const next = { ...prev, [key]: value };
+                    if (activeSelectedClip) {
+                      setTimelineClipsState(clips => clips.map(c => c.id === activeSelectedClip.id ? { ...c, adjustments: next } : c));
+                    }
+                    return next;
+                  });
+                  commitTransaction(getProjectState());
+                }}
+                onResetAdjustments={() => {
+                  beginTransaction('Reset Adjustments', getProjectState());
+                  const defaults = getDefaultClipAdjustments();
+                  setClipAdjustmentsState(defaults);
+                  if (activeSelectedClip) {
+                    setTimelineClipsState(clips => clips.map(c => c.id === activeSelectedClip.id ? { ...c, adjustments: defaults } : c));
+                  }
+                  commitTransaction(getProjectState());
+                  showToast('Reset all adjustments');
                 }}
               />
             )}
@@ -3493,20 +3625,48 @@ function EditorMainScreenContent() {
               <EffectsPanel
                 activeEffectId={activeEffectId}
                 effectIntensity={effectStrength}
-                onSelectEffect={(effectId) => {
+                interactionState={effectInteractionState}
+                effectParams={effectParams}
+                onSelectEffect={(effectId, nextState) => {
                   const effectIdStr = effectId !== null ? String(effectId) : null;
+                  const newState = nextState || (effectIdStr ? 'applied-selected' : 'not-applied');
+
                   beginTransaction('Apply effect', getProjectState());
                   setActiveEffectIdState(effectIdStr);
-                  commitTransaction(getProjectState());
+                  setEffectInteractionState(newState);
+                  
                   if (effectIdStr) {
-                    commitStateChange('Apply effect', getProjectStateRef.current(), { ...getProjectStateRef.current() });
-                    showToast(`Applied effect: ${effectIdStr}`);
+                    const newParams: EffectInstanceParameters = {
+                      id: `effect-${Date.now()}`,
+                      assetId: effectIdStr,
+                      assetName: effectIdStr,
+                      engineKey: 'BasicAnimationEngine',
+                      enabled: true,
+                      startTime: currentTime,
+                      endTime: Math.min(duration, currentTime + 5),
+                      duration: 5,
+                      intensity: effectStrength / 100,
+                      speed: 1.0,
+                      amount: 50,
+                    };
+                    setEffectParams(newParams);
+                  }
+
+                  commitTransaction(getProjectState());
+                  if (newState === 'applied-selected') {
+                    showToast(`Click 1: Applied effect (${effectIdStr})`);
+                  } else if (newState === 'settings-open') {
+                    showToast(`Click 2: Opened effect settings`);
                   } else {
-                    showToast('Effect removed');
+                    showToast('Click 3: Removed effect');
                   }
                 }}
                 onIntensityChange={(intensity) => {
                   setEffectStrength(intensity * 100);
+                  setEffectParams(prev => ({ ...prev, intensity }));
+                }}
+                onEffectParamsChange={(updated) => {
+                  setEffectParams(prev => ({ ...prev, ...updated }));
                 }}
               />
             )}
@@ -3515,14 +3675,43 @@ function EditorMainScreenContent() {
               <TransitionsPanel
                 activeTransitionId={activeTransitionId}
                 transitionDuration={transitionDuration}
-                onSelectTransition={(transId) => {
+                interactionState={transitionInteractionState}
+                transitionParams={transitionParams}
+                onSelectTransition={(transId, nextState) => {
+                  const newState = nextState || (transId ? 'applied-selected' : 'not-applied');
+                  setTransitionInteractionState(newState);
                   handleSelectTransition(transId);
+
+                  if (transId) {
+                    setTransitionParams({
+                      id: `trans-${Date.now()}`,
+                      assetId: String(transId),
+                      assetName: String(transId),
+                      engineKey: 'DissolveTransitionEngine',
+                      duration: transitionDuration,
+                      direction: 'left',
+                      amount: 100
+                    });
+                  }
+
+                  if (newState === 'applied-selected') {
+                    showToast(`Click 1: Applied transition (${transId})`);
+                  } else if (newState === 'settings-open') {
+                    showToast(`Click 2: Opened transition settings`);
+                  } else {
+                    showToast('Click 3: Removed transition');
+                  }
                 }}
                 onDurationChange={(dur) => {
                   setTransitionDuration(dur);
+                  setTransitionParams(prev => ({ ...prev, duration: dur }));
+                }}
+                onTransitionParamsChange={(updated) => {
+                  setTransitionParams(prev => ({ ...prev, ...updated }));
                 }}
                 onResetTransition={() => {
                   setTransitionDuration(1.0);
+                  setTransitionParams(prev => ({ ...prev, duration: 1.0, direction: 'left', amount: 100 }));
                   showToast('Reset transition parameters');
                 }}
               />
@@ -4792,8 +4981,10 @@ function EditorMainScreenContent() {
                         audioClipLaneMap.set(clip.id, assignedLane);
                       });
 
+                      const audioSpec = getTrackSpec('audio');
                       const totalLanes = Math.max(1, audioLanes.length);
-                      const audioRowHeightPx = totalLanes === 1 ? 32 : totalLanes * 22 + 6;
+                      const audioRowHeightPx = totalLanes === 1 ? audioSpec.rowHeight : totalLanes * (audioSpec.clipHeight + 4) + 8;
+                      const singleLaneTopPx = calculateCenteredClipTop(audioRowHeightPx, audioSpec.clipHeight);
 
                       return (
                         <div className="flex flex-row items-center bg-surface transition-all duration-200" style={{ height: `${audioRowHeightPx}px` }}>
@@ -4813,7 +5004,11 @@ function EditorMainScreenContent() {
                             </button>
                             <span className="text-[10px] font-medium tracking-wide">{isMuted ? 'Music (Muted)' : 'Music'}</span>
                           </div>
-                          <div className="relative flex-1 h-full border-b border-border px-0 flex items-center">
+                          <div
+                            className="relative flex-1 h-full border-b border-border px-0 flex items-center"
+                            onDragOver={handleTrackDragOver}
+                            onDrop={(e) => handleTrackDrop(e, 'audio')}
+                          >
                             {allAudioClips.map((clip) => {
                               const startSec = clip.timelineStart ?? clip.start ?? 0;
                               const clipLeftPx = startSec * pxPerSec;
@@ -4822,27 +5017,34 @@ function EditorMainScreenContent() {
                               const isMuted = !!mutedClips[clip.id] || !!clip.isMuted;
                               const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
                               const laneIndex = audioClipLaneMap.get(clip.id) ?? 0;
-                              const topPx = totalLanes === 1 ? 4 : laneIndex * 22 + 3;
+                              const topPx = totalLanes === 1 ? singleLaneTopPx : laneIndex * (audioSpec.clipHeight + 4) + 4;
                               const isExtracted = !!clip.isDetachedAudio;
 
                               return (
                                 <div
                                   key={clip.id}
+                                  draggable={!isLocked}
+                                  onDragStart={(e) => handleDragStart(e, clip.id)}
+                                  onDragOver={(e) => handleDragOver(e, clip.id)}
+                                  onDragEnd={handleDragEnd}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setActiveSelectedClipId(clip.id);
                                     setActiveMediaId(clip.mediaId || clip.id);
                                     setIsSelectedOnCanvas(true);
                                     handleSeek(startSec);
+                                    if (isTrimModeActive && trimmingClipId !== clip.id) {
+                                      enterTrimMode(clip.id, zoomLevel);
+                                    }
                                   }}
-                                  className={`h-5 rounded border flex items-center overflow-hidden cursor-pointer absolute transition px-1.5 font-mono text-[8.5px] font-semibold gap-1 select-none ${isSelected
+                                  className={`rounded border flex items-center overflow-hidden cursor-pointer absolute transition px-1.5 font-mono text-[8.5px] font-semibold gap-1 select-none ${isSelected
                                       ? 'border-emerald-400 ring-2 ring-emerald-400/50 bg-emerald-500/40 text-emerald-100 z-20 shadow-glow'
                                       : isExtracted
                                         ? 'border-purple-500/50 bg-purple-500/30 text-purple-200 hover:border-purple-400/70 z-10'
                                         : 'border-indigo-500/50 bg-indigo-500/30 text-indigo-200 hover:border-indigo-400/70 z-10'
                                     } ${isMuted ? 'opacity-50 line-through border-dashed' : ''} ${isLocked ? 'opacity-70 border-dashed border-amber-500/40' : ''
                                     }`}
-                                  style={{ left: `${clipLeftPx}px`, width: `${clipWidthPx}px`, top: `${topPx}px` }}
+                                  style={{ left: `${clipLeftPx}px`, width: `${clipWidthPx}px`, top: `${topPx}px`, height: `${audioSpec.clipHeight}px` }}
                                   title={`${clip.name} (${formatTimecode(clip.duration)})`}
                                 >
                                   {(isTrimModeActive && trimmingClipId === clip.id) && !isLocked && (
@@ -4920,7 +5122,10 @@ function EditorMainScreenContent() {
                               );
                             })}
                             {allAudioClips.length === 0 && (
-                              <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
+                              <div
+                                className="rounded bg-surface/40 border border-border w-full absolute"
+                                style={{ top: `${singleLaneTopPx}px`, height: `${audioSpec.clipHeight}px` }}
+                              />
                             )}
                           </div>
                         </div>
@@ -4928,267 +5133,292 @@ function EditorMainScreenContent() {
                     })()}
 
                     {/* Row 2: Text Track */}
-                    <div className="flex flex-row h-8 items-center bg-surface">
-                      <div
-                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
-                        onClick={(e) => { e.stopPropagation(); setActiveTab('text'); }}
-                      >
-                        <span className="text-sm font-bold text-amber-400">T</span>
-                        <span className="text-[10px] font-medium tracking-wide">Text</span>
-                      </div>
-                      <div className="relative flex-1 h-full border-b border-border px-0 flex items-center">
-                        {textOverlays.map((overlay) => {
-                          const leftPx = (overlay.startTime ?? 0) * pxPerSec;
-                          const durSec = overlay.duration ?? 5;
-                          const widthPx = Math.max(24, durSec * pxPerSec);
-                          const isSelected = activeOverlayId === overlay.id;
+                    {(() => {
+                      const textSpec = getTrackSpec('text');
+                      const textTopPx = calculateCenteredClipTop(textSpec.rowHeight, textSpec.clipHeight);
 
-                          return (
-                            <div
-                              key={overlay.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveOverlayId(overlay.id);
-                                setActiveTab('text');
-                                handleSeek(overlay.startTime ?? 0);
-                              }}
-                              className={`absolute h-6 rounded bg-amber-500/25 border text-[9px] px-1.5 truncate flex items-center justify-between font-mono cursor-pointer transition top-1 select-none ${
-                                isSelected ? 'border-amber-400 ring-2 ring-amber-400/50 bg-amber-500/40 text-amber-100 z-20 shadow-glow' : 'border-amber-500/35 text-amber-200 hover:border-amber-400/60 z-10'
-                              }`}
-                              style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                              title={`Text: ${overlay.text} (${durSec.toFixed(1)}s)`}
-                            >
-                              {/* Left Trim Handle (Start Time & Duration adjustment) */}
+                      return (
+                        <div className="flex flex-row items-center bg-surface" style={{ height: `${textSpec.rowHeight}px` }}>
+                          <div
+                            className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
+                            onClick={(e) => { e.stopPropagation(); setActiveTab('text'); }}
+                          >
+                            <span className="text-sm font-bold text-amber-400">T</span>
+                            <span className="text-[10px] font-medium tracking-wide">Text</span>
+                          </div>
+                          <div className="relative flex-1 h-full border-b border-border px-0 flex items-center">
+                            {textOverlays.map((overlay) => {
+                              const leftPx = (overlay.startTime ?? 0) * pxPerSec;
+                              const durSec = overlay.duration ?? 5;
+                              const widthPx = Math.max(24, durSec * pxPerSec);
+                              const isSelected = activeOverlayId === overlay.id;
+
+                              return (
+                                <div
+                                  key={overlay.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveOverlayId(overlay.id);
+                                    setActiveTab('text');
+                                    handleSeek(overlay.startTime ?? 0);
+                                  }}
+                                  className={`absolute rounded bg-amber-500/25 border text-[9px] px-1.5 truncate flex items-center justify-between font-mono cursor-pointer transition select-none ${
+                                    isSelected ? 'border-amber-400 ring-2 ring-amber-400/50 bg-amber-500/40 text-amber-100 z-20 shadow-glow' : 'border-amber-500/35 text-amber-200 hover:border-amber-400/60 z-10'
+                                  }`}
+                                  style={{ left: `${leftPx}px`, width: `${widthPx}px`, top: `${textTopPx}px`, height: `${textSpec.clipHeight}px` }}
+                                  title={`Text: ${overlay.text} (${durSec.toFixed(1)}s)`}
+                                >
+                                  {/* Left Trim Handle (Start Time & Duration adjustment) */}
+                                  <div
+                                    className="absolute left-0 top-0 bottom-0 w-2.5 bg-amber-400/60 hover:bg-amber-300 cursor-ew-resize flex items-center justify-center rounded-l"
+                                    onMouseDown={(e) => {
+                                      e.stopPropagation();
+                                      const startX = e.clientX;
+                                      const initialStart = overlay.startTime ?? 0;
+                                      const initialDur = overlay.duration ?? 5;
+
+                                      const onMouseMove = (moveEv: MouseEvent) => {
+                                        const deltaX = moveEv.clientX - startX;
+                                        const deltaSec = deltaX / pxPerSec;
+                                        const newStart = Math.max(0, initialStart + deltaSec);
+                                        const newDur = Math.max(0.5, initialDur - (newStart - initialStart));
+                                        handleUpdateTextOverlay(overlay.id, { startTime: newStart, duration: newDur });
+                                      };
+
+                                      const onMouseUp = () => {
+                                        window.removeEventListener('mousemove', onMouseMove);
+                                        window.removeEventListener('mouseup', onMouseUp);
+                                      };
+
+                                      window.addEventListener('mousemove', onMouseMove);
+                                      window.addEventListener('mouseup', onMouseUp);
+                                    }}
+                                  >
+                                    <div className="w-0.5 h-3 bg-slate-950 rounded-full" />
+                                  </div>
+
+                                  {/* Center Text Label */}
+                                  <div className="px-3 truncate flex items-center gap-1 min-w-0 flex-1">
+                                    <span>✍️</span>
+                                    <span className="truncate font-semibold">{overlay.text}</span>
+                                    <span className="text-[7.5px] opacity-75">({durSec.toFixed(1)}s)</span>
+                                  </div>
+
+                                  {/* Right Trim Handle (Extend / Shorten duration) */}
+                                  <div
+                                    className="absolute right-0 top-0 bottom-0 w-2.5 bg-amber-400/60 hover:bg-amber-300 cursor-ew-resize flex items-center justify-center rounded-r"
+                                    onMouseDown={(e) => {
+                                      e.stopPropagation();
+                                      const startX = e.clientX;
+                                      const initialDur = overlay.duration ?? 5;
+
+                                      const onMouseMove = (moveEv: MouseEvent) => {
+                                        const deltaX = moveEv.clientX - startX;
+                                        const deltaSec = deltaX / pxPerSec;
+                                        const newDur = Math.max(0.5, initialDur + deltaSec);
+                                        handleUpdateTextOverlay(overlay.id, { duration: newDur });
+                                      };
+
+                                      const onMouseUp = () => {
+                                        window.removeEventListener('mousemove', onMouseMove);
+                                        window.removeEventListener('mouseup', onMouseUp);
+                                      };
+
+                                      window.addEventListener('mousemove', onMouseMove);
+                                      window.addEventListener('mouseup', onMouseUp);
+                                    }}
+                                  >
+                                    <div className="w-0.5 h-3 bg-slate-950 rounded-full" />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {captions.map((cap) => {
+                              const leftPx = cap.start * pxPerSec;
+                              const widthPx = (cap.end - cap.start) * pxPerSec;
+                              return (
+                                <div
+                                  key={cap.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveTab('captions');
+                                    handleSeek(cap.start);
+                                  }}
+                                  className="absolute rounded bg-primary/25 border border-sky-500/35 text-[8px] px-1.5 truncate flex items-center font-mono cursor-pointer z-10"
+                                  style={{ left: `${leftPx}px`, width: `${widthPx}px`, top: `${textTopPx}px`, height: `${textSpec.clipHeight}px` }}
+                                >
+                                  💬 {cap.text}
+                                </div>
+                              );
+                            })}
+                            {textOverlays.length === 0 && captions.length === 0 && (
                               <div
-                                className="absolute left-0 top-0 bottom-0 w-2.5 bg-amber-400/60 hover:bg-amber-300 cursor-ew-resize flex items-center justify-center rounded-l"
-                                onMouseDown={(e) => {
-                                  e.stopPropagation();
-                                  const startX = e.clientX;
-                                  const initialStart = overlay.startTime ?? 0;
-                                  const initialDur = overlay.duration ?? 5;
-
-                                  const onMouseMove = (moveEv: MouseEvent) => {
-                                    const deltaX = moveEv.clientX - startX;
-                                    const deltaSec = deltaX / pxPerSec;
-                                    const newStart = Math.max(0, initialStart + deltaSec);
-                                    const newDur = Math.max(0.5, initialDur - (newStart - initialStart));
-                                    handleUpdateTextOverlay(overlay.id, { startTime: newStart, duration: newDur });
-                                  };
-
-                                  const onMouseUp = () => {
-                                    window.removeEventListener('mousemove', onMouseMove);
-                                    window.removeEventListener('mouseup', onMouseUp);
-                                  };
-
-                                  window.addEventListener('mousemove', onMouseMove);
-                                  window.addEventListener('mouseup', onMouseUp);
-                                }}
-                              >
-                                <div className="w-0.5 h-3 bg-slate-950 rounded-full" />
-                              </div>
-
-                              {/* Center Text Label */}
-                              <div className="px-3 truncate flex items-center gap-1 min-w-0 flex-1">
-                                <span>✍️</span>
-                                <span className="truncate font-semibold">{overlay.text}</span>
-                                <span className="text-[7.5px] opacity-75">({durSec.toFixed(1)}s)</span>
-                              </div>
-
-                              {/* Right Trim Handle (Extend / Shorten duration) */}
-                              <div
-                                className="absolute right-0 top-0 bottom-0 w-2.5 bg-amber-400/60 hover:bg-amber-300 cursor-ew-resize flex items-center justify-center rounded-r"
-                                onMouseDown={(e) => {
-                                  e.stopPropagation();
-                                  const startX = e.clientX;
-                                  const initialDur = overlay.duration ?? 5;
-
-                                  const onMouseMove = (moveEv: MouseEvent) => {
-                                    const deltaX = moveEv.clientX - startX;
-                                    const deltaSec = deltaX / pxPerSec;
-                                    const newDur = Math.max(0.5, initialDur + deltaSec);
-                                    handleUpdateTextOverlay(overlay.id, { duration: newDur });
-                                  };
-
-                                  const onMouseUp = () => {
-                                    window.removeEventListener('mousemove', onMouseMove);
-                                    window.removeEventListener('mouseup', onMouseUp);
-                                  };
-
-                                  window.addEventListener('mousemove', onMouseMove);
-                                  window.addEventListener('mouseup', onMouseUp);
-                                }}
-                              >
-                                <div className="w-0.5 h-3 bg-slate-950 rounded-full" />
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {captions.map((cap) => {
-                          const leftPx = cap.start * pxPerSec;
-                          const widthPx = (cap.end - cap.start) * pxPerSec;
-                          return (
-                            <div
-                              key={cap.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveTab('captions');
-                                handleSeek(cap.start);
-                              }}
-                              className="absolute h-5 rounded bg-primary/25 border border-sky-500/35 text-[8px] px-1.5 truncate flex items-center font-mono cursor-pointer top-1.5 z-10"
-                              style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                            >
-                              💬 {cap.text}
-                            </div>
-                          );
-                        })}
-                        {textOverlays.length === 0 && captions.length === 0 && (
-                          <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
-                        )}
-                      </div>
-                    </div>
+                                className="rounded bg-surface/40 border border-border w-full absolute"
+                                style={{ top: `${textTopPx}px`, height: `${textSpec.clipHeight}px` }}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Row 3: Overlay Track */}
-                    <div className="flex flex-row h-8 items-center bg-surface">
-                      <div
-                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
-                        onClick={(e) => { e.stopPropagation(); setActiveTab('effects'); }}
-                      >
-                        <Layers className="h-3.5 w-3.5 text-sky-400" />
-                        <span className="text-[10px] font-medium tracking-wide">Overlay</span>
-                      </div>
-                      <div
-                        className="relative flex-1 h-full border-b border-border px-0 flex items-center"
-                        onDragOver={handleTrackDragOver}
-                        onDrop={(e) => handleTrackDrop(e, 'overlay')}
-                      >
-                        {(() => {
-                          const overlayClips = timelineClips.filter((c) => c.trackId === 'overlay');
-                          return (
-                            <>
-                              {overlayClips.map((clip) => {
-                                const startSec = clip.timelineStart ?? clip.start ?? 0;
-                                const clipLeftPx = startSec * pxPerSec;
-                                const clipWidthPx = Math.max(24, clip.duration * pxPerSec);
-                                const isSelected = activeSelectedClipId === clip.id;
-                                const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
+                    {(() => {
+                      const overlaySpec = getTrackSpec('overlay');
+                      const overlayTopPx = calculateCenteredClipTop(overlaySpec.rowHeight, overlaySpec.clipHeight);
 
-                                return (
+                      return (
+                        <div className="flex flex-row items-center bg-surface" style={{ height: `${overlaySpec.rowHeight}px` }}>
+                          <div
+                            className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border border-b border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold gap-1.5"
+                            onClick={(e) => { e.stopPropagation(); setActiveTab('effects'); }}
+                          >
+                            <Layers className="h-3.5 w-3.5 text-sky-400" />
+                            <span className="text-[10px] font-medium tracking-wide">Overlay</span>
+                          </div>
+                          <div
+                            className="relative flex-1 h-full border-b border-border px-0 flex items-center"
+                            onDragOver={handleTrackDragOver}
+                            onDrop={(e) => handleTrackDrop(e, 'overlay')}
+                          >
+                            {(() => {
+                              const overlayClips = timelineClips.filter((c) => c.trackId === 'overlay');
+                              return (
+                                <>
+                                  {overlayClips.map((clip) => {
+                                    const startSec = clip.timelineStart ?? clip.start ?? 0;
+                                    const clipLeftPx = startSec * pxPerSec;
+                                    const clipWidthPx = Math.max(24, clip.duration * pxPerSec);
+                                    const isSelected = activeSelectedClipId === clip.id;
+                                    const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
+
+                                    return (
+                                      <div
+                                        key={clip.id}
+                                        draggable={!isLocked}
+                                        onDragStart={(e) => handleDragStart(e, clip.id)}
+                                        onDragEnd={handleDragEnd}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setActiveSelectedClipId(clip.id);
+                                          setActiveMediaId(clip.mediaId || clip.id);
+                                          setIsSelectedOnCanvas(true);
+                                          handleSeek(startSec);
+                                          if (isTrimModeActive && trimmingClipId !== clip.id) {
+                                            enterTrimMode(clip.id, zoomLevel);
+                                          }
+                                        }}
+                                        className={`rounded border flex items-center overflow-hidden cursor-pointer absolute transition px-1.5 font-mono text-[8.5px] font-semibold gap-1 select-none ${isSelected
+                                            ? 'border-sky-400 ring-2 ring-sky-400/50 bg-primary/25 text-white z-20 shadow-glow'
+                                            : 'border-sky-500/30 bg-sky-500/20 text-sky-200 hover:border-sky-400/50 z-10'
+                                          } ${isLocked ? 'opacity-70 border-dashed border-amber-500/40' : ''}`}
+                                        style={{ left: `${clipLeftPx}px`, width: `${clipWidthPx}px`, top: `${overlayTopPx}px`, height: `${overlaySpec.clipHeight}px` }}
+                                        title={`${clip.name} (${formatTimecode(clip.duration)})`}
+                                      >
+                                        {(isTrimModeActive && trimmingClipId === clip.id) && !isLocked && (
+                                          <ClipTrimHandles
+                                            clipId={clip.id}
+                                            timelineStart={startSec}
+                                            sourceStart={clip.startOffset || 0}
+                                            duration={clip.duration}
+                                            maxSourceDuration={mediaFiles.find(m => m.id === clip.mediaId)?.duration || clip.duration || Infinity}
+                                            pixelsPerSecond={pxPerSec}
+                                            playbackRate={clip.playbackRate || 1}
+                                            isLocked={isLocked}
+                                            playheadTime={currentTime}
+                                            onTrimStart={(edge) => beginTransaction(`Trim overlay clip ${edge}`, getProjectState())}
+                                            onTrimUpdate={(newTimelineStart, newSourceStart, newDuration, activeEdgeTime) => {
+                                              handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration, activeEdgeTime);
+                                            }}
+                                            onTrimEnd={handleTrimCommit}
+                                          />
+                                        )}
+                                        <span className="text-[9px] flex-shrink-0">🎞️</span>
+                                        <span className="truncate flex-1">{clip.name}</span>
+                                        <span className="text-[7.5px] opacity-80 flex-shrink-0">({formatTimecode(clip.duration)})</span>
+                                      </div>
+                                    );
+                                  })}
+                                  {overlayClips.length === 0 && (
+                                    <div
+                                      className="rounded bg-surface/40 border border-border w-full absolute"
+                                      style={{ top: `${overlayTopPx}px`, height: `${overlaySpec.clipHeight}px` }}
+                                    />
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Row 4: Video Track */}
+                    {(() => {
+                      const videoSpec = getTrackSpec('video');
+                      const videoTopPx = calculateCenteredClipTop(videoSpec.rowHeight, videoSpec.clipHeight);
+
+                      return (
+                        <div className="flex flex-row items-center bg-background/60 border-y border-sky-500/20" style={{ height: `${videoSpec.rowHeight}px` }}>
+                          <div
+                            className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border select-none hover:bg-primary/10 cursor-pointer text-xs font-semibold gap-1.5"
+                            onClick={(e) => { e.stopPropagation(); setActiveTab('media'); }}
+                          >
+                            <span className="text-sm">🎞️</span>
+                            <span className="text-[10px] font-medium tracking-wide">Video</span>
+                          </div>
+                          <div
+                            className="relative flex-1 h-full px-0 flex items-center"
+                            onDragOver={handleTrackDragOver}
+                            onDrop={(e) => handleTrackDrop(e, 'video')}
+                          >
+                            {timelineClips
+                              .filter((c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio && c.trackId !== 'overlay')
+                              .reduce<React.ReactNode[]>((acc, clip, idx, videoClipsArray) => {
+                                const clipWidthPx = clip.duration * pxPerSec;
+                                const clipLeftPx = clip.timelineStart * pxPerSec;
+                                const clipComputedWidth = Math.max(12, clipWidthPx);
+
+                                // Check if clip has adjacent clips directly before/after it to create a visual gap for transition buttons
+                                const hasPrevClip = idx > 0 && Math.abs(videoClipsArray[idx - 1].timelineStart + videoClipsArray[idx - 1].duration - clip.timelineStart) < 0.05;
+                                const hasNextClip = idx < videoClipsArray.length - 1 && Math.abs(clip.timelineStart + clip.duration - videoClipsArray[idx + 1].timelineStart) < 0.05;
+                                
+                                const GAP_PER_SIDE = 12; // 12px inset per adjacent side = 24px gap between adjacent video clips
+                                const renderLeftPx = clipLeftPx + (hasPrevClip ? GAP_PER_SIDE : 0);
+                                const renderWidthPx = Math.max(12, clipComputedWidth - (hasPrevClip ? GAP_PER_SIDE : 0) - (hasNextClip ? GAP_PER_SIDE : 0));
+
+                                const numThumbnails = Math.max(1, Math.ceil(renderWidthPx / 48));
+                                const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
+                                const isMuted = !!mutedClips[clip.id];
+                                const isSelected = clip.id === activeSelectedClipId;
+                                const isTrimming = isTrimModeActive && trimmingClipId === clip.id;
+
+                                const clipEl = (
                                   <div
                                     key={clip.id}
-                                    draggable={!isLocked}
-                                    onDragStart={(e) => handleDragStart(e, clip.id)}
-                                    onDragEnd={handleDragEnd}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setActiveSelectedClipId(clip.id);
                                       setActiveMediaId(clip.mediaId || clip.id);
                                       setIsSelectedOnCanvas(true);
-                                      handleSeek(startSec);
                                       if (isTrimModeActive && trimmingClipId !== clip.id) {
                                         enterTrimMode(clip.id, zoomLevel);
                                       }
                                     }}
-                                    className={`h-6 rounded border flex items-center overflow-hidden cursor-pointer absolute transition px-1.5 font-mono text-[8.5px] font-semibold gap-1 select-none ${isSelected
-                                        ? 'border-sky-400 ring-2 ring-sky-400/50 bg-primary/25 text-white z-20 shadow-glow'
-                                        : 'border-sky-500/30 bg-sky-500/20 text-sky-200 hover:border-sky-400/50 z-10'
-                                      } ${isLocked ? 'opacity-70 border-dashed border-amber-500/40' : ''}`}
-                                    style={{ left: `${clipLeftPx}px`, width: `${clipWidthPx}px`, top: '4px' }}
-                                    title={`${clip.name} (${formatTimecode(clip.duration)})`}
+                                    draggable={!isLocked}
+                                    onDragStart={(e) => handleDragStart(e, clip.id)}
+                                    onDragOver={(e) => handleDragOver(e, clip.id)}
+                                    onDragEnd={handleDragEnd}
+                                    className={`rounded-md border flex items-center overflow-hidden cursor-pointer flex-shrink-0 transition-none absolute ${isTrimming
+                                        ? 'border-sky-400 ring-2 ring-sky-400/80 bg-slate-900 z-30 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
+                                        : isSelected
+                                          ? 'border-sky-400 ring-2 ring-sky-400/50 bg-slate-900 z-20 shadow-lg'
+                                          : (clip.isFreezeFrame || clip.type === 'freeze_frame')
+                                            ? 'border-cyan-500/60 bg-cyan-500/10 hover:border-cyan-400/80 z-10'
+                                            : 'border-slate-800 bg-slate-900 hover:border-sky-400/50 z-10'
+                                      } ${isLocked ? 'opacity-70 border-dashed border-amber-500/30' : ''}`}
+                                    style={{ left: `${renderLeftPx}px`, width: `${renderWidthPx}px`, top: `${videoTopPx}px`, height: `${videoSpec.clipHeight}px` }}
                                   >
-                                    {(isTrimModeActive && trimmingClipId === clip.id) && !isLocked && (
-                                      <ClipTrimHandles
-                                        clipId={clip.id}
-                                        timelineStart={startSec}
-                                        sourceStart={clip.startOffset || 0}
-                                        duration={clip.duration}
-                                        maxSourceDuration={mediaFiles.find(m => m.id === clip.mediaId)?.duration || clip.duration || Infinity}
-                                        pixelsPerSecond={pxPerSec}
-                                        playbackRate={clip.playbackRate || 1}
-                                        isLocked={isLocked}
-                                        playheadTime={currentTime}
-                                        onTrimStart={(edge) => beginTransaction(`Trim overlay clip ${edge}`, getProjectState())}
-                                        onTrimUpdate={(newTimelineStart, newSourceStart, newDuration, activeEdgeTime) => {
-                                          handleTrimUpdate(clip.id, newTimelineStart, newSourceStart, newDuration, activeEdgeTime);
-                                        }}
-                                        onTrimEnd={handleTrimCommit}
-                                      />
-                                    )}
-                                    <span className="text-[9px] flex-shrink-0">🎞️</span>
-                                    <span className="truncate flex-1">{clip.name}</span>
-                                    <span className="text-[7.5px] opacity-80 flex-shrink-0">({formatTimecode(clip.duration)})</span>
-                                  </div>
-                                );
-                              })}
-                              {overlayClips.length === 0 && (
-                                <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
-                              )}
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </div>
-
-                    {/* Row 4: Video Track */}
-                    <div className="flex flex-row h-14 items-center bg-background/60 border-y border-sky-500/20">
-                      <div
-                        className="w-40 h-full flex-shrink-0 flex items-center justify-center bg-background border-r border-border select-none hover:bg-primary/10 cursor-pointer text-xs font-semibold gap-1.5"
-                        onClick={(e) => { e.stopPropagation(); setActiveTab('media'); }}
-                      >
-                        <span className="text-sm">🎞️</span>
-                        <span className="text-[10px] font-medium tracking-wide">Video</span>
-                      </div>
-                      <div
-                        className="relative flex-1 h-full px-0 flex items-center"
-                        onDragOver={handleTrackDragOver}
-                        onDrop={(e) => handleTrackDrop(e, 'video')}
-                      >
-                        {timelineClips
-                          .filter((c) => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio && c.trackId !== 'overlay')
-                          .reduce<React.ReactNode[]>((acc, clip, idx, videoClipsArray) => {
-                            const clipWidthPx = clip.duration * pxPerSec;
-                            const clipLeftPx = clip.timelineStart * pxPerSec;
-                            const clipComputedWidth = Math.max(12, clipWidthPx);
-
-                            // Check if clip has adjacent clips directly before/after it to create a visual gap for transition buttons
-                            const hasPrevClip = idx > 0 && Math.abs(videoClipsArray[idx - 1].timelineStart + videoClipsArray[idx - 1].duration - clip.timelineStart) < 0.05;
-                            const hasNextClip = idx < videoClipsArray.length - 1 && Math.abs(clip.timelineStart + clip.duration - videoClipsArray[idx + 1].timelineStart) < 0.05;
-                            
-                            const GAP_PER_SIDE = 12; // 12px inset per adjacent side = 24px gap between adjacent video clips
-                            const renderLeftPx = clipLeftPx + (hasPrevClip ? GAP_PER_SIDE : 0);
-                            const renderWidthPx = Math.max(12, clipComputedWidth - (hasPrevClip ? GAP_PER_SIDE : 0) - (hasNextClip ? GAP_PER_SIDE : 0));
-
-                            const numThumbnails = Math.max(1, Math.ceil(renderWidthPx / 48));
-                            const isLocked = !!lockedClips[clip.id] || !!clip.isLocked;
-                            const isMuted = !!mutedClips[clip.id];
-                            const isSelected = clip.id === activeSelectedClipId;
-                            const isTrimming = isTrimModeActive && trimmingClipId === clip.id;
-
-                            const clipEl = (
-                              <div
-                                key={clip.id}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveSelectedClipId(clip.id);
-                                  setActiveMediaId(clip.mediaId || clip.id);
-                                  setIsSelectedOnCanvas(true);
-                                  if (isTrimModeActive && trimmingClipId !== clip.id) {
-                                    enterTrimMode(clip.id, zoomLevel);
-                                  }
-                                }}
-                                draggable={!isLocked}
-                                onDragStart={(e) => handleDragStart(e, clip.id)}
-                                onDragOver={(e) => handleDragOver(e, clip.id)}
-                                onDragEnd={handleDragEnd}
-                                className={`h-12 rounded-md border flex items-center overflow-hidden cursor-pointer flex-shrink-0 transition-none absolute ${isTrimming
-                                    ? 'border-sky-400 ring-2 ring-sky-400/80 bg-slate-900 z-30 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
-                                    : isSelected
-                                      ? 'border-sky-400 ring-2 ring-sky-400/50 bg-slate-900 z-20 shadow-lg'
-                                      : (clip.isFreezeFrame || clip.type === 'freeze_frame')
-                                        ? 'border-cyan-500/60 bg-cyan-500/10 hover:border-cyan-400/80 z-10'
-                                        : 'border-slate-800 bg-slate-900 hover:border-sky-400/50 z-10'
-                                  } ${isLocked ? 'opacity-70 border-dashed border-amber-500/30' : ''}`}
-                                style={{ left: `${renderLeftPx}px`, width: `${renderWidthPx}px` }}
-                              >
                                 {/* THUMBNAIL STRIP: Edge-to-Edge inside Clip */}
                                 <div className="absolute inset-0 flex overflow-hidden opacity-90 pointer-events-none">
                                   {(() => {
@@ -5370,31 +5600,43 @@ function EditorMainScreenContent() {
 
                             return acc;
                           }, [])}
+                        </div>
                       </div>
-                    </div>
+                    );
+                  })()}
 
                     {/* Row 5: Audio Track */}
-                    <div className="flex flex-row h-8 items-center bg-surface">
-                      <div
-                        className={`w-40 h-full flex-shrink-0 flex items-center justify-center gap-1.5 border-r border-border border-t border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold transition ${isMuted ? 'text-red-400 bg-red-500/10' : 'text-foreground bg-background'
-                          }`}
-                        onClick={(e) => { e.stopPropagation(); setActiveTab('audio'); }}
-                        title="Open Music Adjustments"
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); toggleMute(); }}
-                          className="p-1 rounded hover:bg-surface-hover/80 transition flex items-center justify-center"
-                          title={isMuted ? 'Unmute' : 'Mute'}
-                        >
-                          {isMuted ? <VolumeX className="h-3.5 w-3.5 text-red-400" /> : <Volume2 className="h-3.5 w-3.5" />}
-                        </button>
-                        <span className="text-[10px] font-medium tracking-wide">{isMuted ? 'Music (Muted)' : 'Music'}</span>
-                      </div>
-                      <div className="relative flex-1 h-full border-t border-border bg-surface/50">
-                        <div className="h-5 rounded bg-surface/40 border border-border w-full absolute top-1.5" />
-                      </div>
-                    </div>
+                    {(() => {
+                      const audioSpec = getTrackSpec('audio');
+                      const audioTopPx = calculateCenteredClipTop(audioSpec.rowHeight, audioSpec.clipHeight);
+
+                      return (
+                        <div className="flex flex-row items-center bg-surface" style={{ height: `${audioSpec.rowHeight}px` }}>
+                          <div
+                            className={`w-40 h-full flex-shrink-0 flex items-center justify-center gap-1.5 border-r border-border border-t border-border select-none hover:bg-surface-hover/50 cursor-pointer text-xs font-semibold transition ${isMuted ? 'text-red-400 bg-red-500/10' : 'text-foreground bg-background'
+                              }`}
+                            onClick={(e) => { e.stopPropagation(); setActiveTab('audio'); }}
+                            title="Open Music Adjustments"
+                          >
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+                              className="p-1 rounded hover:bg-surface-hover/80 transition flex items-center justify-center"
+                              title={isMuted ? 'Unmute' : 'Mute'}
+                            >
+                              {isMuted ? <VolumeX className="h-3.5 w-3.5 text-red-400" /> : <Volume2 className="h-3.5 w-3.5" />}
+                            </button>
+                            <span className="text-[10px] font-medium tracking-wide">{isMuted ? 'Music (Muted)' : 'Music'}</span>
+                          </div>
+                          <div className="relative flex-1 h-full border-t border-border bg-surface/50">
+                            <div
+                              className="rounded bg-surface/40 border border-border w-full absolute"
+                              style={{ top: `${audioTopPx}px`, height: `${audioSpec.clipHeight}px` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               );

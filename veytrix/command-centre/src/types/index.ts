@@ -99,8 +99,13 @@ export interface SupportTicket {
   id: string;
   userId: string;
   subject: string;
-  priority: 'Low' | 'Medium' | 'High' | 'Urgent';
+  description?: string;
+  email?: string;
+  category?: string;
+  priority: 'Low' | 'Medium' | 'High' | 'Urgent' | 'Critical';
   status: TicketStatus;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
   createdAt: string;
   updatedAt: string;
   assignedStaff?: string;

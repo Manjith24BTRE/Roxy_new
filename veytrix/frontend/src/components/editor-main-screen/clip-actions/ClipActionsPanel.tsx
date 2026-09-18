@@ -29,7 +29,7 @@ export function ClipActionsPanel({
   onAction
 }: ClipActionsPanelProps) {
   const hasClip = !!clip;
-  const isAudioEnabled = clip ? (clip.trackId === 'video' || clip.trackId === 'audio') : false;
+  const isAudioEnabled = clip ? (clip.trackId === 'video' || clip.trackId === 'audio' || clip.trackId === 'music' || (clip as any).type === 'audio' || (clip as any).isDetachedAudio) : false;
 
   // Action order: Duplicate, Split, Trim, Speed, Keyframes, Overlap, Reverse, Freeze, Mute, Extract, Replace, Rename, Lock/Unlock, Delete
   const toolbarItems = [
