@@ -44,7 +44,7 @@ import { blurTransitionEngine } from './tools/transitions/engines/blur/BlurTrans
 
 
 import { assetRegistry } from '../../services/AssetRegistry';
-import { AssetInteractionState, FilterInstanceParameters, EffectInstanceParameters, TransitionInstanceParameters, ClipAdjustments, getDefaultClipAdjustments } from '../../types/assetInteraction';
+import { AssetInteractionState, FilterInstanceParameters, EffectInstanceParameters, TransitionInstanceParameters, ClipAdjustments, getDefaultClipAdjustments, calculateEffectLocalProgress } from '../../types/assetInteraction';
 import { Captions, CaptionItem } from './tools/captions/Captions';
 import { SpeedTool, clampPlaybackRate, getSourceDuration, getEffectiveDuration, timelineTimeToSourceTime, sourceTimeToTimelineTime } from './tools/speed';
 import { ReplaceTool, ReplaceMediaPayload } from './tools/replace';
@@ -868,7 +868,7 @@ function EditorMainScreenContent() {
   const [showBeforeOnly, setShowBeforeOnly] = useState(false);
   const [activeEffectId, setActiveEffectIdState] = useState<string | null>(null);
   const [effectInteractionState, setEffectInteractionState] = useState<AssetInteractionState>('not-applied');
-  const [effectParams, setEffectParams] = useState<EffectInstanceParameters>({ id: '', assetId: '', assetName: '', engineKey: '', enabled: true, startTime: 0, endTime: 5, duration: 5, intensity: 1.0, speed: 1.0, amount: 50 });
+  const [effectParams, setEffectParams] = useState<EffectInstanceParameters>({ id: '', assetId: '', assetName: '', engineKey: '', enabled: true, startTime: 0, endTime: 3, duration: 3, intensity: 1.0, speed: 1.0, amount: 50 });
   const [activeAppliedEffectId, setActiveAppliedEffectId] = useState<string | null>(null);
   const [effectStrength, setEffectStrengthState] = useState(60);
   const [effectSpeed, setEffectSpeedState] = useState(50);
@@ -3627,7 +3627,8 @@ function EditorMainScreenContent() {
                 effectIntensity={effectStrength}
                 interactionState={effectInteractionState}
                 effectParams={effectParams}
-                onSelectEffect={(effectId, nextState) => {
+                currentTime={currentTime}
+                onSelectEffect={(effectId, nextState, defaultParams) => {
                   const effectIdStr = effectId !== null ? String(effectId) : null;
                   const newState = nextState || (effectIdStr ? 'applied-selected' : 'not-applied');
 
@@ -3635,38 +3636,106 @@ function EditorMainScreenContent() {
                   setActiveEffectIdState(effectIdStr);
                   setEffectInteractionState(newState);
                   
-                  if (effectIdStr) {
+                  const targetClipId = activeSelectedClipId || timelineClips.find(c => c.trackId !== 'audio' && c.trackId !== 'music' && c.type !== 'audio' && !c.isDetachedAudio && c.trackId !== 'overlay')?.id;
+
+                  if (effectIdStr && newState !== 'not-applied') {
+                    const startTime = defaultParams?.startTime ?? currentTime;
+                    const defaultDuration = defaultParams?.duration ?? 3.0;
+                    const endTime = defaultParams?.endTime ?? (startTime + defaultDuration);
+
                     const newParams: EffectInstanceParameters = {
-                      id: `effect-${Date.now()}`,
-                      assetId: effectIdStr,
-                      assetName: effectIdStr,
-                      engineKey: 'BasicAnimationEngine',
+                      id: defaultParams?.id || `effect-${Date.now()}`,
+                      assetId: defaultParams?.assetId || effectIdStr,
+                      assetName: defaultParams?.assetName || effectIdStr,
+                      engineKey: defaultParams?.engineKey || 'BasicAnimationEngine',
                       enabled: true,
-                      startTime: currentTime,
-                      endTime: Math.min(duration, currentTime + 5),
-                      duration: 5,
-                      intensity: effectStrength / 100,
-                      speed: 1.0,
-                      amount: 50,
+                      targetClipId: targetClipId || '',
+                      startTime,
+                      endTime,
+                      duration: defaultDuration,
+                      intensity: defaultParams?.intensity ?? (effectStrength / 100),
+                      speed: defaultParams?.speed ?? 1.0,
+                      amount: defaultParams?.amount ?? 50,
+                      ...defaultParams,
                     };
                     setEffectParams(newParams);
+
+                    if (targetClipId) {
+                      setTimelineClipsState(clips => clips.map(c => {
+                        if (c.id === targetClipId) {
+                          const prevEffects = Array.isArray(c.appliedEffects) ? c.appliedEffects : [];
+                          const filtered = prevEffects.filter((e: any) => e.assetName !== effectIdStr && e.assetId !== effectIdStr && e.id !== newParams.id);
+                          return {
+                            ...c,
+                            effectId: effectIdStr,
+                            effectParams: newParams,
+                            appliedEffects: [...filtered, newParams],
+                          };
+                        }
+                        return c;
+                      }));
+                    }
+                  } else {
+                    setTimelineClipsState(clips => clips.map(c => {
+                      if (!targetClipId || c.id === targetClipId) {
+                        return {
+                          ...c,
+                          effectId: undefined,
+                          effectParams: undefined,
+                          appliedEffects: Array.isArray(c.appliedEffects)
+                            ? c.appliedEffects.filter((e: any) => e.assetName !== effectIdStr && e.assetId !== effectIdStr && e.id !== effectParams?.id)
+                            : [],
+                        };
+                      }
+                      return c;
+                    }));
                   }
 
                   commitTransaction(getProjectState());
                   if (newState === 'applied-selected') {
-                    showToast(`Click 1: Applied effect (${effectIdStr})`);
+                    showToast(`Applied effect (${effectIdStr})`);
                   } else if (newState === 'settings-open') {
-                    showToast(`Click 2: Opened effect settings`);
+                    showToast(`Opened effect settings`);
                   } else {
-                    showToast('Click 3: Removed effect');
+                    showToast('Removed effect');
                   }
                 }}
                 onIntensityChange={(intensity) => {
                   setEffectStrength(intensity * 100);
-                  setEffectParams(prev => ({ ...prev, intensity }));
+                  setEffectParams(prev => {
+                    const updated = { ...prev, intensity };
+                    const clipId = prev.targetClipId || activeSelectedClipId;
+                    if (clipId) {
+                      setTimelineClipsState(clips => clips.map(c => {
+                        if (c.id === clipId) {
+                          const appliedEffects = Array.isArray(c.appliedEffects)
+                            ? c.appliedEffects.map((e: any) => e.id === updated.id || e.assetName === updated.assetName ? { ...e, intensity } : e)
+                            : [updated];
+                          return { ...c, effectParams: updated, appliedEffects };
+                        }
+                        return c;
+                      }));
+                    }
+                    return updated;
+                  });
                 }}
                 onEffectParamsChange={(updated) => {
-                  setEffectParams(prev => ({ ...prev, ...updated }));
+                  setEffectParams(prev => {
+                    const merged = { ...prev, ...updated };
+                    const clipId = merged.targetClipId || activeSelectedClipId;
+                    if (clipId) {
+                      setTimelineClipsState(clips => clips.map(c => {
+                        if (c.id === clipId) {
+                          const appliedEffects = Array.isArray(c.appliedEffects)
+                            ? c.appliedEffects.map((e: any) => e.id === merged.id || e.assetName === merged.assetName ? { ...e, ...updated } : e)
+                            : [merged];
+                          return { ...c, effectParams: merged, appliedEffects };
+                        }
+                        return c;
+                      }));
+                    }
+                    return merged;
+                  });
                 }}
               />
             )}
@@ -4050,87 +4119,97 @@ function EditorMainScreenContent() {
                           )
                         ) : null;
 
-                        const clipDuration = clip.duration || 1.0;
-                        const clipProgress = clipDuration > 0 
-                          ? Math.min(1.0, Math.max(0.0, (currentTime - clip.timelineStart) / clipDuration))
-                          : 1.0;
+                        const effectStartTime = effectParams?.startTime ?? 0;
+                        const effectEndTime = effectParams?.endTime ?? (effectStartTime + (effectParams?.duration ?? 3.0));
+                        const isEffectActiveAtCurrentTime = !!currentClipEffectId && (currentTime >= effectStartTime && currentTime <= effectEndTime);
 
-                        const normEffectIntensity = effectStrength > 1.0 ? effectStrength / 100 : effectStrength;
+                        const effectProgress = isEffectActiveAtCurrentTime
+                          ? calculateEffectLocalProgress(currentTime, effectStartTime, effectEndTime)
+                          : 0;
 
-                        const effectState = currentClipEffectId
+                        const normEffectIntensity = (effectParams?.intensity ?? (effectStrength > 1.0 ? effectStrength / 100 : effectStrength));
+
+                        const effectPresetOverrides: any = {
+                          speed: effectParams?.speed,
+                          amount: effectParams?.amount,
+                          blur: effectParams?.blur,
+                          scale: effectParams?.scale,
+                        };
+
+                        const effectState = isEffectActiveAtCurrentTime
                           ? (activeEffectAsset?.engineKey === 'retro_fx' || activeEffectAsset?.engineKey === 'RetroFXEngine')
                             ? retroFXEngine.evaluateEffect(
                                 activeEffectAsset?.name || currentClipEffectId,
-                                clipProgress,
+                                effectProgress,
                                 normEffectIntensity,
-                                {},
+                                effectPresetOverrides,
                                 { timelineTime: currentTime }
                               )
                             : (activeEffectAsset?.engineKey === 'distortion_fx' || activeEffectAsset?.engineKey === 'DistortionFXEngine')
                             ? distortionFXEngine.evaluateEffect(
                                 activeEffectAsset?.name || currentClipEffectId,
-                                clipProgress,
+                                effectProgress,
                                 normEffectIntensity,
-                                {},
+                                effectPresetOverrides,
                                 { timelineTime: currentTime }
                               )
                             : (activeEffectAsset?.engineKey === 'lighting_fx' || activeEffectAsset?.engineKey === 'LightingFXEngine')
                             ? lightingFXEngine.evaluateEffect(
                                 activeEffectAsset?.name || currentClipEffectId,
-                                clipProgress,
+                                effectProgress,
                                 normEffectIntensity,
-                                {},
+                                effectPresetOverrides,
                                 { timelineTime: currentTime }
                               )
                             : (activeEffectAsset?.engineKey === 'atmospheric_fx' || activeEffectAsset?.engineKey === 'AtmosphericFXEngine')
                             ? atmosphericFXEngine.evaluateEffect(
                                 activeEffectAsset?.name || currentClipEffectId,
-                                clipProgress,
+                                effectProgress,
                                 normEffectIntensity,
-                                {},
+                                effectPresetOverrides,
                                 { timelineTime: currentTime }
                               )
                             : (activeEffectAsset?.engineKey === 'cinematic_fx' || activeEffectAsset?.engineKey === 'CinematicFXEngine')
                             ? cinematicFXEngine.evaluateEffect(
                                 activeEffectAsset?.name || currentClipEffectId,
-                                clipProgress,
+                                effectProgress,
                                 normEffectIntensity,
-                                {},
+                                effectPresetOverrides,
                                 { timelineTime: currentTime }
                               )
                             : (activeEffectAsset?.engineKey === 'glitch_digital' || activeEffectAsset?.engineKey === 'GlitchDigitalEngine')
                             ? glitchDigitalEngine.evaluateEffect(
                                 activeEffectAsset?.name || currentClipEffectId,
-                                clipProgress,
+                                effectProgress,
                                 normEffectIntensity,
-                                {},
+                                effectPresetOverrides,
                                 { timelineTime: currentTime }
                               )
                             : (activeEffectAsset?.engineKey === 'blur_focus' || activeEffectAsset?.engineKey === 'BlurFocusEngine')
                             ? blurFocusEngine.evaluateEffect(
                                 activeEffectAsset?.name || currentClipEffectId,
-                                clipProgress,
+                                effectProgress,
                                 normEffectIntensity,
-                                {},
+                                effectPresetOverrides,
                                 { timelineTime: currentTime }
                               )
                             : (activeEffectAsset?.engineKey === 'motion_camera' || activeEffectAsset?.engineKey === 'CameraShakeEngine')
                             ? motionCameraEngine.evaluateEffect(
                                 activeEffectAsset?.name || currentClipEffectId,
-                                clipProgress,
+                                effectProgress,
                                 normEffectIntensity,
-                                {},
+                                effectPresetOverrides,
                                 { timelineTime: currentTime }
                               )
                             : (activeEffectAsset?.engineKey === 'transform_attention' || activeEffectAsset?.engineKey === 'TransformFXEngine')
                             ? transformAttentionEngine.evaluateEffect(
                                 activeEffectAsset?.name || currentClipEffectId,
-                                clipProgress,
+                                effectProgress,
                                 normEffectIntensity
                               )
                             : basicAnimationEngine.evaluateEffect(
                                 activeEffectAsset?.name || currentClipEffectId,
-                                clipProgress,
+                                effectProgress,
                                 normEffectIntensity
                               )
                           : null;
@@ -4303,21 +4382,33 @@ function EditorMainScreenContent() {
                 })()}
 
                 {/* Dynamic Effect Overlay Simulation */}
-                {(activeEffectId === 'vhs-retro' || activeEffectId?.includes('glitch') || activeEffectId?.includes('vhs') || activeEffectId?.includes('tv')) && (
-                  <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_4px,3px_100%] pointer-events-none z-10 opacity-70 animate-pulse" />
-                )}
-                {(activeEffectId === 'glitch-core' || activeEffectId?.includes('pixel') || activeEffectId?.includes('corruption') || activeEffectId?.includes('signal')) && (
-                  <div className="absolute inset-0 bg-primary/5 mix-blend-color-dodge pointer-events-none z-10 animate-[pulse_0.1s_infinite]" />
-                )}
-                {(activeEffectId === 'cinema-flare' || activeEffectId?.includes('flare') || activeEffectId?.includes('leak') || activeEffectId?.includes('prism') || activeEffectId?.includes('sun')) && (
-                  <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-amber-400/10 to-blue-500/20 pointer-events-none z-10 opacity-60" />
-                )}
-                {(activeEffectId === 'sparkle-glow' || activeEffectId?.includes('glow') || activeEffectId?.includes('bloom') || activeEffectId?.includes('aurora') || activeEffectId?.includes('light')) && (
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(253,224,71,0.1)_0%,transparent_70%)] pointer-events-none z-10 animate-pulse" />
-                )}
-                {(activeEffectId === 'neon-edge' || activeEffectId?.includes('spotlight') || activeEffectId?.includes('reflection')) && (
-                  <div className="absolute inset-0 border-4 border-sky-400/30 rounded-lg pointer-events-none z-10 filter blur-[2px] shadow-[inset_0_0_15px_rgba(56,189,248,0.5)] animate-pulse" />
-                )}
+                {(() => {
+                  const effectStartTime = effectParams?.startTime ?? 0;
+                  const effectEndTime = effectParams?.endTime ?? (effectStartTime + (effectParams?.duration ?? 3.0));
+                  const isEffectActiveAtPlayhead = activeEffectId && (currentTime >= effectStartTime && currentTime <= effectEndTime);
+
+                  if (!isEffectActiveAtPlayhead) return null;
+
+                  return (
+                    <>
+                      {(activeEffectId === 'vhs-retro' || activeEffectId?.includes('glitch') || activeEffectId?.includes('vhs') || activeEffectId?.includes('tv')) && (
+                        <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_4px,3px_100%] pointer-events-none z-10 opacity-70 animate-pulse" />
+                      )}
+                      {(activeEffectId === 'glitch-core' || activeEffectId?.includes('pixel') || activeEffectId?.includes('corruption') || activeEffectId?.includes('signal')) && (
+                        <div className="absolute inset-0 bg-primary/5 mix-blend-color-dodge pointer-events-none z-10 animate-[pulse_0.1s_infinite]" />
+                      )}
+                      {(activeEffectId === 'cinema-flare' || activeEffectId?.includes('flare') || activeEffectId?.includes('leak') || activeEffectId?.includes('prism') || activeEffectId?.includes('sun')) && (
+                        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-amber-400/10 to-blue-500/20 pointer-events-none z-10 opacity-60" />
+                      )}
+                      {(activeEffectId === 'sparkle-glow' || activeEffectId?.includes('glow') || activeEffectId?.includes('bloom') || activeEffectId?.includes('aurora') || activeEffectId?.includes('light')) && (
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(253,224,71,0.1)_0%,transparent_70%)] pointer-events-none z-10 animate-pulse" />
+                      )}
+                      {(activeEffectId === 'neon-edge' || activeEffectId?.includes('spotlight') || activeEffectId?.includes('reflection')) && (
+                        <div className="absolute inset-0 border-4 border-sky-400/30 rounded-lg pointer-events-none z-10 filter blur-[2px] shadow-[inset_0_0_15px_rgba(56,189,248,0.5)] animate-pulse" />
+                      )}
+                    </>
+                  );
+                })()}
 
                 {/* Text Overlays Layer */}
                 {textOverlays
@@ -5462,6 +5553,27 @@ function EditorMainScreenContent() {
                                     <span className="text-slate-400 text-[8.5px] font-normal">({formatTimecode(clip.duration)})</span>
                                   </span>
                                 </div>
+
+                                {/* SUBTLE BOTTOM-LEFT EFFECT BADGE ON VIDEO CLIP */}
+                                {(() => {
+                                  const clipEffList = Array.isArray(clip.appliedEffects) && clip.appliedEffects.length > 0 
+                                    ? clip.appliedEffects 
+                                    : ((activeEffectId && (clip.id === activeSelectedClipId || (!activeSelectedClipId && idx === 0))) ? [{ assetName: effectParams?.assetName || activeEffectId, duration: effectParams?.duration || 3.0 }] : []);
+                                  
+                                  if (clipEffList.length === 0) return null;
+
+                                  return (
+                                    <div className="absolute bottom-1 left-2 z-20 pointer-events-none flex items-center gap-1 max-w-[90%] truncate">
+                                      {clipEffList.map((eff: any, eIdx: number) => (
+                                        <span key={eff.id || eIdx} className="px-1.5 py-0.5 rounded font-mono text-[8.5px] bg-sky-950/90 border border-sky-400/60 text-sky-200 font-semibold truncate flex items-center gap-1 backdrop-blur-md shadow-sm">
+                                          <Sparkles className="h-2.5 w-2.5 text-sky-300 flex-shrink-0" />
+                                          <span className="truncate">{eff.assetName || eff.name || eff.id || 'Effect'}</span>
+                                          <span className="text-[7.5px] text-sky-300 opacity-80 flex-shrink-0">({(eff.duration ?? 3.0).toFixed(1)}s)</span>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
 
                                 {(isTrimModeActive && trimmingClipId === clip.id) && !isLocked && (
                                   <ClipTrimHandles

@@ -13,13 +13,14 @@ interface PreviewPlayerProps {
   colorSettings: Record<string, number>;
   activeFilterId: string | null;
   activeEffectId: string | null;
+  effectParams?: { startTime?: number; endTime?: number; duration?: number };
   textOverlays: Array<{ id: string; text: string; color: string; font: string; size: number }>;
 }
 
 export function PreviewPlayer({
   isPlaying, onPlayToggle,
   currentTime, onTimeChange, duration,
-  aspectRatio, colorSettings, activeFilterId, activeEffectId, textOverlays
+  aspectRatio, colorSettings, activeFilterId, activeEffectId, effectParams, textOverlays
 }: PreviewPlayerProps) {
   const [zoom, setZoom] = useState(100);
   const [showGrid, setShowGrid] = useState(false);
@@ -155,12 +156,24 @@ export function PreviewPlayer({
                   }}
                 />
 
-                {activeEffectId === 'vhs-retro' && (
-                  <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_4px,3px_100%] z-10 opacity-60 animate-pulse" />
-                )}
-                {activeEffectId === 'glitch-core' && (
-                  <div className="absolute inset-0 bg-primary/5 mix-blend-color-dodge z-10 animate-[pulse_0.1s_infinite]" />
-                )}
+                {(() => {
+                  const eStart = effectParams?.startTime ?? 0;
+                  const eEnd = effectParams?.endTime ?? (eStart + (effectParams?.duration ?? 3.0));
+                  const isEffectActiveInPreview = activeEffectId && (currentTime >= eStart && currentTime <= eEnd);
+
+                  if (!isEffectActiveInPreview) return null;
+
+                  return (
+                    <>
+                      {activeEffectId === 'vhs-retro' && (
+                        <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_4px,3px_100%] z-10 opacity-60 animate-pulse" />
+                      )}
+                      {activeEffectId === 'glitch-core' && (
+                        <div className="absolute inset-0 bg-primary/5 mix-blend-color-dodge z-10 animate-[pulse_0.1s_infinite]" />
+                      )}
+                    </>
+                  );
+                })()}
 
                 {textOverlays.map((t) => (
                   <div
