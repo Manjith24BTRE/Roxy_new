@@ -16,7 +16,7 @@ export function ProtectedRoute({ children }: { children?: React.ReactNode }) {
     );
   }
 
-  if (!isSignedIn) {
+  if (!isSignedIn && !import.meta.env.DEV) {
     return <Navigate to="/login" replace />;
   }
 

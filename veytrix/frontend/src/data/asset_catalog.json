@@ -1,0 +1,2112 @@
+[
+  {
+    "id": 1,
+    "name": "Hollywood Gold",
+    "type": "Filters",
+    "category": "Cinematic",
+    "plan": "Free",
+    "engineKey": "ColorGradeEngine",
+    "preset": "hollywood_gold",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 2,
+    "name": "Cinematic LUT",
+    "type": "Filters",
+    "category": "Cinematic",
+    "plan": "Free",
+    "engineKey": "ColorGradeEngine",
+    "preset": "cinematic_lut",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 3,
+    "name": "Teal & Orange",
+    "type": "Filters",
+    "category": "Cinematic",
+    "plan": "Free",
+    "engineKey": "ColorGradeEngine",
+    "preset": "teal_orange",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 4,
+    "name": "Warm CInema",
+    "type": "Filters",
+    "category": "Cinematic",
+    "plan": "Free",
+    "engineKey": "ColorGradeEngine",
+    "preset": "warm_cinema",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 5,
+    "name": "Cold Cinema",
+    "type": "Filters",
+    "category": "Cinematic",
+    "plan": "Free",
+    "engineKey": "ColorGradeEngine",
+    "preset": "cold_cinema",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 6,
+    "name": "Moddy Film",
+    "type": "Filters",
+    "category": "Cinematic",
+    "plan": "Free",
+    "engineKey": "ColorGradeEngine",
+    "preset": "moddy_film",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 7,
+    "name": "Dream Cinema",
+    "type": "Filters",
+    "category": "Cinematic",
+    "plan": "Free",
+    "engineKey": "ColorGradeEngine",
+    "preset": "dream_cinema",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 8,
+    "name": "Vinatage Cinema",
+    "type": "Filters",
+    "category": "Cinematic",
+    "plan": "Free",
+    "engineKey": "ColorGradeEngine",
+    "preset": "vinatage_cinema",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 9,
+    "name": "HDR Film",
+    "type": "Filters",
+    "category": "Cinematic",
+    "plan": "Free",
+    "engineKey": "ColorGradeEngine",
+    "preset": "hdr_film",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 10,
+    "name": "Director's Cut",
+    "type": "Filters",
+    "category": "Cinematic",
+    "plan": "Free",
+    "engineKey": "ColorGradeEngine",
+    "preset": "directors_cut",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 11,
+    "name": "Bright Pop",
+    "type": "Filters",
+    "category": "Lighting & Tone",
+    "plan": "Free",
+    "engineKey": "ToneAdjustmentEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 12,
+    "name": "Deep Contrast",
+    "type": "Filters",
+    "category": "Lighting & Tone",
+    "plan": "Free",
+    "engineKey": "ToneAdjustmentEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 13,
+    "name": "Soft Contrast",
+    "type": "Filters",
+    "category": "Lighting & Tone",
+    "plan": "Free",
+    "engineKey": "ToneAdjustmentEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 14,
+    "name": "Matte Finish",
+    "type": "Filters",
+    "category": "Lighting & Tone",
+    "plan": "Free",
+    "engineKey": "ToneAdjustmentEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 15,
+    "name": "Fade Colour",
+    "type": "Filters",
+    "category": "Lighting & Tone",
+    "plan": "Free",
+    "engineKey": "ToneAdjustmentEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 16,
+    "name": "Natural Tone",
+    "type": "Filters",
+    "category": "Lighting & Tone",
+    "plan": "Free",
+    "engineKey": "ToneAdjustmentEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 17,
+    "name": "Dynamic Tone",
+    "type": "Filters",
+    "category": "Lighting & Tone",
+    "plan": "Free",
+    "engineKey": "ToneAdjustmentEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 18,
+    "name": "GoldenGlow",
+    "type": "Filters",
+    "category": "Lighting & Tone",
+    "plan": "Free",
+    "engineKey": "ToneAdjustmentEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 19,
+    "name": "Natural Skin",
+    "type": "Filters",
+    "category": "Portrait",
+    "plan": "Free",
+    "engineKey": "PortraitRetouchEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 20,
+    "name": "Beauty Soft",
+    "type": "Filters",
+    "category": "Portrait",
+    "plan": "Free",
+    "engineKey": "PortraitRetouchEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 21,
+    "name": "Golden Skin",
+    "type": "Filters",
+    "category": "Portrait",
+    "plan": "Free",
+    "engineKey": "PortraitRetouchEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 22,
+    "name": "Fashion Look",
+    "type": "Filters",
+    "category": "Portrait",
+    "plan": "Free",
+    "engineKey": "PortraitRetouchEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 23,
+    "name": "Glamour Glow",
+    "type": "Filters",
+    "category": "Portrait",
+    "plan": "Free",
+    "engineKey": "PortraitRetouchEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 24,
+    "name": "Clean Portrait",
+    "type": "Filters",
+    "category": "Portrait",
+    "plan": "Free",
+    "engineKey": "PortraitRetouchEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 25,
+    "name": "Beauty Pro",
+    "type": "Filters",
+    "category": "Portrait",
+    "plan": "Free",
+    "engineKey": "PortraitRetouchEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 26,
+    "name": "FIlm Grain",
+    "type": "Filters",
+    "category": "Vintage & Retro",
+    "plan": "Free",
+    "engineKey": "FilmSimulationEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 27,
+    "name": "Kodak Gold",
+    "type": "Filters",
+    "category": "Vintage & Retro",
+    "plan": "Free",
+    "engineKey": "FilmSimulationEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 28,
+    "name": "Fuji Classic",
+    "type": "Filters",
+    "category": "Vintage & Retro",
+    "plan": "Free",
+    "engineKey": "FilmSimulationEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 29,
+    "name": "VHS Classix",
+    "type": "Filters",
+    "category": "Vintage & Retro",
+    "plan": "Free",
+    "engineKey": "FilmSimulationEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 30,
+    "name": "Sepia",
+    "type": "Filters",
+    "category": "Vintage & Retro",
+    "plan": "Free",
+    "engineKey": "FilmSimulationEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 31,
+    "name": "Retro Film",
+    "type": "Filters",
+    "category": "Vintage & Retro",
+    "plan": "Free",
+    "engineKey": "FilmSimulationEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 32,
+    "name": "Pure Mono",
+    "type": "Filters",
+    "category": "Black & White",
+    "plan": "Free",
+    "engineKey": "MonochromeEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 33,
+    "name": "High Contrast B/W",
+    "type": "Filters",
+    "category": "Black & White",
+    "plan": "Free",
+    "engineKey": "MonochromeEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 34,
+    "name": "Noir B/W",
+    "type": "Filters",
+    "category": "Black & White",
+    "plan": "Free",
+    "engineKey": "MonochromeEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 35,
+    "name": "Soft B/W",
+    "type": "Filters",
+    "category": "Black & White",
+    "plan": "Free",
+    "engineKey": "MonochromeEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 36,
+    "name": "Platinum B/W",
+    "type": "Filters",
+    "category": "Black & White",
+    "plan": "Free",
+    "engineKey": "MonochromeEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 37,
+    "name": "Forest Green",
+    "type": "Filters",
+    "category": "Nature & Landscape",
+    "plan": "Free",
+    "engineKey": "LandscapeEnhanceEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 38,
+    "name": "Ocean Blue",
+    "type": "Filters",
+    "category": "Nature & Landscape",
+    "plan": "Free",
+    "engineKey": "LandscapeEnhanceEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 39,
+    "name": "Tropical Paradise",
+    "type": "Filters",
+    "category": "Nature & Landscape",
+    "plan": "Free",
+    "engineKey": "LandscapeEnhanceEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 40,
+    "name": "Autumn Leaves",
+    "type": "Filters",
+    "category": "Nature & Landscape",
+    "plan": "Free",
+    "engineKey": "LandscapeEnhanceEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 41,
+    "name": "Nature HDR",
+    "type": "Filters",
+    "category": "Nature & Landscape",
+    "plan": "Free",
+    "engineKey": "LandscapeEnhanceEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 42,
+    "name": "Neon Blue",
+    "type": "Filters",
+    "category": "Neon & Cyber",
+    "plan": "Free",
+    "engineKey": "NeonGradeEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 43,
+    "name": "Neon Pink",
+    "type": "Filters",
+    "category": "Neon & Cyber",
+    "plan": "Free",
+    "engineKey": "NeonGradeEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 44,
+    "name": "Cyberpunk",
+    "type": "Filters",
+    "category": "Neon & Cyber",
+    "plan": "Free",
+    "engineKey": "NeonGradeEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 45,
+    "name": "Synthwave",
+    "type": "Filters",
+    "category": "Neon & Cyber",
+    "plan": "Free",
+    "engineKey": "NeonGradeEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 46,
+    "name": "Oil Painting",
+    "type": "Filters",
+    "category": "Creative & Artistic",
+    "plan": "Free",
+    "engineKey": "ArtisticFilterEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 47,
+    "name": "Watercolor",
+    "type": "Filters",
+    "category": "Creative & Artistic",
+    "plan": "Free",
+    "engineKey": "ArtisticFilterEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 48,
+    "name": "Comic book",
+    "type": "Filters",
+    "category": "Creative & Artistic",
+    "plan": "Free",
+    "engineKey": "ArtisticFilterEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 49,
+    "name": "Pixel Art",
+    "type": "Filters",
+    "category": "Creative & Artistic",
+    "plan": "Free",
+    "engineKey": "ArtisticFilterEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 50,
+    "name": "Double Exposure",
+    "type": "Filters",
+    "category": "Creative & Artistic",
+    "plan": "Free",
+    "engineKey": "ArtisticFilterEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 1,
+    "name": "Fade in",
+    "type": "Effects",
+    "category": "Basic Effects",
+    "plan": "Free",
+    "engineKey": "basic_animation",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 2,
+    "name": "Fade Out",
+    "type": "Effects",
+    "category": "Basic Effects",
+    "plan": "Free",
+    "engineKey": "basic_animation",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 3,
+    "name": "Zoom In ",
+    "type": "Effects",
+    "category": "Basic Effects",
+    "plan": "Free",
+    "engineKey": "basic_animation",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 4,
+    "name": "Zoom Out",
+    "type": "Effects",
+    "category": "Basic Effects",
+    "plan": "Free",
+    "engineKey": "basic_animation",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 5,
+    "name": "Spin",
+    "type": "Effects",
+    "category": "Basic Effects",
+    "plan": "Free",
+    "engineKey": "basic_animation",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 6,
+    "name": "Drop",
+    "type": "Effects",
+    "category": "Basic Effects",
+    "plan": "Free",
+    "engineKey": "basic_animation",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 7,
+    "name": "Move Left",
+    "type": "Effects",
+    "category": "Basic Effects",
+    "plan": "Free",
+    "engineKey": "basic_animation",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 8,
+    "name": "Move Right",
+    "type": "Effects",
+    "category": "Basic Effects",
+    "plan": "Free",
+    "engineKey": "basic_animation",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 9,
+    "name": "Move Up",
+    "type": "Effects",
+    "category": "Basic Effects",
+    "plan": "Free",
+    "engineKey": "basic_animation",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 10,
+    "name": "Move Down",
+    "type": "Effects",
+    "category": "Basic Effects",
+    "plan": "Free",
+    "engineKey": "basic_animation",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 11,
+    "name": "Shake in",
+    "type": "Effects",
+    "category": "Scale & Rotation",
+    "plan": "Free",
+    "engineKey": "transform_attention",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 12,
+    "name": "Zoom Bounce",
+    "type": "Effects",
+    "category": "Scale & Rotation",
+    "plan": "Free",
+    "engineKey": "transform_attention",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 13,
+    "name": "Pulse",
+    "type": "Effects",
+    "category": "Scale & Rotation",
+    "plan": "Free",
+    "engineKey": "transform_attention",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 14,
+    "name": "Pop In",
+    "type": "Effects",
+    "category": "Scale & Rotation",
+    "plan": "Free",
+    "engineKey": "transform_attention",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 15,
+    "name": "Pop Out",
+    "type": "Effects",
+    "category": "Scale & Rotation",
+    "plan": "Free",
+    "engineKey": "transform_attention",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 16,
+    "name": "Expand",
+    "type": "Effects",
+    "category": "Scale & Rotation",
+    "plan": "Free",
+    "engineKey": "transform_attention",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 17,
+    "name": "Collapse",
+    "type": "Effects",
+    "category": "Scale & Rotation",
+    "plan": "Free",
+    "engineKey": "transform_attention",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 18,
+    "name": "Swing",
+    "type": "Effects",
+    "category": "Scale & Rotation",
+    "plan": "Free",
+    "engineKey": "transform_attention",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 19,
+    "name": "Bounce",
+    "type": "Effects",
+    "category": "Scale & Rotation",
+    "plan": "Free",
+    "engineKey": "transform_attention",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 20,
+    "name": "Wiggle",
+    "type": "Effects",
+    "category": "Scale & Rotation",
+    "plan": "Free",
+    "engineKey": "transform_attention",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 21,
+    "name": "Handheld Camera",
+    "type": "Effects",
+    "category": "Motion & Camera Effect",
+    "plan": "Free",
+    "engineKey": "motion_camera",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 22,
+    "name": "Camera Shake",
+    "type": "Effects",
+    "category": "Motion & Camera Effect",
+    "plan": "Free",
+    "engineKey": "motion_camera",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 23,
+    "name": "Micro Shake",
+    "type": "Effects",
+    "category": "Motion & Camera Effect",
+    "plan": "Free",
+    "engineKey": "motion_camera",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 24,
+    "name": "Heavy Shake",
+    "type": "Effects",
+    "category": "Motion & Camera Effect",
+    "plan": "Free",
+    "engineKey": "motion_camera",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 25,
+    "name": "Crash Zoom ",
+    "type": "Effects",
+    "category": "Motion & Camera Effect",
+    "plan": "Free",
+    "engineKey": "motion_camera",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 26,
+    "name": "Smooth Zoom ",
+    "type": "Effects",
+    "category": "Motion & Camera Effect",
+    "plan": "Free",
+    "engineKey": "motion_camera",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 27,
+    "name": "Dolly In",
+    "type": "Effects",
+    "category": "Motion & Camera Effect",
+    "plan": "Free",
+    "engineKey": "motion_camera",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 28,
+    "name": "Dolly out",
+    "type": "Effects",
+    "category": "Motion & Camera Effect",
+    "plan": "Free",
+    "engineKey": "motion_camera",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 29,
+    "name": "Whip Pan Left",
+    "type": "Effects",
+    "category": "Motion & Camera Effect",
+    "plan": "Free",
+    "engineKey": "motion_camera",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 30,
+    "name": "Whip Pan Right",
+    "type": "Effects",
+    "category": "Motion & Camera Effect",
+    "plan": "Free",
+    "engineKey": "motion_camera",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 31,
+    "name": "Gaussian Blur",
+    "type": "Effects",
+    "category": "Blur & Focus Effects",
+    "plan": "Free",
+    "engineKey": "blur_focus",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 32,
+    "name": "Motion blur",
+    "type": "Effects",
+    "category": "Blur & Focus Effects",
+    "plan": "Free",
+    "engineKey": "blur_focus",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 33,
+    "name": "Directional Blur",
+    "type": "Effects",
+    "category": "Blur & Focus Effects",
+    "plan": "Free",
+    "engineKey": "blur_focus",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 34,
+    "name": "Radial Blur",
+    "type": "Effects",
+    "category": "Blur & Focus Effects",
+    "plan": "Free",
+    "engineKey": "blur_focus",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 35,
+    "name": "Zoom Blur",
+    "type": "Effects",
+    "category": "Blur & Focus Effects",
+    "plan": "Free",
+    "engineKey": "blur_focus",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 36,
+    "name": "Lens Blur ",
+    "type": "Effects",
+    "category": "Blur & Focus Effects",
+    "plan": "Free",
+    "engineKey": "blur_focus",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 37,
+    "name": "Broken Blur",
+    "type": "Effects",
+    "category": "Blur & Focus Effects",
+    "plan": "Free",
+    "engineKey": "blur_focus",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 38,
+    "name": "Tilt Blur",
+    "type": "Effects",
+    "category": "Blur & Focus Effects",
+    "plan": "Free",
+    "engineKey": "blur_focus",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 39,
+    "name": "Focus Blur",
+    "type": "Effects",
+    "category": "Blur & Focus Effects",
+    "plan": "Free",
+    "engineKey": "blur_focus",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 40,
+    "name": "Background Blur",
+    "type": "Effects",
+    "category": "Blur & Focus Effects",
+    "plan": "Free",
+    "engineKey": "blur_focus",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 41,
+    "name": "RGB Split",
+    "type": "Effects",
+    "category": "Glicth & Digital Effects",
+    "plan": "Free",
+    "engineKey": "glitch_digital",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 42,
+    "name": "Digital Glitch",
+    "type": "Effects",
+    "category": "Glicth & Digital Effects",
+    "plan": "Free",
+    "engineKey": "glitch_digital",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 43,
+    "name": "Data Corruption",
+    "type": "Effects",
+    "category": "Glicth & Digital Effects",
+    "plan": "Free",
+    "engineKey": "glitch_digital",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 44,
+    "name": "Signal loss",
+    "type": "Effects",
+    "category": "Glicth & Digital Effects",
+    "plan": "Free",
+    "engineKey": "glitch_digital",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 45,
+    "name": "Screen Tear",
+    "type": "Effects",
+    "category": "Glicth & Digital Effects",
+    "plan": "Free",
+    "engineKey": "glitch_digital",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 46,
+    "name": "Pixel Sort",
+    "type": "Effects",
+    "category": "Glicth & Digital Effects",
+    "plan": "Free",
+    "engineKey": "glitch_digital",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 47,
+    "name": "Pixel Stretch",
+    "type": "Effects",
+    "category": "Glicth & Digital Effects",
+    "plan": "Free",
+    "engineKey": "glitch_digital",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 48,
+    "name": "Pixel Explosion",
+    "type": "Effects",
+    "category": "Glicth & Digital Effects",
+    "plan": "Free",
+    "engineKey": "glitch_digital",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 49,
+    "name": "TV Static",
+    "type": "Effects",
+    "category": "Glicth & Digital Effects",
+    "plan": "Free",
+    "engineKey": "glitch_digital",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 50,
+    "name": "Scan Lines",
+    "type": "Effects",
+    "category": "Glicth & Digital Effects",
+    "plan": "Free",
+    "engineKey": "glitch_digital",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 51,
+    "name": "FIlm Grain",
+    "type": "Effects",
+    "category": "Cinematic & Film Effcts",
+    "plan": "Free",
+    "engineKey": "cinematic_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 52,
+    "name": "Film Burn",
+    "type": "Effects",
+    "category": "Cinematic & Film Effcts",
+    "plan": "Free",
+    "engineKey": "cinematic_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 53,
+    "name": "Light Leak",
+    "type": "Effects",
+    "category": "Cinematic & Film Effcts",
+    "plan": "Free",
+    "engineKey": "cinematic_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 54,
+    "name": "Lens Flare",
+    "type": "Effects",
+    "category": "Cinematic & Film Effcts",
+    "plan": "Free",
+    "engineKey": "cinematic_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 55,
+    "name": "Bloom",
+    "type": "Effects",
+    "category": "Cinematic & Film Effcts",
+    "plan": "Free",
+    "engineKey": "cinematic_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 56,
+    "name": "Soft Glow",
+    "type": "Effects",
+    "category": "Cinematic & Film Effcts",
+    "plan": "Free",
+    "engineKey": "cinematic_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 57,
+    "name": "Golden Hour",
+    "type": "Effects",
+    "category": "Cinematic & Film Effcts",
+    "plan": "Free",
+    "engineKey": "cinematic_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 58,
+    "name": "Blue Hour",
+    "type": "Effects",
+    "category": "Cinematic & Film Effcts",
+    "plan": "Free",
+    "engineKey": "cinematic_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 59,
+    "name": "Moonlight",
+    "type": "Effects",
+    "category": "Cinematic & Film Effcts",
+    "plan": "Free",
+    "engineKey": "cinematic_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 60,
+    "name": "Cinematic Contrast",
+    "type": "Effects",
+    "category": "Cinematic & Film Effcts",
+    "plan": "Free",
+    "engineKey": "cinematic_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 61,
+    "name": "Fog",
+    "type": "Effects",
+    "category": "Atmospheric & Weather Effects",
+    "plan": "Free",
+    "engineKey": "atmospheric_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 62,
+    "name": "Mist",
+    "type": "Effects",
+    "category": "Atmospheric & Weather Effects",
+    "plan": "Free",
+    "engineKey": "atmospheric_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 63,
+    "name": "Smoke Overlay",
+    "type": "Effects",
+    "category": "Atmospheric & Weather Effects",
+    "plan": "Free",
+    "engineKey": "atmospheric_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 64,
+    "name": "Rain",
+    "type": "Effects",
+    "category": "Atmospheric & Weather Effects",
+    "plan": "Free",
+    "engineKey": "atmospheric_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 65,
+    "name": "Snow",
+    "type": "Effects",
+    "category": "Atmospheric & Weather Effects",
+    "plan": "Free",
+    "engineKey": "atmospheric_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 66,
+    "name": "Lightning Flash",
+    "type": "Effects",
+    "category": "Atmospheric & Weather Effects",
+    "plan": "Free",
+    "engineKey": "atmospheric_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 67,
+    "name": "Dust Particles",
+    "type": "Effects",
+    "category": "Atmospheric & Weather Effects",
+    "plan": "Free",
+    "engineKey": "atmospheric_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 68,
+    "name": "Atmosphere",
+    "type": "Effects",
+    "category": "Atmospheric & Weather Effects",
+    "plan": "Free",
+    "engineKey": "atmospheric_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 69,
+    "name": "Haze",
+    "type": "Effects",
+    "category": "Atmospheric & Weather Effects",
+    "plan": "Free",
+    "engineKey": "atmospheric_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 70,
+    "name": "Heat Blur",
+    "type": "Effects",
+    "category": "Atmospheric & Weather Effects",
+    "plan": "Free",
+    "engineKey": "atmospheric_fx",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 71,
+    "name": "Sun GLow",
+    "type": "Effects",
+    "category": "Light & Illumination Effects",
+    "plan": "Free",
+    "engineKey": "LightingFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 72,
+    "name": "Sun Rays",
+    "type": "Effects",
+    "category": "Light & Illumination Effects",
+    "plan": "Free",
+    "engineKey": "LightingFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 73,
+    "name": "God Rays",
+    "type": "Effects",
+    "category": "Light & Illumination Effects",
+    "plan": "Free",
+    "engineKey": "LightingFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 74,
+    "name": "Spotlight",
+    "type": "Effects",
+    "category": "Light & Illumination Effects",
+    "plan": "Free",
+    "engineKey": "LightingFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 75,
+    "name": "Studio Light",
+    "type": "Effects",
+    "category": "Light & Illumination Effects",
+    "plan": "Free",
+    "engineKey": "LightingFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 76,
+    "name": "Ring Light",
+    "type": "Effects",
+    "category": "Light & Illumination Effects",
+    "plan": "Free",
+    "engineKey": "LightingFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 77,
+    "name": "FIll Light",
+    "type": "Effects",
+    "category": "Light & Illumination Effects",
+    "plan": "Free",
+    "engineKey": "LightingFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 78,
+    "name": "Rim Light",
+    "type": "Effects",
+    "category": "Light & Illumination Effects",
+    "plan": "Free",
+    "engineKey": "LightingFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 79,
+    "name": "Neon Glow",
+    "type": "Effects",
+    "category": "Light & Illumination Effects",
+    "plan": "Free",
+    "engineKey": "LightingFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 80,
+    "name": "Volumetric Light",
+    "type": "Effects",
+    "category": "Light & Illumination Effects",
+    "plan": "Free",
+    "engineKey": "LightingFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 81,
+    "name": "Fish Eye",
+    "type": "Effects",
+    "category": "Distortion & Reflection effects",
+    "plan": "Free",
+    "engineKey": "DistortionFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 82,
+    "name": "Wide Angle ",
+    "type": "Effects",
+    "category": "Distortion & Reflection effects",
+    "plan": "Free",
+    "engineKey": "DistortionFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 83,
+    "name": "Barrel Distortion",
+    "type": "Effects",
+    "category": "Distortion & Reflection effects",
+    "plan": "Free",
+    "engineKey": "DistortionFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 84,
+    "name": "Pincushion",
+    "type": "Effects",
+    "category": "Distortion & Reflection effects",
+    "plan": "Free",
+    "engineKey": "DistortionFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 85,
+    "name": "Chromatic Aberration",
+    "type": "Effects",
+    "category": "Distortion & Reflection effects",
+    "plan": "Free",
+    "engineKey": "DistortionFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 86,
+    "name": "Prism",
+    "type": "Effects",
+    "category": "Distortion & Reflection effects",
+    "plan": "Free",
+    "engineKey": "DistortionFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 87,
+    "name": "Glass Reflection",
+    "type": "Effects",
+    "category": "Distortion & Reflection effects",
+    "plan": "Free",
+    "engineKey": "DistortionFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 88,
+    "name": "Water Reflection ",
+    "type": "Effects",
+    "category": "Distortion & Reflection effects",
+    "plan": "Free",
+    "engineKey": "DistortionFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 89,
+    "name": "Ripple ",
+    "type": "Effects",
+    "category": "Distortion & Reflection effects",
+    "plan": "Free",
+    "engineKey": "DistortionFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 90,
+    "name": "Swirl",
+    "type": "Effects",
+    "category": "Distortion & Reflection effects",
+    "plan": "Free",
+    "engineKey": "DistortionFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 91,
+    "name": "Vintage FIlm",
+    "type": "Effects",
+    "category": "Retro & Stylized Effects",
+    "plan": "Free",
+    "engineKey": "RetroFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 92,
+    "name": "Super 8 Film",
+    "type": "Effects",
+    "category": "Retro & Stylized Effects",
+    "plan": "Free",
+    "engineKey": "RetroFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 93,
+    "name": "16mm Film",
+    "type": "Effects",
+    "category": "Retro & Stylized Effects",
+    "plan": "Free",
+    "engineKey": "RetroFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 94,
+    "name": "35mm Film",
+    "type": "Effects",
+    "category": "Retro & Stylized Effects",
+    "plan": "Free",
+    "engineKey": "RetroFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 95,
+    "name": "Silent Film",
+    "type": "Effects",
+    "category": "Retro & Stylized Effects",
+    "plan": "Free",
+    "engineKey": "RetroFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 96,
+    "name": "Sepia FIlm",
+    "type": "Effects",
+    "category": "Retro & Stylized Effects",
+    "plan": "Free",
+    "engineKey": "RetroFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 97,
+    "name": "Old Photograpgh",
+    "type": "Effects",
+    "category": "Retro & Stylized Effects",
+    "plan": "Free",
+    "engineKey": "RetroFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 98,
+    "name": "Color Isolation",
+    "type": "Effects",
+    "category": "Retro & Stylized Effects",
+    "plan": "Free",
+    "engineKey": "RetroFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 99,
+    "name": "Double Exposure",
+    "type": "Effects",
+    "category": "Retro & Stylized Effects",
+    "plan": "Free",
+    "engineKey": "RetroFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 100,
+    "name": "Kaleidoscope",
+    "type": "Effects",
+    "category": "Retro & Stylized Effects",
+    "plan": "Free",
+    "engineKey": "RetroFXEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 1,
+    "name": "Cross Dissolve",
+    "type": "Transitions",
+    "category": "Basic",
+    "plan": "Free",
+    "engineKey": "DissolveTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 2,
+    "name": "Fade To Black",
+    "type": "Transitions",
+    "category": "Basic",
+    "plan": "Free",
+    "engineKey": "DissolveTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 3,
+    "name": "Fade to Wight",
+    "type": "Transitions",
+    "category": "Basic",
+    "plan": "Free",
+    "engineKey": "DissolveTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 4,
+    "name": "Dip to color",
+    "type": "Transitions",
+    "category": "Basic",
+    "plan": "Free",
+    "engineKey": "DissolveTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 5,
+    "name": "Instant Cut",
+    "type": "Transitions",
+    "category": "Basic",
+    "plan": "Free",
+    "engineKey": "DissolveTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 6,
+    "name": "Smooth Fade",
+    "type": "Transitions",
+    "category": "Basic",
+    "plan": "Free",
+    "engineKey": "DissolveTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 7,
+    "name": "Flash Cut",
+    "type": "Transitions",
+    "category": "Basic",
+    "plan": "Free",
+    "engineKey": "DissolveTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 8,
+    "name": "Soft Dissolve",
+    "type": "Transitions",
+    "category": "Basic",
+    "plan": "Free",
+    "engineKey": "DissolveTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 9,
+    "name": "Blur Disslove",
+    "type": "Transitions",
+    "category": "Basic",
+    "plan": "Free",
+    "engineKey": "DissolveTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 10,
+    "name": "Luma Fade",
+    "type": "Transitions",
+    "category": "Basic",
+    "plan": "Free",
+    "engineKey": "DissolveTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 11,
+    "name": "Handheld Transition",
+    "type": "Transitions",
+    "category": "Camera",
+    "plan": "Free",
+    "engineKey": "CameraTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 12,
+    "name": "Camera Shake",
+    "type": "Transitions",
+    "category": "Camera",
+    "plan": "Free",
+    "engineKey": "CameraTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 13,
+    "name": "Crash Zoom",
+    "type": "Transitions",
+    "category": "Camera",
+    "plan": "Free",
+    "engineKey": "CameraTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 14,
+    "name": "Snap Zoom",
+    "type": "Transitions",
+    "category": "Camera",
+    "plan": "Free",
+    "engineKey": "CameraTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 15,
+    "name": "Dolly Zoom",
+    "type": "Transitions",
+    "category": "Camera",
+    "plan": "Free",
+    "engineKey": "CameraTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 16,
+    "name": "Pull In",
+    "type": "Transitions",
+    "category": "Camera",
+    "plan": "Free",
+    "engineKey": "CameraTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 17,
+    "name": "Pull Out",
+    "type": "Transitions",
+    "category": "Camera",
+    "plan": "Free",
+    "engineKey": "CameraTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 18,
+    "name": "Orbit Camera",
+    "type": "Transitions",
+    "category": "Camera",
+    "plan": "Free",
+    "engineKey": "CameraTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 19,
+    "name": "Whip Pan Left",
+    "type": "Transitions",
+    "category": "Camera",
+    "plan": "Free",
+    "engineKey": "CameraTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 20,
+    "name": "Whip Pan Right ",
+    "type": "Transitions",
+    "category": "Camera",
+    "plan": "Free",
+    "engineKey": "CameraTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 21,
+    "name": "Zoom In",
+    "type": "Transitions",
+    "category": "Zoom",
+    "plan": "Free",
+    "engineKey": "ZoomTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 22,
+    "name": "Zoom Out",
+    "type": "Transitions",
+    "category": "Zoom",
+    "plan": "Free",
+    "engineKey": "ZoomTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 23,
+    "name": "Hyper Zoom",
+    "type": "Transitions",
+    "category": "Zoom",
+    "plan": "Free",
+    "engineKey": "ZoomTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 24,
+    "name": "Elastic Zoom",
+    "type": "Transitions",
+    "category": "Zoom",
+    "plan": "Free",
+    "engineKey": "ZoomTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 25,
+    "name": "Bounce Zoom",
+    "type": "Transitions",
+    "category": "Zoom",
+    "plan": "Free",
+    "engineKey": "ZoomTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 26,
+    "name": "Pulse Zoom",
+    "type": "Transitions",
+    "category": "Zoom",
+    "plan": "Free",
+    "engineKey": "ZoomTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 27,
+    "name": "Center Zoom",
+    "type": "Transitions",
+    "category": "Zoom",
+    "plan": "Free",
+    "engineKey": "ZoomTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 28,
+    "name": "Corner Zoom",
+    "type": "Transitions",
+    "category": "Zoom",
+    "plan": "Free",
+    "engineKey": "ZoomTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 29,
+    "name": "Radial Zoom",
+    "type": "Transitions",
+    "category": "Zoom",
+    "plan": "Free",
+    "engineKey": "ZoomTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 30,
+    "name": "Velocity Zoom",
+    "type": "Transitions",
+    "category": "Zoom",
+    "plan": "Free",
+    "engineKey": "ZoomTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 31,
+    "name": "Slide Left",
+    "type": "Transitions",
+    "category": "Slide",
+    "plan": "Free",
+    "engineKey": "SlideTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 32,
+    "name": "Slide Right",
+    "type": "Transitions",
+    "category": "Slide",
+    "plan": "Free",
+    "engineKey": "SlideTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 33,
+    "name": "Slide Up",
+    "type": "Transitions",
+    "category": "Slide",
+    "plan": "Free",
+    "engineKey": "SlideTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 34,
+    "name": "Slide Down",
+    "type": "Transitions",
+    "category": "Slide",
+    "plan": "Free",
+    "engineKey": "SlideTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 35,
+    "name": "Push left ",
+    "type": "Transitions",
+    "category": "Slide",
+    "plan": "Free",
+    "engineKey": "SlideTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 36,
+    "name": "Push Right",
+    "type": "Transitions",
+    "category": "Slide",
+    "plan": "Free",
+    "engineKey": "SlideTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 37,
+    "name": "Push Up",
+    "type": "Transitions",
+    "category": "Slide",
+    "plan": "Free",
+    "engineKey": "SlideTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 38,
+    "name": "Push Down",
+    "type": "Transitions",
+    "category": "Slide",
+    "plan": "Free",
+    "engineKey": "SlideTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 39,
+    "name": "Diagonal Slide",
+    "type": "Transitions",
+    "category": "Slide",
+    "plan": "Free",
+    "engineKey": "SlideTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 40,
+    "name": "Perspective Push",
+    "type": "Transitions",
+    "category": "Slide",
+    "plan": "Free",
+    "engineKey": "SlideTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 41,
+    "name": "Spin Left",
+    "type": "Transitions",
+    "category": "Spin",
+    "plan": "Free",
+    "engineKey": "SpinTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 42,
+    "name": "Spin Right",
+    "type": "Transitions",
+    "category": "Spin",
+    "plan": "Free",
+    "engineKey": "SpinTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 43,
+    "name": "360 Rotate",
+    "type": "Transitions",
+    "category": "Spin",
+    "plan": "Free",
+    "engineKey": "SpinTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 44,
+    "name": "3D Flip",
+    "type": "Transitions",
+    "category": "Spin",
+    "plan": "Free",
+    "engineKey": "SpinTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 45,
+    "name": "Page Flip",
+    "type": "Transitions",
+    "category": "Spin",
+    "plan": "Free",
+    "engineKey": "SpinTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 46,
+    "name": "Barrel Roll",
+    "type": "Transitions",
+    "category": "Spin",
+    "plan": "Free",
+    "engineKey": "SpinTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 47,
+    "name": "Twist Rotate",
+    "type": "Transitions",
+    "category": "Spin",
+    "plan": "Free",
+    "engineKey": "SpinTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 48,
+    "name": "Helix Spin",
+    "type": "Transitions",
+    "category": "Spin",
+    "plan": "Free",
+    "engineKey": "SpinTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 49,
+    "name": "Cylinder Rotate",
+    "type": "Transitions",
+    "category": "Spin",
+    "plan": "Free",
+    "engineKey": "SpinTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 50,
+    "name": "Portal SPin",
+    "type": "Transitions",
+    "category": "Spin",
+    "plan": "Free",
+    "engineKey": "SpinTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 51,
+    "name": "Motion Blur",
+    "type": "Transitions",
+    "category": "Blur",
+    "plan": "Free",
+    "engineKey": "BlurTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 52,
+    "name": "Gaussian Blur",
+    "type": "Transitions",
+    "category": "Blur",
+    "plan": "Free",
+    "engineKey": "BlurTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 53,
+    "name": "Directional Blur",
+    "type": "Transitions",
+    "category": "Blur",
+    "plan": "Free",
+    "engineKey": "BlurTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 54,
+    "name": "Radial Blur",
+    "type": "Transitions",
+    "category": "Blur",
+    "plan": "Free",
+    "engineKey": "BlurTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 55,
+    "name": "Lens Blur ",
+    "type": "Transitions",
+    "category": "Blur",
+    "plan": "Free",
+    "engineKey": "BlurTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 56,
+    "name": "Broken Blur",
+    "type": "Transitions",
+    "category": "Blur",
+    "plan": "Free",
+    "engineKey": "BlurTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 57,
+    "name": "Blur Flash",
+    "type": "Transitions",
+    "category": "Blur",
+    "plan": "Free",
+    "engineKey": "BlurTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 58,
+    "name": "Blur Stretch",
+    "type": "Transitions",
+    "category": "Blur",
+    "plan": "Free",
+    "engineKey": "BlurTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 59,
+    "name": "Blur Tunnel ",
+    "type": "Transitions",
+    "category": "Blur",
+    "plan": "Free",
+    "engineKey": "BlurTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  },
+  {
+    "id": 60,
+    "name": "Cinematic Blur",
+    "type": "Transitions",
+    "category": "Blur",
+    "plan": "Free",
+    "engineKey": "BlurTransitionEngine",
+    "enabled": true,
+    "version": "1.0.0"
+  }
+]

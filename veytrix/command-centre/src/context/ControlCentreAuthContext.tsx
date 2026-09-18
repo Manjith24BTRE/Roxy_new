@@ -117,17 +117,20 @@ export const ControlCentreAuthProvider = ({ children }: { children: React.ReactN
 
   const logout = async () => {
     try {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'global' });
       
       localStorage.removeItem('veytrix_control_session');
       sessionStorage.removeItem('veytrix_control_session');
+      localStorage.removeItem('veytrix_user_profile');
       
       setSession(null);
       setUser(null);
+      setIsUnauthorizedNormalUser(false);
       
-      window.location.href = '/';
+      window.location.href = '/login';
     } catch (error) {
       console.error('Logout error:', error);
+      throw error;
     }
   };
 

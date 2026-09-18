@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  Scissors, Copy, Trash2, Key, CornerDownRight, 
+  Scissors, Copy, Trash2, Key, 
   RotateCcw, VolumeX, Volume2, Link2Off, Snowflake, Replace, Lock, Unlock, 
   ChevronRight, Clipboard, Edit3, Gauge, Layers, Image as ImageIcon
 } from 'lucide-react';
@@ -31,13 +31,12 @@ export function ClipActionsPanel({
   const hasClip = !!clip;
   const isAudioEnabled = clip ? (clip.trackId === 'video' || clip.trackId === 'audio') : false;
 
-  // Action order: Duplicate, Split, Trim, Speed, Transition, Keyframes, Overlap, Reverse, Freeze, Mute, Extract, Replace, Rename, Lock/Unlock, Delete
+  // Action order: Duplicate, Split, Trim, Speed, Keyframes, Overlap, Reverse, Freeze, Mute, Extract, Replace, Rename, Lock/Unlock, Delete
   const toolbarItems = [
     { id: 'duplicate', label: 'Duplicate', icon: Copy, disabled: !hasClip || isReversing, locked: isLocked },
     { id: 'split', label: 'Split', icon: Scissors, disabled: !hasClip || isReversing, locked: isLocked },
     { id: 'trim', label: 'Trim', icon: ChevronRight, disabled: !hasClip || isReversing, locked: isLocked },
     { id: 'speed', label: 'Speed', icon: Gauge, disabled: !hasClip || isReversing, locked: isLocked },
-    { id: 'add-transition', label: 'Transition', icon: CornerDownRight, disabled: !hasClip || isReversing, locked: isLocked },
     { id: 'keyframes', label: 'Keyframe', icon: Key, disabled: !hasClip || isReversing, locked: isLocked },
     { id: 'overlap', label: clip?.trackId === 'overlay' ? 'Main Video' : 'Overlap', icon: Layers, disabled: !hasClip || clip?.trackId === 'audio' || clip?.trackId === 'music' || isReversing, active: clip?.trackId === 'overlay', locked: isLocked },
     { id: 'cover', label: 'Cover', icon: ImageIcon, disabled: !hasVideo || isReversing, locked: false },

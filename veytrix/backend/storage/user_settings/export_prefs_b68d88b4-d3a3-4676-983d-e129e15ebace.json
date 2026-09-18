@@ -1,0 +1,10 @@
+{
+  "resolution": "720p (1280x720)",
+  "fps": "30 fps",
+  "codec": "AV1",
+  "bitrate": "High (15 Mbps)",
+  "audioQuality": "Stereo (320 kbps)",
+  "audio_codec": "Stereo (320 kbps)",
+  "exportFolder": "/users/veytrix/exports",
+  "export_folder": "/users/veytrix/exports"
+}

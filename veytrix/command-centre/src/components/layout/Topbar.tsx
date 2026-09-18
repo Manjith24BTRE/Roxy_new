@@ -7,8 +7,13 @@ export const Topbar = ({ onMenuClick }: { onMenuClick: () => void }) => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
-    setIsLoggingOut(true);
-    await logout();
+    try {
+      setIsLoggingOut(true);
+      await logout();
+    } catch (err) {
+      console.error('Logout operation failed:', err);
+      setIsLoggingOut(false);
+    }
   };
 
   return (

@@ -17,9 +17,6 @@ import { AudioFadeCommand } from '../commands/audio/AudioFadeCommand';
 import { RotateCommand } from '../commands/transform/RotateCommand';
 import { ScaleCommand } from '../commands/transform/ScaleCommand';
 import { AspectRatioCommand } from '../commands/transform/AspectRatioCommand';
-import { EffectCommand } from '../commands/effects/EffectCommand';
-import { FilterCommand } from '../commands/effects/FilterCommand';
-import { TransitionCommand } from '../commands/effects/TransitionCommand';
 import { TextCommand } from '../commands/text/TextCommand';
 
 export function initializeCommandRegistry(): CommandRegistry {
@@ -49,10 +46,7 @@ export function initializeCommandRegistry(): CommandRegistry {
   registry.register(new ScaleCommand());
   registry.register(new AspectRatioCommand());
 
-  // Register effects, filters, transitions, text
-  registry.register(new EffectCommand());
-  registry.register(new FilterCommand());
-  registry.register(new TransitionCommand());
+  // Register text
   registry.register(new TextCommand());
 
   return registry;

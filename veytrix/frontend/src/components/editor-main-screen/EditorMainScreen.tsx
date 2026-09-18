@@ -6,7 +6,7 @@ import {
   Wand2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   ZoomIn, ZoomOut, Scissors, Split, Plus, Search,
   FolderPlus, Maximize2, RotateCcw, Image as ImageIcon,
-  Languages, Crop, Lock, Unlock, Gauge, Replace, ArrowRightLeft, Sliders, Activity, Edit3, Layers, Music, Video, Sparkles
+  Languages, Crop, Lock, Unlock, Gauge, Replace, ArrowRightLeft, Sliders, SlidersHorizontal, Activity, Edit3, Layers, Music, Video, Sparkles
 } from 'lucide-react';
 import { AiAssistantPanel, EditorContextProvider } from '../../features/ai_command_engine';
 
@@ -15,23 +15,37 @@ import { useProjectMedia } from '../../contexts/ProjectMediaContext';
 import { ExportCenter } from './components/ExportCenter/ExportCenter';
 import { CoverThumbnailModal } from './tools/cover/CoverThumbnailModal';
 
-// Quick AI Edit Imports
 import { AspectRatio } from './tools/aspect-ratio/AspectRatio';
 import { Audio } from './tools/audio/Audio';
 import { TextPanel, TextOverlay } from './tools/text/TextPanel';
+import { FiltersPanel, colorGradeEngine, toneAdjustmentEngine, portraitRetouchEngine, filmSimulationEngine, monochromeEngine, landscapeEnhanceEngine, neonGradeEngine, artisticFilterEngine } from './tools/filters';
+import { EffectsPanel } from './tools/effects/EffectsPanel';
+import { basicAnimationEngine } from './tools/effects/engines/basicAnimation/BasicAnimationEngine';
+import { transformAttentionEngine } from './tools/effects/engines/transformAttention/TransformAttentionEngine';
+import { motionCameraEngine } from './tools/effects/engines/motionCamera/MotionCameraEngine';
+import { blurFocusEngine } from './tools/effects/engines/blurFocus/BlurFocusEngine';
+import { glitchDigitalEngine } from './tools/effects/engines/glitchDigital/GlitchDigitalEngine';
+import { cinematicFXEngine } from './tools/effects/engines/cinematicFx/CinematicFXEngine';
+import { atmosphericFXEngine } from './tools/effects/engines/atmosphericFx/AtmosphericFXEngine';
+import { lightingFXEngine } from './tools/effects/engines/lightingFx/LightingFXEngine';
+import { distortionFXEngine } from './tools/effects/engines/distortionFx/DistortionFXEngine';
+import { retroFXEngine } from './tools/effects/engines/retroFx/RetroFXEngine';
+import { TransitionsPanel } from './tools/transitions/TransitionsPanel';
+import { dissolveTransitionEngine } from './tools/transitions/engines/dissolve/DissolveTransitionEngine';
+import { cameraTransitionEngine } from './tools/transitions/engines/camera/CameraTransitionEngine';
+import { zoomTransitionEngine } from './tools/transitions/engines/zoom/ZoomTransitionEngine';
+import { slideTransitionEngine } from './tools/transitions/engines/slide/SlideTransitionEngine';
+import { spinTransitionEngine } from './tools/transitions/engines/spin/SpinTransitionEngine';
+import { blurTransitionEngine } from './tools/transitions/engines/blur/BlurTransitionEngine';
+
+
+
+
+
+import { assetRegistry } from '../../services/AssetRegistry';
 import { Captions, CaptionItem } from './tools/captions/Captions';
-import { Effects } from './tools/effects/Effects';
-import { Filters } from './tools/filters/Filters';
-import { Transitions } from './tools/transitions/Transitions';
-import { resolveFrontendTransition, renderFrontendTransitionFrame } from './tools/transitions/frontendTransitionEngine';
-import { resolveFrontendEffect, renderFrontendEffectFrame } from './tools/effects/frontendEffectEngine';
 import { SpeedTool, clampPlaybackRate, getSourceDuration, getEffectiveDuration, timelineTimeToSourceTime, sourceTimeToTimelineTime } from './tools/speed';
 import { ReplaceTool, ReplaceMediaPayload } from './tools/replace';
-// Force IDE cache refresh for folder casing
-import { SAMPLE_FILTERS, getInterpolatedFilter } from './tools/filters/samples';
-import { SAMPLE_TRANSITIONS_NEW } from './tools/transitions/Transitions.data';
-import { EFFECT_PRESETS, EffectPreset, AppliedEffect, EffectKeyframe, getInterpolatedEffectProps } from './tools/effects/effectsPreset';
-import { applyEffectPipeline, renderStateToCSS, createDefaultRenderState } from './tools/effects/renderers';
 import { useDuplicate } from './tools/duplicate';
 import { useRename, RenameDialog } from './tools/rename';
 import { useReverse, reversedAudioEngine } from './tools/reverse';
@@ -205,9 +219,6 @@ function EditorMainScreenContent() {
       seekingMapRef.current[clipId] = false;
     }
   }, []);
-
-  // Memoized Map for O(1) sample filter lookups during canvas rendering
-  const sampleFiltersMap = useMemo(() => new Map(SAMPLE_FILTERS.map((f: any) => [f.id, f])), []);
 
   // Duplicate hook initialization
   const { duplicateClipSequence, handleDuplicateEffect } = useDuplicate({ showToast });
@@ -844,7 +855,7 @@ function EditorMainScreenContent() {
   const [captions, setCaptionsState] = useState<CaptionItem[]>([]);
   const [activeFilterId, setActiveFilterIdState] = useState<string | null>(null);
   const [previewFilterId, setPreviewFilterId] = useState<string | null>(null);
-  const [filterIntensity, setFilterIntensityState] = useState(80);
+  const [filterIntensity, setFilterIntensityState] = useState(1.0);
   const [filterOpacity, setFilterOpacityState] = useState(100);
   const [filterBlendMode, setFilterBlendModeState] = useState('normal');
   const [filterEnabled, setFilterEnabledState] = useState(true);
@@ -854,6 +865,7 @@ function EditorMainScreenContent() {
   const [effectStrength, setEffectStrengthState] = useState(60);
   const [effectSpeed, setEffectSpeedState] = useState(50);
   const [activeTransitionId, setActiveTransitionId] = useState<string | null>(null);
+  const [transitionDuration, setTransitionDuration] = useState<number>(1.0);
   const [captionStyle, setCaptionStyle] = useState({
     font: 'Outfit',
     size: 24,
@@ -992,7 +1004,7 @@ function EditorMainScreenContent() {
     commitTransaction(getProjectState());
   }, [beginTransaction, commitTransaction, getProjectState]);
 
-  const handleUpdateAppliedEffect = useCallback((clipId: string, effectId: string, updates: Partial<AppliedEffect>) => {
+  const handleUpdateAppliedEffect = useCallback((clipId: string, effectId: string, updates: any) => {
     setTimelineClipsState((prev) =>
       prev.map((c) => {
         if (c.id === clipId) {
@@ -1029,71 +1041,6 @@ function EditorMainScreenContent() {
     );
     commitTransaction(getProjectState());
   }, [beginTransaction, commitTransaction, getProjectState]);
-
-  const handleAddAppliedEffect = useCallback((presetId: string) => {
-    const preset = EFFECT_PRESETS.find(p => p.id === presetId);
-    if (!preset) return;
-
-    const totalDur = timelineClipsRef.current.reduce((acc, c) => acc + c.duration, 0) || 5;
-    const curTime = currentTimeRef.current;
-    const activeClip = timelineClipsRef.current.find(c => curTime >= c.timelineStart && curTime < c.timelineStart + c.duration) ||
-      (curTime >= totalDur ? timelineClipsRef.current[timelineClipsRef.current.length - 1] : timelineClipsRef.current[0]);
-
-    if (activeClip) {
-      const existingEffect = activeClip.appliedEffects?.find(
-        (e: AppliedEffect) => e.presetId === presetId || e.presetId === preset.id || e.name === preset.name
-      );
-
-      beginTransaction(existingEffect ? 'Remove effect' : 'Apply effect', getProjectState());
-
-      if (existingEffect) {
-        setTimelineClipsState((prev) =>
-          prev.map((c) => {
-            if (c.id === activeClip.id) {
-              const appliedEffects = c.appliedEffects ? c.appliedEffects.filter((e: any) => e.id !== existingEffect.id) : [];
-              return { ...c, appliedEffects };
-            }
-            return c;
-          })
-        );
-        if (activeAppliedEffectId === existingEffect.id) {
-          setActiveAppliedEffectId(null);
-        }
-        commitTransaction(getProjectState());
-        showToast(`Effect "${preset.name}" removed from clip`);
-        return;
-      }
-
-      const newEffect: AppliedEffect = {
-        id: `effect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        presetId: preset.id,
-        name: preset.name,
-        category: preset.category,
-        enabled: true,
-        intensity: preset.defaultIntensity,
-        opacity: preset.defaultOpacity,
-        speed: preset.defaultSpeed,
-        angle: preset.defaultAngle,
-        direction: preset.defaultDirection,
-        blendMode: preset.defaultBlendMode,
-        keyframes: []
-      };
-
-      setTimelineClipsState((prev) =>
-        prev.map((c) => {
-          if (c.id === activeClip.id) {
-            return { ...c, appliedEffects: [newEffect] };
-          }
-          return c;
-        })
-      );
-      setActiveAppliedEffectId(newEffect.id);
-      commitTransaction(getProjectState());
-      showToast(`Effect "${preset.name}" applied to active clip`);
-    } else {
-      showToast('No active clip found to apply effect');
-    }
-  }, [activeAppliedEffectId, beginTransaction, commitTransaction, getProjectState, showToast]);
 
   const applyProjectState = useCallback((state: ProjectState) => {
     setTimelineClipsState(state.timelineClips);
@@ -1342,8 +1289,7 @@ function EditorMainScreenContent() {
 
     beginTransaction('Apply filter', getProjectState());
 
-    const filterObj = id ? SAMPLE_FILTERS.find((f: any) => f.id === id) : null;
-    const defaultIntensity = filterObj ? (filterObj.defaultIntensity ?? 80) : filterIntensity;
+    const defaultIntensity = filterIntensity;
 
     setActiveFilterIdState(id);
     if (id) {
@@ -1528,66 +1474,111 @@ function EditorMainScreenContent() {
     let overlayColor: string | undefined;
 
     const totalDur = videoClipsOnly.reduce((acc, c) => Math.max(acc, (c.timelineStart ?? 0) + c.duration), 0) || 5;
-    const activeMainClip = mainVideoClips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) ||
-      (currentTime >= totalDur ? mainVideoClips[mainVideoClips.length - 1] : mainVideoClips[0]);
+    const activeMainClipIndex = mainVideoClips.findIndex(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration);
+    const activeMainClip = activeMainClipIndex !== -1 ? mainVideoClips[activeMainClipIndex] : (currentTime >= totalDur ? mainVideoClips[mainVideoClips.length - 1] : mainVideoClips[0]);
 
-    videoClipsOnly.forEach((c) => {
-      const isOverlay = c.trackId === 'overlay';
-      const isActive = isOverlay
-        ? (currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration)
-        : (activeMainClip?.id === c.id);
-
-      states[c.id] = {
-        display: isActive,
-        opacity: isActive ? 1 : 0,
-        filter: '',
-        transform: '',
-        zIndex: isOverlay ? 20 : 1,
-      };
-    });
+    let activeTransitionBoundary: {
+      outgoingClip: any;
+      incomingClip: any;
+      transitionId: string | number;
+      progress: number;
+    } | null = null;
 
     for (let i = 0; i < mainVideoClips.length - 1; i++) {
       const clipA = mainVideoClips[i];
       const clipB = mainVideoClips[i + 1];
-      const transId = clipB.transitionId || (activeSelectedClipId === clipB.id ? activeTransitionId : null);
+      const transId = clipA.appliedTransition || (activeTransitionId && (activeMainClipIndex === i || activeMainClipIndex === i + 1) ? activeTransitionId : null);
 
-      if (!transId || transId === 'none') continue;
+      if (transId) {
+        const boundary = clipA.timelineStart + clipA.duration;
+        const transDur = clipA.transitionDuration || transitionDuration || 1.0;
+        const transStart = boundary - transDur / 2;
+        const transEnd = boundary + transDur / 2;
 
-      const boundaryTime = clipB.timelineStart;
-      const transDur = clipB.transitionDuration || 0.8;
-      const halfDur = transDur / 2;
-      const transStart = boundaryTime - halfDur;
-      const transEnd = boundaryTime + halfDur;
-
-      if (currentTime >= transStart && currentTime <= transEnd) {
-        const progress = Math.max(0, Math.min(1, (currentTime - transStart) / transDur));
-        const transConfig = resolveFrontendTransition(transId);
-        const pairFrame = renderFrontendTransitionFrame(transConfig, progress);
-
-        states[clipA.id] = {
-          display: true,
-          opacity: pairFrame.sceneA.opacity,
-          filter: pairFrame.sceneA.filter !== 'none' ? pairFrame.sceneA.filter : '',
-          transform: pairFrame.sceneA.transform !== 'none' ? pairFrame.sceneA.transform : '',
-          zIndex: pairFrame.sceneA.zIndex,
-        };
-
-        states[clipB.id] = {
-          display: true,
-          opacity: pairFrame.sceneB.opacity,
-          filter: pairFrame.sceneB.filter !== 'none' ? pairFrame.sceneB.filter : '',
-          transform: pairFrame.sceneB.transform !== 'none' ? pairFrame.sceneB.transform : '',
-          zIndex: pairFrame.sceneB.zIndex,
-        };
-
-        if (pairFrame.overlayColor) {
-          overlayColor = pairFrame.overlayColor;
+        if (currentTime >= transStart && currentTime <= transEnd) {
+          const progress = Math.max(0, Math.min(1, (currentTime - transStart) / transDur));
+          activeTransitionBoundary = {
+            outgoingClip: clipA,
+            incomingClip: clipB,
+            transitionId: transId,
+            progress,
+          };
+          break;
         }
       }
     }
 
+    if (activeTransitionBoundary) {
+      const { outgoingClip, incomingClip, transitionId, progress } = activeTransitionBoundary;
+      const asset = typeof transitionId === 'number'
+        ? assetRegistry.getAssetById('Transitions', transitionId)
+        : assetRegistry.getAssetByName(String(transitionId));
+      const evalRes = asset?.engineKey === 'CameraTransitionEngine'
+        ? cameraTransitionEngine.evaluateTransition(transitionId, progress)
+        : asset?.engineKey === 'ZoomTransitionEngine'
+        ? zoomTransitionEngine.evaluateTransition(transitionId, progress)
+        : asset?.engineKey === 'SlideTransitionEngine'
+        ? slideTransitionEngine.evaluateTransition(transitionId, progress)
+        : asset?.engineKey === 'SpinTransitionEngine'
+        ? spinTransitionEngine.evaluateTransition(transitionId, progress)
+        : asset?.engineKey === 'BlurTransitionEngine'
+        ? blurTransitionEngine.evaluateTransition(transitionId, progress)
+        : dissolveTransitionEngine.evaluateTransition(transitionId, progress);
+
+
+
+
+
+      videoClipsOnly.forEach((c) => {
+        const isOverlay = c.trackId === 'overlay';
+        if (isOverlay) {
+          const isActive = currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration;
+          states[c.id] = { display: isActive, opacity: isActive ? 1 : 0, filter: '', transform: '', zIndex: 20 };
+        } else if (c.id === outgoingClip.id) {
+          states[c.id] = {
+            display: evalRes.outgoingOpacity > 0.001,
+            opacity: evalRes.outgoingOpacity,
+            filter: evalRes.outgoingFilter,
+            transform: evalRes.outgoingTransform,
+            zIndex: 1,
+          };
+        } else if (c.id === incomingClip.id) {
+          states[c.id] = {
+            display: evalRes.incomingOpacity > 0.001,
+            opacity: evalRes.incomingOpacity,
+            filter: evalRes.incomingFilter,
+            transform: evalRes.incomingTransform,
+            zIndex: 2,
+          };
+        } else {
+          states[c.id] = { display: false, opacity: 0, filter: '', transform: '', zIndex: 1 };
+        }
+      });
+
+      const resObj = evalRes as { overlayColor?: string; overlayOpacity?: number };
+      if (resObj.overlayColor && resObj.overlayOpacity && resObj.overlayOpacity > 0.001) {
+        overlayColor = resObj.overlayColor;
+      }
+    } else {
+      videoClipsOnly.forEach((c) => {
+        const isOverlay = c.trackId === 'overlay';
+        const isActive = isOverlay
+          ? (currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration)
+          : (activeMainClip?.id === c.id);
+
+        states[c.id] = {
+          display: isActive,
+          opacity: isActive ? 1 : 0,
+          filter: '',
+          transform: '',
+          zIndex: isOverlay ? 20 : 1,
+        };
+      });
+    }
+
     return { states, overlayColor };
-  }, [timelineClips, currentTime, activeSelectedClipId, activeTransitionId]);
+  }, [timelineClips, currentTime, activeTransitionId, transitionDuration]);
+
 
   const handleUndoAction = () => {
     const currentState = getProjectStateRef.current();
@@ -3222,9 +3213,9 @@ function EditorMainScreenContent() {
               { id: 'audio', label: 'Audio', icon: AudioWaveform },
               { id: 'text', label: 'Text', icon: Type },
               { id: 'captions', label: 'Captions', icon: Languages },
-              { id: 'effects', label: 'Effects', icon: Wand2 },
-              { id: 'transitions', label: 'Transitions', icon: ArrowRightLeft },
-              { id: 'filters', label: 'Filters', icon: Sliders },
+              { id: 'filters', label: 'Filters', icon: Wand2 },
+              { id: 'effects', label: 'Effects', icon: Sparkles },
+              { id: 'transitions', label: 'Transitions', icon: SlidersHorizontal },
               { id: 'speed', label: 'Speed', icon: Gauge },
               { id: 'keyframes', label: 'Keyframes', icon: Activity },
             ].map((tab) => (
@@ -3233,18 +3224,7 @@ function EditorMainScreenContent() {
                 key={tab.id}
                 type="button"
                 onClick={() => {
-                  if (tab.id === 'effects') {
-                    setEffectsSubTab('effects');
-                    setActiveTab('effects');
-                  } else if (tab.id === 'transitions') {
-                    setEffectsSubTab('transitions');
-                    setActiveTab('transitions');
-                  } else if (tab.id === 'filters') {
-                    setEffectsSubTab('filters');
-                    setActiveTab('filters');
-                  } else {
-                    setActiveTab(tab.id as any);
-                  }
+                  setActiveTab(tab.id as any);
                 }}
                 className={`flex-shrink-0 flex flex-col items-center justify-center gap-0.5 py-1 px-2 min-w-[56px] text-[9px] font-semibold rounded-md transition cursor-pointer ${activeTab === tab.id
                     ? 'bg-primary/15 text-primary border border-sky-500/25 font-bold shadow-sm'
@@ -3323,25 +3303,13 @@ function EditorMainScreenContent() {
                 }}
                 onApplyFilter={(targetId, filterName) => {
                   const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
-                  const filterObj = SAMPLE_FILTERS.find(f => f.id === filterName || f.name.toLowerCase() === filterName.toLowerCase() || (f.category && f.category.toLowerCase() === filterName.toLowerCase()));
-                  if (targetClip && filterObj) {
-                    const defaultIntensity = filterObj.defaultIntensity ?? 80;
+                  if (targetClip) {
                     beginTransaction('Apply filter', getProjectState());
-                    setActiveFilterIdState(filterObj.id);
-                    setFilterIntensityState(defaultIntensity);
+                    setActiveFilterIdState(filterName);
                     setFilterEnabledState(true);
                     setTimelineClipsState(prev => prev.map(c => {
                       if (c.id === targetClip.id) {
-                        const newFilter = { id: filterObj.id, intensity: defaultIntensity, opacity: 100, blendMode: 'normal' };
-                        return {
-                          ...c,
-                          filterId: filterObj.id,
-                          filterIntensity: defaultIntensity,
-                          filterOpacity: 100,
-                          filterBlendMode: 'normal',
-                          filters: [newFilter],
-                          appliedFilters: [newFilter]
-                        };
+                        return { ...c, filterId: filterName };
                       }
                       return c;
                     }));
@@ -3499,68 +3467,68 @@ function EditorMainScreenContent() {
               />
             )}
 
-            {activeTab === 'transitions' && (
-              <Transitions
-                activeTransitionId={activeTransitionId}
-                onSelectTransition={handleSelectTransition}
-                showBeforeOnly={showBeforeOnly}
-                onShowBeforeOnlyChange={setShowBeforeOnly}
-              />
-            )}
-
             {activeTab === 'filters' && (
-              <Filters
+              <FiltersPanel
                 activeFilterId={activeFilterId}
-                onSelectFilter={handleSelectFilter}
                 filterIntensity={filterIntensity}
-                onFilterIntensityChange={handleFilterIntensityChange}
-                filterOpacity={filterOpacity}
-                onFilterOpacityChange={handleFilterOpacityChange}
-                filterBlendMode={filterBlendMode}
-                onFilterBlendModeChange={handleFilterBlendModeChange}
-                filterEnabled={filterEnabled}
-                onFilterEnabledChange={setFilterEnabled}
-                showBeforeOnly={showBeforeOnly}
-                onShowBeforeOnlyChange={setShowBeforeOnly}
-                onHoverFilter={setPreviewFilterId}
-                onStartSliderDrag={handleStartSliderDrag}
-                onEndSliderDrag={handleEndSliderDrag}
+                onSelectFilter={(filterId) => {
+                  const filterIdStr = filterId !== null ? String(filterId) : null;
+                  beginTransaction('Apply filter', getProjectState());
+                  setActiveFilterIdState(filterIdStr);
+                  setFilterEnabledState(!!filterIdStr);
+                  commitTransaction(getProjectState());
+                  if (filterIdStr) {
+                    showToast(`Applied filter`);
+                  } else {
+                    showToast('Filter removed');
+                  }
+                }}
+                onIntensityChange={(intensity) => {
+                  setFilterIntensityState(intensity);
+                }}
               />
             )}
 
             {activeTab === 'effects' && (
-              <Effects
-                timelineClips={timelineClips}
-                currentTime={currentTime}
-                activeTransitionId={activeTransitionId}
-                onSelectTransition={handleSelectTransition}
-                activeFilterId={activeFilterId}
-                onSelectFilter={handleSelectFilter}
-                filterIntensity={filterIntensity}
-                onFilterIntensityChange={handleFilterIntensityChange}
-                filterOpacity={filterOpacity}
-                onFilterOpacityChange={handleFilterOpacityChange}
-                filterBlendMode={filterBlendMode}
-                onFilterBlendModeChange={handleFilterBlendModeChange}
-                filterEnabled={filterEnabled}
-                onFilterEnabledChange={setFilterEnabled}
-                showBeforeOnly={showBeforeOnly}
-                onShowBeforeOnlyChange={setShowBeforeOnly}
-                onHoverFilter={setPreviewFilterId}
-                activeAppliedEffectId={activeAppliedEffectId}
-                onSetActiveAppliedEffectId={setActiveAppliedEffectId}
-                onAddAppliedEffect={handleAddAppliedEffect}
-                onDeleteAppliedEffect={handleDeleteAppliedEffect}
-                onToggleAppliedEffect={handleToggleAppliedEffect}
-                onUpdateAppliedEffect={handleUpdateAppliedEffect}
-                onDuplicateAppliedEffect={handleDuplicateAppliedEffect}
-                onReorderAppliedEffects={handleReorderAppliedEffects}
-                onAddEffectKeyframe={handleAddEffectKeyframe}
-                onDeleteEffectKeyframe={handleDeleteEffectKeyframe}
-                onStartSliderDrag={handleStartSliderDrag}
-                onEndSliderDrag={handleEndSliderDrag}
+              <EffectsPanel
+                activeEffectId={activeEffectId}
+                effectIntensity={effectStrength}
+                onSelectEffect={(effectId) => {
+                  const effectIdStr = effectId !== null ? String(effectId) : null;
+                  beginTransaction('Apply effect', getProjectState());
+                  setActiveEffectIdState(effectIdStr);
+                  commitTransaction(getProjectState());
+                  if (effectIdStr) {
+                    commitStateChange('Apply effect', getProjectStateRef.current(), { ...getProjectStateRef.current() });
+                    showToast(`Applied effect: ${effectIdStr}`);
+                  } else {
+                    showToast('Effect removed');
+                  }
+                }}
+                onIntensityChange={(intensity) => {
+                  setEffectStrength(intensity * 100);
+                }}
               />
             )}
+
+            {activeTab === 'transitions' && (
+              <TransitionsPanel
+                activeTransitionId={activeTransitionId}
+                transitionDuration={transitionDuration}
+                onSelectTransition={(transId) => {
+                  handleSelectTransition(transId);
+                }}
+                onDurationChange={(dur) => {
+                  setTransitionDuration(dur);
+                }}
+                onResetTransition={() => {
+                  setTransitionDuration(1.0);
+                  showToast('Reset transition parameters');
+                }}
+              />
+            )}
+
+
 
             {activeTab === 'speed' && (
               <SpeedTool
@@ -3837,443 +3805,159 @@ function EditorMainScreenContent() {
                         if (hasKf('glow')) kfFilterStr += ` drop-shadow(0 0 ${kfProps.glow}px rgba(56, 189, 248, 0.8))`;
                         if (hasKf('shadow')) kfFilterStr += ` drop-shadow(0 ${kfProps.shadow / 2}px ${kfProps.shadow}px rgba(0, 0, 0, 0.5))`;
                         if (hasKf('crop')) kfClipPathStr = `inset(${kfProps.crop}%)`;
-                        if (clip.appliedEffects && tState.display) {
-                          clip.appliedEffects.forEach((eff: AppliedEffect) => {
-                            if (!eff.enabled || showBeforeOnly) return;
-                            const props = getInterpolatedEffectProps(eff, localTime) || {};
-                            if (props.scale !== undefined && props.scale !== 1) {
-                              clipScale = clipScale * props.scale;
-                            }
-                            if (props.rotation !== undefined && props.rotation !== 0) {
-                              clipRotation = clipRotation + props.rotation;
-                            }
-                            if (props.positionX !== undefined) posX += props.positionX;
-                            if (props.positionY !== undefined) posY += props.positionY;
-
-                            // Dynamic Camera Shake
-                            if (props.shakeAmount && props.shakeAmount > 0) {
-                              const freq = props.frequency || 10;
-                              const shakeTime = currentTime * freq;
-                              posX += Math.sin(shakeTime) * props.shakeAmount * 1.5;
-                              posY += Math.cos(shakeTime * 1.2) * props.shakeAmount * 1.5;
-                            }
-
-                            // Dynamic Basic Effects Animations
-                            const presetId = eff.presetId;
-                            const speedFactor = eff.speed / 50;
-                            const intFactor = eff.intensity / 100;
-                            const duration = clip.duration || 5;
-
-                            if (presetId === 'basic-zoom-in') {
-                              const p = Math.min(1, localTime / 2);
-                              clipScale = clipScale * (1 + p * 0.3 * intFactor);
-                            } else if (presetId === 'basic-zoom-out') {
-                              const p = Math.min(1, localTime / 2);
-                              clipScale = clipScale * (1.3 - p * 0.3 * intFactor);
-                            } else if (presetId === 'basic-move-left') {
-                              posX -= Math.min(1, localTime / 1.5) * 150 * intFactor;
-                            } else if (presetId === 'basic-move-right') {
-                              posX += Math.min(1, localTime / 1.5) * 150 * intFactor;
-                            } else if (presetId === 'basic-move-up') {
-                              posY -= Math.min(1, localTime / 1.5) * 150 * intFactor;
-                            } else if (presetId === 'basic-move-down') {
-                              posY += Math.min(1, localTime / 1.5) * 150 * intFactor;
-                            } else if (presetId === 'basic-spin-cw') {
-                              clipRotation += localTime * 90 * speedFactor * intFactor;
-                            } else if (presetId === 'basic-spin-ccw') {
-                              clipRotation -= localTime * 90 * speedFactor * intFactor;
-                            } else if (presetId === 'basic-flip-h') {
-                              clipScaleX = -1;
-                            } else if (presetId === 'basic-flip-v') {
-                              clipScaleY = -1;
-                            } else if (presetId === 'basic-scale-up') {
-                              clipScale = clipScale * (1 + 0.35 * intFactor);
-                            } else if (presetId === 'basic-scale-down') {
-                              clipScale = clipScale * (1 - 0.35 * intFactor);
-                            } else if (presetId === 'basic-bounce') {
-                              const wave = localTime * Math.PI * 2 * speedFactor * 1.5;
-                              posY -= Math.abs(Math.sin(wave)) * 50 * intFactor;
-                            } else if (presetId === 'basic-pulse') {
-                              const wave = localTime * Math.PI * 2 * speedFactor;
-                              clipScale = clipScale * (1 + Math.sin(wave) * 0.1 * intFactor);
-                            } else if (presetId === 'basic-shake') {
-                              const sT = localTime * 35 * speedFactor;
-                              posX += Math.sin(sT) * 12 * intFactor;
-                              posY += Math.cos(sT * 1.2) * 12 * intFactor;
-                            } else if (presetId === 'basic-swing') {
-                              const wave = localTime * Math.PI * 2 * speedFactor;
-                              clipRotation += Math.sin(wave) * 15 * intFactor;
-                            } else if (presetId === 'basic-elastic') {
-                              const t = localTime * speedFactor;
-                              const spring = Math.exp(-3 * t) * Math.cos(10 * t);
-                              clipScale = clipScale * (1 + (1 - spring) * 0.25 * intFactor);
-                            } else if (presetId === 'basic-stretch') {
-                              clipScaleX = 1.35 * intFactor;
-                            } else if (presetId === 'basic-compress') {
-                              clipScaleX = 0.65 * intFactor;
-                            } else if (presetId === 'basic-grow') {
-                              const p = localTime / duration;
-                              clipScale = clipScale * (1 + p * 0.4 * intFactor);
-                            } else if (presetId === 'basic-shrink') {
-                              const p = localTime / duration;
-                              clipScale = clipScale * (1 - p * 0.3 * intFactor);
-                            } else if (presetId === 'basic-rotate-l') {
-                              clipRotation -= 45 * intFactor;
-                            } else if (presetId === 'basic-rotate-r') {
-                              clipRotation += 45 * intFactor;
-                            } else if (presetId === 'basic-float-up') {
-                              posY -= Math.sin(localTime * 2.5 * speedFactor) * 30 * intFactor;
-                            } else if (presetId === 'basic-float-down') {
-                              posY += Math.sin(localTime * 2.5 * speedFactor) * 30 * intFactor;
-                            } else if (presetId === 'basic-pop-in') {
-                              const p = Math.min(1, localTime / 0.5);
-                              clipScale = clipScale * p * intFactor;
-                            } else if (presetId === 'basic-pop-out') {
-                              const p = Math.max(0, (duration - localTime) / 0.5);
-                              clipScale = clipScale * p * intFactor;
-                            } else if (presetId === 'basic-jelly') {
-                              const wave = localTime * Math.PI * 2 * speedFactor;
-                              clipScaleX = clipScaleX * (1 + Math.sin(wave) * 0.15 * intFactor);
-                              clipScaleY = clipScaleY * (1 - Math.sin(wave) * 0.15 * intFactor);
-                            } else if (presetId === 'basic-rubber') {
-                              const wave = localTime * Math.PI * 2 * speedFactor;
-                              clipScaleX = clipScaleX * (1 + Math.abs(Math.sin(wave)) * 0.2 * intFactor);
-                              clipScaleY = clipScaleY * (1 + Math.abs(Math.cos(wave)) * 0.2 * intFactor);
-                            } else if (presetId === 'basic-swing-l') {
-                              const wave = localTime * Math.PI * 2 * speedFactor;
-                              clipRotation += Math.sin(wave) * 12 * intFactor;
-                              posX -= Math.abs(Math.sin(wave)) * 25 * intFactor;
-                            } else if (presetId === 'basic-swing-r') {
-                              const wave = localTime * Math.PI * 2 * speedFactor;
-                              clipRotation += Math.sin(wave) * 12 * intFactor;
-                              posX += Math.abs(Math.sin(wave)) * 25 * intFactor;
-                            } else if (presetId === 'basic-heartbeat') {
-                              const pulse = (localTime * speedFactor) % 1;
-                              const h = pulse < 0.15 ? Math.sin(pulse * Math.PI / 0.15) * 0.12 : pulse < 0.3 ? Math.sin((pulse - 0.15) * Math.PI / 0.15) * 0.08 : 0;
-                              clipScale = clipScale * (1 + h * intFactor);
-                            } else if (presetId === 'basic-quick-zoom') {
-                              const p = Math.min(1, localTime / 0.6);
-                              clipScale = clipScale * (1 + (1 - p) * 0.6 * intFactor);
-                            } else if (presetId === 'basic-slow-zoom') {
-                              const p = localTime / duration;
-                              clipScale = clipScale * (1 + p * 0.25 * intFactor);
-                            } else if (presetId === 'basic-micro-shake') {
-                              const s = localTime * 60 * speedFactor;
-                              posX += Math.sin(s) * 3 * intFactor;
-                              posY += Math.cos(s * 1.3) * 3 * intFactor;
-                            } else if (presetId === 'basic-macro-shake') {
-                              const s = localTime * 12 * speedFactor;
-                              posX += Math.sin(s) * 25 * intFactor;
-                              posY += Math.cos(s * 1.3) * 25 * intFactor;
-                            } else if (presetId === 'basic-drift-l') {
-                              posX -= (localTime / duration) * 100 * intFactor;
-                            } else if (presetId === 'basic-drift-r') {
-                              posX += (localTime / duration) * 100 * intFactor;
-                            } else if (presetId === 'basic-drift-up') {
-                              posY -= (localTime / duration) * 100 * intFactor;
-                            } else if (presetId === 'basic-drift-down') {
-                              posY += (localTime / duration) * 100 * intFactor;
-                            } else if (presetId === 'basic-rotate-zoom') {
-                              const p = localTime / duration;
-                              clipRotation += p * 36 * intFactor;
-                              clipScale = clipScale * (1 + p * 0.15 * intFactor);
-                            } else if (presetId === 'basic-scale-rotate') {
-                              const p = localTime / duration;
-                              clipScale = clipScale * (1 + Math.sin(localTime * 3) * 0.08 * intFactor);
-                              clipRotation += p * 45 * intFactor;
-                            } else if (presetId === 'basic-expand') {
-                              const p = Math.min(1, localTime / 1.2);
-                              clipScale = clipScale * (0.7 + p * 0.3 * intFactor);
-                            } else if (presetId === 'basic-collapse') {
-                              const p = Math.min(1, localTime / 1.2);
-                              clipScale = clipScale * (1.0 - p * 0.3 * intFactor);
-                            } else if (presetId === 'basic-ease-in') {
-                              const p = Math.pow(Math.min(1, localTime / duration), 2);
-                              posX += p * 120 * intFactor;
-                            } else if (presetId === 'basic-ease-out') {
-                              const p = 1 - Math.pow(1 - Math.min(1, localTime / duration), 2);
-                              posX += p * 120 * intFactor;
-                            } else if (presetId === 'camera-handheld') {
-                              posX += Math.sin(localTime * 1.5 * speedFactor) * 15 * intFactor;
-                              posY += Math.cos(localTime * 1.1 * speedFactor) * 12 * intFactor;
-                              clipRotation += Math.sin(localTime * 0.8 * speedFactor) * 1.5 * intFactor;
-                            } else if (presetId === 'camera-shake') {
-                              const s = localTime * 35 * speedFactor;
-                              posX += Math.sin(s) * 12 * intFactor;
-                              posY += Math.cos(s * 1.2) * 12 * intFactor;
-                            } else if (presetId === 'camera-earthquake') {
-                              const s = localTime * 60 * speedFactor;
-                              posX += Math.sin(s) * 35 * intFactor;
-                              posY += Math.cos(s * 1.4) * 30 * intFactor;
-                            } else if (presetId === 'camera-crash-zoom') {
-                              const p = Math.min(1, localTime / 0.6);
-                              const ease = Math.pow(p, 3);
-                              clipScale = clipScale * (1 + ease * 0.7 * intFactor);
-                            } else if (presetId === 'camera-whip-l') {
-                              const p = Math.min(1, localTime / 0.5);
-                              posX -= (1 - p) * 350 * intFactor;
-                            } else if (presetId === 'camera-whip-r') {
-                              const p = Math.min(1, localTime / 0.5);
-                              posX += (1 - p) * 350 * intFactor;
-                            } else if (presetId === 'camera-whip-up') {
-                              const p = Math.min(1, localTime / 0.5);
-                              posY -= (1 - p) * 350 * intFactor;
-                            } else if (presetId === 'camera-whip-down') {
-                              const p = Math.min(1, localTime / 0.5);
-                              posY += (1 - p) * 350 * intFactor;
-                            } else if (presetId === 'camera-dolly-in') {
-                              clipScale = clipScale * (1 + (localTime / duration) * 0.3 * intFactor);
-                            } else if (presetId === 'camera-dolly-out') {
-                              clipScale = clipScale * (1 - (localTime / duration) * 0.25 * intFactor);
-                            } else if (presetId === 'camera-truck-l') {
-                              posX -= (localTime / duration) * 120 * intFactor;
-                            } else if (presetId === 'camera-truck-r') {
-                              posX += (localTime / duration) * 120 * intFactor;
-                            } else if (presetId === 'camera-pedestal-up') {
-                              posY -= (localTime / duration) * 120 * intFactor;
-                            } else if (presetId === 'camera-pedestal-down') {
-                              posY += (localTime / duration) * 120 * intFactor;
-                            } else if (presetId === 'camera-orbit-l') {
-                              const angle = (localTime / duration) * Math.PI * intFactor;
-                              posX -= Math.sin(angle) * 80 * speedFactor;
-                              clipScale = clipScale * (1 + (1 - Math.cos(angle)) * 0.08);
-                            } else if (presetId === 'camera-orbit-r') {
-                              const angle = (localTime / duration) * Math.PI * intFactor;
-                              posX += Math.sin(angle) * 80 * speedFactor;
-                              clipScale = clipScale * (1 + (1 - Math.cos(angle)) * 0.08);
-                            } else if (presetId === 'camera-roll-l') {
-                              clipRotation -= (localTime / duration) * 30 * speedFactor * intFactor;
-                            } else if (presetId === 'camera-roll-r') {
-                              clipRotation += (localTime / duration) * 30 * speedFactor * intFactor;
-                            } else if (presetId === 'camera-dutch-angle') {
-                              clipRotation += 12 * intFactor;
-                            } else if (presetId === 'camera-snap-zoom') {
-                              const p = (localTime * speedFactor) % 2;
-                              const snap = p < 0.4 ? Math.sin((p / 0.4) * Math.PI / 2) * 0.5 : p < 1.0 ? 0.5 - ((p - 0.4) / 0.6) * 0.5 : 0;
-                              clipScale = clipScale * (1 + snap * intFactor);
-                            } else if (presetId === 'camera-slow-push') {
-                              clipScale = clipScale * (1 + (localTime / duration) * 0.15 * intFactor);
-                            } else if (presetId === 'camera-slow-pull') {
-                              clipScale = clipScale * (1 - (localTime / duration) * 0.12 * intFactor);
-                            } else if (presetId === 'camera-action-cam') {
-                              posX += Math.sin(localTime * 25 * speedFactor) * 8 * intFactor;
-                              posY += Math.cos(localTime * 22 * speedFactor) * 8 * intFactor;
-                              clipRotation += Math.sin(localTime * 15 * speedFactor) * 2 * intFactor;
-                            } else if (presetId === 'camera-drone-rise') {
-                              posY -= (localTime / duration) * 90 * intFactor;
-                              clipScale = clipScale * (1 - (localTime / duration) * 0.08 * intFactor);
-                            } else if (presetId === 'camera-drone-drop') {
-                              posY += (localTime / duration) * 90 * intFactor;
-                              clipScale = clipScale * (1 + (localTime / duration) * 0.08 * intFactor);
-                            } else if (presetId === 'camera-fpv-dive') {
-                              clipRotation += (localTime / duration) * 90 * speedFactor * intFactor;
-                              posY += (localTime / duration) * 180 * speedFactor * intFactor;
-                              clipScale = clipScale * (1 + (localTime / duration) * 0.3 * intFactor);
-                            } else if (presetId === 'camera-fpv-fly') {
-                              posX += Math.sin(localTime * 2 * speedFactor) * 60 * intFactor;
-                              posY -= Math.sin(localTime * 1.5 * speedFactor) * 20 * intFactor;
-                            } else if (presetId === 'camera-steadicam') {
-                              posX += Math.sin(localTime * 0.8 * speedFactor) * 4 * intFactor;
-                              posY += Math.cos(localTime * 0.6 * speedFactor) * 3 * intFactor;
-                            } else if (presetId === 'camera-walking-cam') {
-                              const walkCycle = localTime * Math.PI * 2 * 1.5 * speedFactor;
-                              posY -= Math.abs(Math.sin(walkCycle)) * 12 * intFactor;
-                              posX += Math.cos(walkCycle / 2) * 5 * intFactor;
-                            } else if (presetId === 'camera-running-cam') {
-                              const runCycle = localTime * Math.PI * 2 * 3.0 * speedFactor;
-                              posY -= Math.abs(Math.sin(runCycle)) * 30 * intFactor;
-                              posX += Math.cos(runCycle / 2) * 12 * intFactor;
-                              clipRotation += Math.sin(runCycle) * 2.5 * intFactor;
-                            } else if (presetId === 'camera-pov-motion') {
-                              posX += Math.sin(localTime * 2 * speedFactor) * 15 * intFactor;
-                              posY += Math.cos(localTime * 1.6 * speedFactor) * 8 * intFactor;
-                            } else if (presetId === 'camera-lens-breathing') {
-                              const breathe = Math.sin(localTime * Math.PI * speedFactor);
-                              clipScale = clipScale * (1 + breathe * 0.025 * intFactor);
-                            } else if (presetId === 'camera-parallax') {
-                              clipScale = clipScale * (1 + (localTime / duration) * 0.12 * intFactor);
-                              posX -= (localTime / duration) * 50 * intFactor;
-                            } else if (presetId === 'camera-360-orbit') {
-                              clipRotation += (localTime / duration) * 360 * speedFactor * intFactor;
-                            } else if (presetId === 'camera-arc-shot') {
-                              const arc = (localTime / duration) * Math.PI * intFactor;
-                              posX += Math.sin(arc) * 100 * speedFactor;
-                              clipRotation -= (localTime / duration) * 30 * intFactor;
-                            } else if (presetId === 'camera-drift') {
-                              posX += Math.sin(localTime * 0.5 * speedFactor) * 25 * intFactor;
-                              posY += Math.cos(localTime * 0.7 * speedFactor) * 25 * intFactor;
-                            } else if (presetId === 'camera-tilt-up') {
-                              posY -= (localTime / duration) * 70 * intFactor;
-                            } else if (presetId === 'camera-tilt-down') {
-                              posY += (localTime / duration) * 70 * intFactor;
-                            } else if (presetId === 'camera-pan-l') {
-                              posX -= (localTime / duration) * 70 * intFactor;
-                            } else if (presetId === 'camera-pan-r') {
-                              posX += (localTime / duration) * 70 * intFactor;
-                            } else if (presetId === 'camera-jitter-cam') {
-                              const j = localTime * 80 * speedFactor;
-                              posX += Math.sin(j) * 2.5 * intFactor;
-                              posY += Math.cos(j * 1.2) * 2.5 * intFactor;
-                            } else if (presetId === 'camera-doc-cam') {
-                              posX += Math.sin(localTime * 1.2 * speedFactor) * 10 * intFactor;
-                              const zoomStep = Math.floor(localTime * speedFactor) % 3 === 0 ? 0.08 : 0;
-                              clipScale = clipScale * (1 + zoomStep * intFactor);
-                            } else if (presetId === 'camera-cinema-cam') {
-                              posX += Math.sin(localTime * 0.6) * 5 * intFactor;
-                            } else if (presetId === 'camera-movie-push') {
-                              clipScale = clipScale * (1 + (localTime / duration) * 0.18 * intFactor);
-                            } else if (presetId === 'camera-epic-zoom') {
-                              clipScale = clipScale * (1 - (localTime / duration) * 0.22 * intFactor);
-                            } else if (presetId.startsWith('glitch-')) {
-                              const glitchFreq = 30 * speedFactor;
-                              const isGlitchFrame = Math.sin(localTime * glitchFreq) > (0.85 - intFactor * 0.25);
-                              if (isGlitchFrame) {
-                                const noiseX = Math.sin(localTime * 100) * 20 * intFactor;
-                                const noiseY = Math.cos(localTime * 120) * 12 * intFactor;
-                                posX += noiseX;
-                                posY += noiseY;
-                                if (presetId === 'glitch-screen-tear' || presetId === 'glitch-slice' || presetId === 'glitch-block-shift' || presetId === 'glitch-mirror') {
-                                  clipScaleX = clipScaleX * (1 + (Math.sin(localTime * 200) * 0.08 * intFactor));
-                                  posX += Math.sin(localTime * 150) * 35 * intFactor;
-                                }
-                                if (presetId === 'glitch-digital' || presetId === 'glitch-corruption' || presetId === 'glitch-cyber' || presetId === 'glitch-quantum' || presetId === 'glitch-master') {
-                                  clipRotation += Math.sin(localTime * 90) * 4 * intFactor;
-                                }
-                              }
-                            } else if (presetId.startsWith('lens-')) {
-                              if (presetId === 'lens-fisheye' || presetId === 'lens-barrel' || presetId === 'lens-wide-angle' || presetId === 'lens-ultra-wide' || presetId === 'lens-telephoto' || presetId === 'lens-zoom' || presetId === 'lens-compression' || presetId === 'lens-cinema' || presetId === 'lens-vintage' || presetId === 'lens-prime' || presetId === 'lens-master') {
-                                clipScale = clipScale * (1 + 0.15 * intFactor);
-                              } else if (presetId === 'lens-twist' || presetId === 'lens-warp') {
-                                clipRotation += Math.sin(localTime * 4 * speedFactor) * 8 * intFactor;
-                                clipScale = clipScale * (1 + Math.sin(localTime * 2 * speedFactor) * 0.05 * intFactor);
-                              } else if (presetId === 'lens-breathing' || presetId === 'lens-focus-ring') {
-                                const breathe = Math.sin(localTime * 3 * speedFactor) * 0.04 * intFactor;
-                                clipScale = clipScale * (1 + breathe);
-                              } else if (presetId === 'lens-drift' || presetId === 'lens-optical-drift') {
-                                posX += Math.sin(localTime * 1.5 * speedFactor) * 10 * intFactor;
-                                posY += Math.cos(localTime * 1.2 * speedFactor) * 8 * intFactor;
-                                clipRotation += Math.sin(localTime * 0.8 * speedFactor) * 1.5 * intFactor;
-                              } else if (presetId === 'lens-pulse') {
-                                const pulse = Math.abs(Math.sin(localTime * Math.PI * speedFactor)) * 0.08 * intFactor;
-                                clipScale = clipScale * (1 + pulse);
-                              } else if (presetId === 'lens-stretch') {
-                                clipScaleX = clipScaleX * (1 + 0.2 * intFactor);
-                              } else if (presetId === 'lens-pincushion') {
-                                clipScale = clipScale * (1 - 0.12 * intFactor);
-                              }
-                            } else if (presetId.startsWith('dist-')) {
-                              if (presetId === 'dist-wave' || presetId === 'dist-water' || presetId === 'dist-heat' || presetId === 'dist-wobble' || presetId === 'dist-organic' || presetId === 'dist-fluid' || presetId === 'dist-morph' || presetId === 'dist-chaos') {
-                                posX += Math.sin(localTime * 8 * speedFactor) * 15 * intFactor;
-                                posY += Math.cos(localTime * 6 * speedFactor) * 10 * intFactor;
-                              } else if (presetId === 'dist-jelly' || presetId === 'dist-rubber' || presetId === 'dist-elastic' || presetId === 'dist-elastic-bounce') {
-                                const jellyScaleX = 1 + Math.sin(localTime * 10 * speedFactor) * 0.08 * intFactor;
-                                const jellyScaleY = 1 + Math.cos(localTime * 10 * speedFactor) * 0.08 * intFactor;
-                                clipScaleX = clipScaleX * jellyScaleX;
-                                clipScaleY = clipScaleY * jellyScaleY;
-                              } else if (presetId === 'dist-swirl' || presetId === 'dist-twist' || presetId === 'dist-spiral' || presetId === 'dist-vortex' || presetId === 'dist-tornado') {
-                                clipRotation += Math.sin(localTime * 3 * speedFactor) * 12 * intFactor;
-                                clipScale = clipScale * (1 + 0.05 * intFactor);
-                              } else if (presetId === 'dist-stretch' || presetId === 'dist-pinch' || presetId === 'dist-bulge' || presetId === 'dist-warp' || presetId === 'dist-extreme' || presetId === 'dist-master') {
-                                clipScaleX = clipScaleX * (1 + 0.15 * intFactor);
-                                clipScaleY = clipScaleY * (1 + 0.15 * intFactor);
-                              } else if (presetId === 'dist-kaleidoscope') {
-                                clipRotation += Math.sin(localTime * speedFactor) * 5;
-                                clipScale = clipScale * 1.15;
-                              } else if (presetId.startsWith('vhs-')) {
-                                if (presetId === 'vhs-tracking' || presetId === 'vhs-distortion' || presetId === 'vhs-head-switching' || presetId === 'vhs-dropout' || presetId === 'vhs-signal-loss' || presetId === 'vhs-mag-distortion' || presetId === 'vhs-wave' || presetId === 'vhs-analog-signal' || presetId === 'vhs-master') {
-                                  posX += Math.sin(localTime * 15 * speedFactor) * 8 * intFactor;
-                                  posY += Math.cos(localTime * 8 * speedFactor) * 5 * intFactor;
-                                } else if (presetId === 'vhs-vert-hold') {
-                                  posY = (posY + localTime * 120 * speedFactor * intFactor) % 360 - 180;
-                                } else if (presetId === 'vhs-horiz-roll') {
-                                  posX = (posX + localTime * 150 * speedFactor * intFactor) % 480 - 240;
-                                } else if (presetId === 'vhs-tape-stretch' || presetId === 'vhs-tape-fold' || presetId === 'vhs-tape-wrinkle') {
-                                  clipScaleY = clipScaleY * (1 + 0.1 * intFactor);
-                                }
-                              } else if (presetId.startsWith('crt-')) {
-                                if (presetId === 'crt-sync-error' || presetId === 'crt-analog-signal' || presetId === 'crt-tv-dist' || presetId === 'crt-broken-signal' || presetId === 'crt-mag-distortion' || presetId === 'crt-electron-beam' || presetId === 'crt-master') {
-                                  posX += Math.sin(localTime * 18 * speedFactor) * 4 * intFactor;
-                                  posY += Math.cos(localTime * 10 * speedFactor) * 3 * intFactor;
-                                } else if (presetId === 'crt-barrel-dist' || presetId === 'crt-screen-warp' || presetId === 'crt-curved-screen') {
-                                  clipScale = clipScale * (1 + 0.12 * intFactor);
-                                } else if (presetId === 'crt-vert-roll') {
-                                  posY = (posY + localTime * 130 * speedFactor * intFactor) % 360 - 180;
-                                } else if (presetId === 'crt-horiz-roll') {
-                                  posX = (posX + localTime * 140 * speedFactor * intFactor) % 480 - 240;
-                                } else if (presetId === 'crt-screen-jitter' || presetId === 'crt-monitor-shake') {
-                                  posX += (Math.random() - 0.5) * 15 * intFactor;
-                                  posY += (Math.random() - 0.5) * 10 * intFactor;
-                                } else if (presetId === 'crt-power-on') {
-                                  const beam = Math.min(1, localTime * 2 * speedFactor);
-                                  clipScaleX = clipScaleX * beam;
-                                  clipScaleY = clipScaleY * Math.max(0.01, beam);
-                                } else if (presetId === 'crt-power-off') {
-                                  const beam = Math.max(0.01, 1 - localTime * 2 * speedFactor);
-                                  clipScaleX = clipScaleX * beam;
-                                  clipScaleY = clipScaleY * beam;
-                                }
-                              }
-                            }
-                          });
-                        }
 
                         let renderedCSS = { filterStr: 'none', transformStr: '', opacityVal: 1, mixBlendModeVal: 'normal' as any };
                         let effectOverlays: any[] = [];
-
-                        if (!showBeforeOnly && clip.appliedEffects && clip.appliedEffects.length > 0) {
-                          const pipelineState = applyEffectPipeline(clip.appliedEffects, localTime, clip.duration || 5, EFFECT_PRESETS);
-                          renderedCSS = renderStateToCSS(pipelineState);
-                          effectOverlays = pipelineState.overlays || [];
-                        } else if (!showBeforeOnly && clip.effectId) {
-                          const effFrame = renderFrontendEffectFrame(resolveFrontendEffect(clip.effectId), localTime);
-                          renderedCSS = {
-                            filterStr: effFrame.filter,
-                            transformStr: effFrame.transform,
-                            opacityVal: effFrame.opacity,
-                            mixBlendModeVal: 'normal' as any
-                          };
-                          if (effFrame.overlayColor) {
-                            effectOverlays.push({
-                              id: 'eff-color',
-                              style: { backgroundColor: effFrame.overlayColor },
-                              content: null
-                            });
-                          }
-                          if (effFrame.overlayGradient) {
-                            effectOverlays.push({
-                              id: 'eff-grad',
-                              style: { background: effFrame.overlayGradient },
-                              content: null
-                            });
-                          }
-                        }
-
-                        const targetFilterId = (previewFilterId !== null && isSelected)
-                          ? previewFilterId
-                          : (clip.filterId || (isSelected ? activeFilterId : null));
-                        const filterObj = targetFilterId ? SAMPLE_FILTERS.find((f: any) => f.id === targetFilterId) : null;
-                        const clipFilterIntensity = clip.filterIntensity ?? filterIntensity;
-                        const globalFilterStr = (filterObj && filterEnabled && !showBeforeOnly)
-                          ? getInterpolatedFilter(filterObj.cssFilter, clipFilterIntensity)
-                          : 'none';
-
-                        const rawFilterStr = globalFilterStr === 'none'
-                          ? renderedCSS.filterStr
-                          : (renderedCSS.filterStr === 'none' ? globalFilterStr : `${globalFilterStr} ${renderedCSS.filterStr}`);
+                        const rawFilterStr = 'none';
 
                         // Overlap Transition Interpolation Calculation
                         const ovState = OverlapEngine.getOverlapTransitionState(clip, timelineClips, currentTime, overlaps);
+
+                        const currentClipFilterId = clip.filterId || activeFilterId;
+                        const currentClipFilterIntensity = clip.filterIntensity !== undefined ? clip.filterIntensity : filterIntensity;
+                        const normClipIntensity = currentClipFilterIntensity > 1.0 ? currentClipFilterIntensity / 100 : currentClipFilterIntensity;
+
+                        const activeFilterAsset = currentClipFilterId ? (
+                          assetRegistry.getAssetById('Filters', Number(currentClipFilterId)) ||
+                          assetRegistry.getAssetByName(String(currentClipFilterId)) ||
+                          assetRegistry.getAssetsByType('Filters').find(a => 
+                            a.name.toLowerCase() === String(currentClipFilterId).toLowerCase() ||
+                            (a as any).preset === String(currentClipFilterId).toLowerCase() ||
+                            String(a.id) === String(currentClipFilterId)
+                          )
+                        ) : null;
+
+                        const filterCssStr = (currentClipFilterId && filterEnabled && !showBeforeOnly)
+                          ? (activeFilterAsset?.engineKey === 'ArtisticFilterEngine'
+                              ? artisticFilterEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
+                              : activeFilterAsset?.engineKey === 'NeonGradeEngine'
+                              ? neonGradeEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
+                              : activeFilterAsset?.engineKey === 'LandscapeEnhanceEngine'
+                              ? landscapeEnhanceEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
+                              : activeFilterAsset?.engineKey === 'MonochromeEngine'
+                              ? monochromeEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
+                              : activeFilterAsset?.engineKey === 'FilmSimulationEngine'
+                              ? filmSimulationEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
+                              : activeFilterAsset?.engineKey === 'PortraitRetouchEngine'
+                              ? portraitRetouchEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
+                              : activeFilterAsset?.engineKey === 'ToneAdjustmentEngine'
+                              ? toneAdjustmentEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
+                              : colorGradeEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity))
+                          : null;
+
+
+
+
+
+
+                        // Applied Effect evaluation
+                        const currentClipEffectId = clip.effectId || activeEffectId;
+                        const activeEffectAsset = currentClipEffectId ? (
+                          assetRegistry.getAssetById('Effects', Number(currentClipEffectId)) ||
+                          assetRegistry.getAssetByName(String(currentClipEffectId)) ||
+                          assetRegistry.getAssetsByType('Effects').find(a => 
+                            a.name.toLowerCase() === String(currentClipEffectId).toLowerCase() ||
+                            String(a.id) === String(currentClipEffectId)
+                          )
+                        ) : null;
+
+                        const clipDuration = clip.duration || 1.0;
+                        const clipProgress = clipDuration > 0 
+                          ? Math.min(1.0, Math.max(0.0, (currentTime - clip.timelineStart) / clipDuration))
+                          : 1.0;
+
+                        const normEffectIntensity = effectStrength > 1.0 ? effectStrength / 100 : effectStrength;
+
+                        const effectState = currentClipEffectId
+                          ? (activeEffectAsset?.engineKey === 'retro_fx' || activeEffectAsset?.engineKey === 'RetroFXEngine')
+                            ? retroFXEngine.evaluateEffect(
+                                activeEffectAsset?.name || currentClipEffectId,
+                                clipProgress,
+                                normEffectIntensity,
+                                {},
+                                { timelineTime: currentTime }
+                              )
+                            : (activeEffectAsset?.engineKey === 'distortion_fx' || activeEffectAsset?.engineKey === 'DistortionFXEngine')
+                            ? distortionFXEngine.evaluateEffect(
+                                activeEffectAsset?.name || currentClipEffectId,
+                                clipProgress,
+                                normEffectIntensity,
+                                {},
+                                { timelineTime: currentTime }
+                              )
+                            : (activeEffectAsset?.engineKey === 'lighting_fx' || activeEffectAsset?.engineKey === 'LightingFXEngine')
+                            ? lightingFXEngine.evaluateEffect(
+                                activeEffectAsset?.name || currentClipEffectId,
+                                clipProgress,
+                                normEffectIntensity,
+                                {},
+                                { timelineTime: currentTime }
+                              )
+                            : (activeEffectAsset?.engineKey === 'atmospheric_fx' || activeEffectAsset?.engineKey === 'AtmosphericFXEngine')
+                            ? atmosphericFXEngine.evaluateEffect(
+                                activeEffectAsset?.name || currentClipEffectId,
+                                clipProgress,
+                                normEffectIntensity,
+                                {},
+                                { timelineTime: currentTime }
+                              )
+                            : (activeEffectAsset?.engineKey === 'cinematic_fx' || activeEffectAsset?.engineKey === 'CinematicFXEngine')
+                            ? cinematicFXEngine.evaluateEffect(
+                                activeEffectAsset?.name || currentClipEffectId,
+                                clipProgress,
+                                normEffectIntensity,
+                                {},
+                                { timelineTime: currentTime }
+                              )
+                            : (activeEffectAsset?.engineKey === 'glitch_digital' || activeEffectAsset?.engineKey === 'GlitchDigitalEngine')
+                            ? glitchDigitalEngine.evaluateEffect(
+                                activeEffectAsset?.name || currentClipEffectId,
+                                clipProgress,
+                                normEffectIntensity,
+                                {},
+                                { timelineTime: currentTime }
+                              )
+                            : (activeEffectAsset?.engineKey === 'blur_focus' || activeEffectAsset?.engineKey === 'BlurFocusEngine')
+                            ? blurFocusEngine.evaluateEffect(
+                                activeEffectAsset?.name || currentClipEffectId,
+                                clipProgress,
+                                normEffectIntensity,
+                                {},
+                                { timelineTime: currentTime }
+                              )
+                            : (activeEffectAsset?.engineKey === 'motion_camera' || activeEffectAsset?.engineKey === 'CameraShakeEngine')
+                            ? motionCameraEngine.evaluateEffect(
+                                activeEffectAsset?.name || currentClipEffectId,
+                                clipProgress,
+                                normEffectIntensity,
+                                {},
+                                { timelineTime: currentTime }
+                              )
+                            : (activeEffectAsset?.engineKey === 'transform_attention' || activeEffectAsset?.engineKey === 'TransformFXEngine')
+                            ? transformAttentionEngine.evaluateEffect(
+                                activeEffectAsset?.name || currentClipEffectId,
+                                clipProgress,
+                                normEffectIntensity
+                              )
+                            : basicAnimationEngine.evaluateEffect(
+                                activeEffectAsset?.name || currentClipEffectId,
+                                clipProgress,
+                                normEffectIntensity
+                              )
+                          : null;
 
                         const combinedFilter = [
                           rawFilterStr !== 'none' ? rawFilterStr : null,
                           kfFilterStr || null,
                           tState.filter || null,
-                          ovState.blurPx > 0 ? `blur(${ovState.blurPx}px)` : null
+                          ovState.blurPx > 0 ? `blur(${ovState.blurPx}px)` : null,
+                          filterCssStr,
+                          effectState?.filterStr || null
                         ].filter(Boolean).join(' ') || 'none';
                         const finalFilterStr = combinedFilter;
 
                         const baseOpacityVal = tState.opacity * renderedCSS.opacityVal * kfOpacityMultiplier * (filterEnabled && !showBeforeOnly ? filterOpacity / 100 : 1);
-                        const finalOpacity = baseOpacityVal * ovState.opacityMultiplier;
+                        const finalOpacity = baseOpacityVal * ovState.opacityMultiplier * (effectState?.opacityMultiplier ?? 1.0);
                         const finalBlendMode = (filterEnabled && !showBeforeOnly) ? (filterBlendMode as any) : renderedCSS.mixBlendModeVal;
                         let canvasAspect = 16 / 9;
                         if (aspectRatio === '9/16') canvasAspect = 9 / 16;
@@ -4296,11 +3980,14 @@ function EditorMainScreenContent() {
                         const wrapperWidth = mediaAspect > canvasAspect ? '100%' : 'auto';
                         const wrapperHeight = mediaAspect > canvasAspect ? 'auto' : '100%';
 
-                        const effectivePosX = posX + ovState.transformOffsetX;
-                        const effectivePosY = posY + ovState.transformOffsetY;
-                        const effectiveScale = clipScale * ovState.scaleMultiplier;
+                        const effectivePosX = posX + ovState.transformOffsetX + (effectState?.transformOffsetX || 0);
+                        const effectivePosY = posY + ovState.transformOffsetY + (effectState?.transformOffsetY || 0);
+                        const effectiveScale = clipScale * ovState.scaleMultiplier * (effectState?.scaleMultiplier || 1.0);
+                        const effectiveScaleX = effectiveScale * clipScaleX * (effectState?.scaleXMultiplier ?? 1.0);
+                        const effectiveScaleY = effectiveScale * clipScaleY * (effectState?.scaleYMultiplier ?? 1.0);
+                        const effectiveRotation = clipRotation + (effectState?.rotationOffset || 0);
 
-                        const finalTransform = `translate(-50%, -50%) translate(${effectivePosX}px, ${effectivePosY}px) scale(${effectiveScale * clipScaleX}, ${effectiveScale * clipScaleY}) rotate(${clipRotation}deg) ${renderedCSS.transformStr} ${tState.transform}`;
+                        const finalTransform = `translate(-50%, -50%) translate(${effectivePosX}px, ${effectivePosY}px) scale(${effectiveScaleX.toFixed(4)}, ${effectiveScaleY.toFixed(4)}) rotate(${effectiveRotation}deg) ${renderedCSS.transformStr} ${tState.transform} ${effectState?.transformStr || ''}`;
 
                         const isImageOrFreeze = clip.isFreezeFrame || clip.type === 'freeze_frame' || clip.type === 'image' || clip.type === 'freeze' || (clip.url && (clip.url.startsWith('data:image/') || clip.url.endsWith('.png') || clip.url.endsWith('.jpg') || clip.url.endsWith('.jpeg') || clip.url.endsWith('.webp')));
 
@@ -4366,6 +4053,37 @@ function EditorMainScreenContent() {
                                 }}
                                 onTimeUpdate={() => handleTimeUpdate(clip.id)}
                                 onEnded={() => handleClipEnded(clip.id)}
+                              />
+                            )}
+
+                            {(effectState as any)?.lightingOverlayCss && (
+                              <div
+                                className="absolute inset-0 pointer-events-none z-10"
+                                style={{ background: (effectState as any).lightingOverlayCss }}
+                              />
+                            )}
+                            {(effectState as any)?.radialGlowCss && (
+                              <div
+                                className="absolute inset-0 pointer-events-none z-10"
+                                style={{ background: (effectState as any).radialGlowCss }}
+                              />
+                            )}
+                            {(effectState as any)?.distortionOverlayCss && (
+                              <div
+                                className="absolute inset-0 pointer-events-none z-10"
+                                style={{ background: (effectState as any).distortionOverlayCss }}
+                              />
+                            )}
+                            {(effectState as any)?.retroOverlayCss && (
+                              <div
+                                className="absolute inset-0 pointer-events-none z-10"
+                                style={{ background: (effectState as any).retroOverlayCss }}
+                              />
+                            )}
+                            {(effectState as any)?.dustOverlayCss && (
+                              <div
+                                className="absolute inset-0 pointer-events-none z-10"
+                                style={{ background: (effectState as any).dustOverlayCss }}
                               />
                             )}
 
@@ -4794,25 +4512,13 @@ function EditorMainScreenContent() {
                   }}
                   onApplyFilter={(targetId, filterName) => {
                     const targetClip = timelineClips.find(c => c.id === targetId) || activeSelectedClip;
-                    const filterObj = SAMPLE_FILTERS.find(f => f.id === filterName || f.name.toLowerCase() === filterName.toLowerCase() || (f.category && f.category.toLowerCase() === filterName.toLowerCase()));
-                    if (targetClip && filterObj) {
-                      const defaultIntensity = filterObj.defaultIntensity ?? 80;
+                    if (targetClip) {
                       beginTransaction('Apply filter', getProjectState());
-                      setActiveFilterIdState(filterObj.id);
-                      setFilterIntensityState(defaultIntensity);
+                      setActiveFilterIdState(filterName);
                       setFilterEnabledState(true);
                       setTimelineClipsState(prev => prev.map(c => {
                         if (c.id === targetClip.id) {
-                          const newFilter = { id: filterObj.id, intensity: defaultIntensity, opacity: 100, blendMode: 'normal' };
-                          return {
-                            ...c,
-                            filterId: filterObj.id,
-                            filterIntensity: defaultIntensity,
-                            filterOpacity: 100,
-                            filterBlendMode: 'normal',
-                            filters: [newFilter],
-                            appliedFilters: [newFilter]
-                          };
+                          return { ...c, filterId: filterName };
                         }
                         return c;
                       }));

@@ -359,9 +359,6 @@ export function Timeline({ currentTime, onTimeChange }: TimelineProps) {
       case 'trim':
         showToast(`Opened manual crop trimmers for ${clip.name}`);
         break;
-      case 'add-transition':
-        showToast(`Mock Action: Add transition before ${clip.name}`);
-        break;
       case 'rename':
         openRename(clipId || clip?.id, clip?.name);
         break;
