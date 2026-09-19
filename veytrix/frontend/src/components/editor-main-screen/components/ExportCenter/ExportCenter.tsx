@@ -125,8 +125,14 @@ export function ExportCenter({ isOpen, onClose, projectId, projectTitle, timelin
                     mediaUrl = resolved;
                   }
                 }
+                const isImage = clip.isImage || clip.type === 'image' || clip.asset_type === 'IMAGE' || (mediaUrl && (mediaUrl.includes('.png') || mediaUrl.includes('.jpg') || mediaUrl.includes('.jpeg') || mediaUrl.includes('.webp')));
+                if (isImage) {
+                  console.log('[IMAGE EXPORT]', clip.id, mediaUrl);
+                }
                 return {
                   ...clip,
+                  type: isImage ? 'image' : (clip.type || 'video'),
+                  asset_type: isImage ? 'IMAGE' : (clip.asset_type || 'VIDEO'),
                   media_url: mediaUrl,
                   url: mediaUrl,
                   src: mediaUrl,
@@ -151,8 +157,14 @@ export function ExportCenter({ isOpen, onClose, projectId, projectTitle, timelin
                 mediaUrl = resolved;
               }
             }
+            const isImage = clip.isImage || clip.type === 'image' || clip.asset_type === 'IMAGE' || (mediaUrl && (mediaUrl.includes('.png') || mediaUrl.includes('.jpg') || mediaUrl.includes('.jpeg') || mediaUrl.includes('.webp')));
+            if (isImage) {
+              console.log('[IMAGE EXPORT]', clip.id, mediaUrl);
+            }
             return {
               ...clip,
+              type: isImage ? 'image' : (clip.type || 'video'),
+              asset_type: isImage ? 'IMAGE' : (clip.asset_type || 'VIDEO'),
               media_url: mediaUrl,
               url: mediaUrl,
               src: mediaUrl,

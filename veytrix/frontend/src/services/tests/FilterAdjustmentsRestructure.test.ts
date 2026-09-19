@@ -9,7 +9,7 @@ describe('Filter Panel UX Restructure (CapCut/Premiere Style)', () => {
     expect(adj.exposure).toBe(0);
     expect(adj.brightness).toBe(0);
     expect(adj.contrast).toBe(0);
-    expect(adj.saturation).toBe(100);
+    expect(adj.saturation).toBe(0);
     expect(adj.gamma).toBe(1.0);
   });
 

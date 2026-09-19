@@ -37,8 +37,20 @@ uniform float u_fade;
 uniform float u_vignette;
 uniform float u_glow;
 
-float rand(vec2 co) {
-    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+vec3 rgb2hsv(vec3 c) {
+    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
 
 void main() {
@@ -46,7 +58,7 @@ void main() {
     vec3 origRgb = color.rgb;
     vec3 rgb = color.rgb;
 
-    // 1. Exposure & Brightness
+    // 1. Exposure & Brightness Module
     rgb *= pow(2.0, u_exposure);
     rgb += vec3(u_brightness);
 
@@ -54,63 +66,56 @@ void main() {
     vec3 tempColor = vec3(1.0 + u_temperature * 0.25, 1.0 - u_tint * 0.15, 1.0 - u_temperature * 0.25);
     rgb *= tempColor;
 
-    // 3. Contrast & Midtone Gain
+    // 3. S-Curve Contrast & Midtone Preservation
     float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-    rgb = (rgb - 0.5) * (1.0 + u_contrast) + 0.5;
+    float midtoneProtect = 1.0 - smoothstep(0.25, 0.45, luma) * (1.0 - smoothstep(0.55, 0.75, luma)) * 0.35;
+    rgb = (rgb - 0.5) * (1.0 + u_contrast * midtoneProtect) + 0.5;
 
-    if (u_midtones != 0.0) {
-        float midtoneMask = 1.0 - abs(luma - 0.5) * 2.0;
-        rgb += vec3(u_midtones * midtoneMask * 0.2);
-    }
-
-    // 4. Gamma Correction
-    if (u_gamma > 0.0 && u_gamma != 1.0) {
-        rgb = pow(clamp(rgb, 0.0, 1.0), vec3(1.0 / u_gamma));
-    }
-
-    // 5. Highlights, Shadows, Blacks, Whites
+    // 4. Shadow Depth & Highlight Control Modules (Prevent shadow clipping & highlight blowout)
     luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-    float shadowMask = clamp(1.0 - luma * 2.0, 0.0, 1.0);
+    float shadowMask = clamp((0.5 - luma) * 2.0, 0.0, 1.0);
     float highlightMask = clamp((luma - 0.5) * 2.0, 0.0, 1.0);
 
-    rgb += vec3(u_shadows * shadowMask * 0.35);
+    // Apply shadow depth (-12%) with toe protection to prevent crushed black detail
+    float shadowToe = smoothstep(0.02, 0.18, luma);
+    rgb += vec3(u_shadows * shadowMask * shadowToe * 0.35);
+
+    // Apply highlight recovery (-6%) to protect windows, skies, and reflections
     rgb += vec3(u_highlights * highlightMask * 0.35);
-    rgb += vec3(u_blacks * pow(1.0 - luma, 3.0) * 0.25);
-    rgb += vec3(u_whites * pow(luma, 3.0) * 0.25);
 
-    // 6. Matte / Lifted Blacks Fade
-    if (u_fade > 0.0) {
-        rgb = mix(rgb, vec3(0.14, 0.13, 0.15), u_fade * (1.0 - luma));
+    // 5. Selective Color Luminance & Social Media Boost Engine
+    vec3 hsv = rgb2hsv(clamp(rgb, 0.0, 1.0));
+    float hueDeg = hsv.x * 360.0;
+
+    // Detect Sky Blues (190° - 240°), Green Foliage (80° - 150°), Cyan (160° - 190°), Orange (20° - 45°)
+    float isBlue = smoothstep(180.0, 200.0, hueDeg) * (1.0 - smoothstep(235.0, 250.0, hueDeg));
+    float isGreen = smoothstep(75.0, 95.0, hueDeg) * (1.0 - smoothstep(145.0, 160.0, hueDeg));
+    float isCyan = smoothstep(155.0, 165.0, hueDeg) * (1.0 - smoothstep(185.0, 195.0, hueDeg));
+    float isOrange = smoothstep(15.0, 25.0, hueDeg) * (1.0 - smoothstep(45.0, 55.0, hueDeg));
+
+    // Selective Luminance Boost
+    hsv.z += (isBlue * 0.08 + isGreen * 0.07 + isCyan * 0.06 + isOrange * 0.04) * clamp(u_intensity, 0.0, 1.0);
+
+    // 6. Skin Protection Module (Shield skin range 15° to 50° from excessive contrast / discoloration)
+    float isSkin = smoothstep(10.0, 20.0, hueDeg) * (1.0 - smoothstep(48.0, 58.0, hueDeg)) * smoothstep(0.15, 0.4, hsv.y);
+    float satBoost = u_saturation * (1.0 - isSkin * 0.75);
+    float vibranceBoost = u_vibrance * (1.0 - isSkin * 0.65);
+
+    hsv.y = clamp(hsv.y * (1.0 + satBoost), 0.0, 1.0);
+    if (vibranceBoost > 0.0) {
+        float satFactor = (1.0 - hsv.y) * vibranceBoost;
+        hsv.y = clamp(hsv.y + satFactor * 0.5, 0.0, 1.0);
     }
+    rgb = hsv2rgb(hsv);
 
-    // 7. Saturation & Vibrance
+    // 7. White Cleanup (Clean walls, shirts, products for social/tone content)
     luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-    rgb = mix(vec3(luma), rgb, 1.0 + u_saturation);
-
-    if (u_vibrance != 0.0) {
-        float maxChannel = max(rgb.r, max(rgb.g, rgb.b));
-        float satAmt = (maxChannel - luma) / (maxChannel + 0.001);
-        float vibranceFactor = (1.0 - satAmt) * u_vibrance;
-        rgb = mix(vec3(luma), rgb, 1.0 + vibranceFactor);
-    }
-
-    // 8. Glow / Bloom Softening
-    if (u_glow > 0.0) {
-        vec3 glowColor = mix(rgb, vec3(1.0, 0.92, 0.8), u_glow * highlightMask);
-        rgb = mix(rgb, glowColor, u_glow * 0.4);
-    }
-
-    // 9. Vignette
-    if (u_vignette > 0.0) {
-        vec2 uv = v_texCoord - 0.5;
-        float dist = length(uv);
-        float vign = smoothstep(0.7, 0.3, dist * (1.0 + u_vignette * 0.8));
-        rgb *= vign;
-    }
+    float isWhite = smoothstep(0.7, 0.95, luma) * (1.0 - smoothstep(0.0, 0.25, hsv.y));
+    rgb += vec3(isWhite * 0.02);
 
     rgb = clamp(rgb, 0.0, 1.0);
 
-    // 10. Intensity Lerp Blend (0.0 = original, 1.0 = 100% tone preset)
+    // 8. Intensity Blend
     vec3 finalRgb = mix(origRgb, rgb, clamp(u_intensity, 0.0, 1.0));
 
     gl_FragColor = vec4(finalRgb, color.a);

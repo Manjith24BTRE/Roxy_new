@@ -139,13 +139,19 @@ export const ProjectMediaProvider: React.FC<{ children: React.ReactNode }> = ({ 
         : [blobUrl];
 
       const itemId = Math.random().toString(36).substring(2, 9);
+      const itemType = isVideo ? 'video' : 'image';
+      if (!isVideo) {
+        console.log('[IMAGE IMPORT]', file.name);
+        console.log('[IMAGE ASSET CREATED]', itemId, itemType);
+      }
+
       const item: MediaItem = {
         id: itemId,
         file,
         url: blobUrl,
         name: file.name,
         size: formatFileSize(file.size),
-        type: isVideo ? 'video' : 'image',
+        type: itemType,
         duration,
         durationFormatted: formatDuration(duration),
         thumbnails,

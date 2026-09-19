@@ -37,13 +37,14 @@ export const TONE_ADJUSTMENT_PRESETS: Record<string, ToneAdjustmentPreset> = {
     name: 'Bright Pop',
     engineKey: 'ToneAdjustmentEngine',
     category: 'Lighting & Tone',
-    description: 'Bright, energetic enhancement for social content avoiding highlight clipping.',
+    description: 'Fresh, bright, social-media creator grade with smart exposure boost, skin protection, and selective color luminance.',
     params: {
       exposure: 0.08,
       contrast: 0.06,
       highlights: -0.04,
-      saturation: 0.06,
-      vibrance: 0.06,
+      saturation: 0.02,
+      vibrance: 0.08,
+      clarity: 0.02,
     }
   },
   deep_contrast: {
@@ -52,7 +53,7 @@ export const TONE_ADJUSTMENT_PRESETS: Record<string, ToneAdjustmentPreset> = {
     name: 'Deep Contrast',
     engineKey: 'ToneAdjustmentEngine',
     category: 'Lighting & Tone',
-    description: 'Strong tonal separation and visual depth with monitored shadow clipping.',
+    description: 'Commercial depth and 3D-like dimensionality grade with S-curve contrast, unclipped shadow detail, and skin protection.',
     params: {
       contrast: 0.18,
       highlights: -0.06,
@@ -66,7 +67,7 @@ export const TONE_ADJUSTMENT_PRESETS: Record<string, ToneAdjustmentPreset> = {
     name: 'Soft Contrast',
     engineKey: 'ToneAdjustmentEngine',
     category: 'Lighting & Tone',
-    description: 'Smooth, gentle tonal range preserving micro-contrast for clarity without a flat image.',
+    description: 'Smooth, elegant, and gentle beauty grade with soft highlights, opened shadows, and skin smoothing without blur or flatness.',
     params: {
       contrast: -0.10,
       highlights: -0.05,
@@ -80,7 +81,7 @@ export const TONE_ADJUSTMENT_PRESETS: Record<string, ToneAdjustmentPreset> = {
     name: 'Matte Finish',
     engineKey: 'ToneAdjustmentEngine',
     category: 'Lighting & Tone',
-    description: 'Lifted blacks and reduced contrast for a modern matte grade without a washed-out image.',
+    description: 'Modern editorial matte grade with lifted charcoal blacks, controlled highlights, and skin protection without gray haze.',
     params: {
       contrast: -0.12,
       blacks: 0.12,
@@ -94,7 +95,7 @@ export const TONE_ADJUSTMENT_PRESETS: Record<string, ToneAdjustmentPreset> = {
     name: 'Fade Colour',
     engineKey: 'ToneAdjustmentEngine',
     category: 'Lighting & Tone',
-    description: 'Subtle aged/faded print character with lifted blacks and softened contrast.',
+    description: 'Nostalgic faded print grade with selective color aging, lifted print blacks, skin protection, and zero grain/bloom.',
     params: {
       contrast: -0.08,
       saturation: -0.12,
@@ -108,7 +109,7 @@ export const TONE_ADJUSTMENT_PRESETS: Record<string, ToneAdjustmentPreset> = {
     name: 'Natural Tone',
     engineKey: 'ToneAdjustmentEngine',
     category: 'Lighting & Tone',
-    description: 'Corrective preset prioritizing neutrality over style to move footage toward realistic color.',
+    description: 'Pure corrective grade for white balance, tint neutralization, and accurate colors without creative styling.',
     params: {
       exposure: 0.0,
       temperature: 0.0,
@@ -123,13 +124,15 @@ export const TONE_ADJUSTMENT_PRESETS: Record<string, ToneAdjustmentPreset> = {
     name: 'Dynamic Tone',
     engineKey: 'ToneAdjustmentEngine',
     category: 'Lighting & Tone',
-    description: 'Balanced enhancement of brightness, contrast, saturation, and color for broad compatibility.',
+    description: 'Balanced all-around auto-enhancement grade with smart exposure, highlight recovery, shadow opening, vibrance, and skin protection.',
     params: {
       exposure: 0.03,
       contrast: 0.08,
       highlights: -0.08,
       shadows: 0.06,
       saturation: 0.05,
+      vibrance: 0.04,
+      clarity: 0.02,
     }
   },
   golden_glow: {
@@ -138,7 +141,7 @@ export const TONE_ADJUSTMENT_PRESETS: Record<string, ToneAdjustmentPreset> = {
     name: 'GoldenGlow',
     engineKey: 'ToneAdjustmentEngine',
     category: 'Lighting & Tone',
-    description: 'Warm golden illumination with soft highlights protecting skin tones and bright yellow objects.',
+    description: 'Golden-hour sunlight atmosphere with warm highlight light wrapping, radiant bloom, and skin protection.',
     params: {
       temperature: 0.10,
       highlights: -0.06,

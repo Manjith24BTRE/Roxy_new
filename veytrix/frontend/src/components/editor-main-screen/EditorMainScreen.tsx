@@ -44,6 +44,8 @@ import { blurTransitionEngine } from './tools/transitions/engines/blur/BlurTrans
 
 
 import { assetRegistry } from '../../services/AssetRegistry';
+import { filterRenderer } from '../../services/FilterRenderer';
+import { filterProcessor } from '../../services/FilterProcessor';
 import { AssetInteractionState, FilterInstanceParameters, EffectInstanceParameters, TransitionInstanceParameters, ClipAdjustments, getDefaultClipAdjustments, calculateEffectLocalProgress } from '../../types/assetInteraction';
 import { Captions, CaptionItem } from './tools/captions/Captions';
 import { SpeedTool, clampPlaybackRate, getSourceDuration, getEffectiveDuration, timelineTimeToSourceTime, sourceTimeToTimelineTime } from './tools/speed';
@@ -823,19 +825,28 @@ function EditorMainScreenContent() {
         const existingIds = new Set(prev.map(c => c.mediaId));
         const newClips = mediaFiles
           .filter(m => !existingIds.has(m.id))
-          .map(m => ({
-            id: m.id,
-            mediaId: m.id,
-            name: m.name,
-            duration: m.duration || 5,
-            baseDuration: m.duration || 5,
-            playbackRate: 1,
-            durationFormatted: m.durationFormatted,
-            thumbnails: m.thumbnails,
-            url: m.url,
-            startOffset: 0,
-            timelineStart: 0
-          }));
+          .map(m => {
+            const isImg = m.type === 'image' || /\.(png|jpg|jpeg|webp|gif|bmp|svg)$/i.test(m.name);
+            if (isImg) {
+              console.log('[IMAGE ADDED TO TIMELINE]', m.id, m.name);
+            }
+            return {
+              id: m.id,
+              mediaId: m.id,
+              name: m.name,
+              type: isImg ? 'image' : 'video',
+              asset_type: isImg ? 'IMAGE' : 'VIDEO',
+              isImage: isImg,
+              duration: m.duration || 5,
+              baseDuration: m.duration || 5,
+              playbackRate: 1,
+              durationFormatted: m.durationFormatted,
+              thumbnails: m.thumbnails,
+              url: m.url,
+              startOffset: 0,
+              timelineStart: 0
+            };
+          });
 
         const reflowed = recalculateSequence([...prev, ...newClips]);
 
@@ -3461,7 +3472,7 @@ function EditorMainScreenContent() {
                   <input
                     ref={importFileInputRef}
                     type="file"
-                    accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v,.ts,.3gp"
+                    accept="image/*,video/*,.jpg,.jpeg,.png,.webp,.gif,.svg,.mp4,.mov,.avi,.mkv,.webm,.m4v,.ts,.3gp"
                     multiple
                     className="hidden"
                     onChange={handleFileInputChange}
@@ -3478,49 +3489,61 @@ function EditorMainScreenContent() {
 
                 {/* Media Asset List */}
                 <div className="flex-1 p-3 overflow-y-auto space-y-3">
-                  <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                    Uploaded Clips ({mediaFiles.length})
+                  <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                    <span>Uploaded Clips ({mediaFiles.length})</span>
+                    {mediaFiles.length > 0 && (
+                      <span className="text-[9px] text-sky-400/80 font-medium lowercase">
+                        {mediaFiles.filter(m => m.type === 'video').length > 0 ? `${mediaFiles.filter(m => m.type === 'video').length} vids` : ''}
+                        {mediaFiles.filter(m => m.type === 'video').length > 0 && mediaFiles.filter(m => m.type === 'image').length > 0 ? ' · ' : ''}
+                        {mediaFiles.filter(m => m.type === 'image').length > 0 ? `${mediaFiles.filter(m => m.type === 'image').length} imgs` : ''}
+                      </span>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    {mediaFiles.map((item) => (
-                      <div
-                        key={item.id}
-                        onClick={() => {
-                          setActiveMediaId(item.id);
-                          setIsSelectedOnCanvas(true);
-                          handleSeek(0);
-                        }}
-                        className={`group relative aspect-video rounded-md border overflow-hidden bg-surface cursor-pointer transition ${item.id === activeMedia?.id
-                            ? 'border-sky-400 ring-1 ring-sky-400 shadow-glow'
-                            : 'border-border hover:border-sky-400/50'
-                          }`}
-                      >
-                        {item.thumbnails[0] ? (
-                          <img src={item.thumbnails[0]} alt="" className="h-full w-full object-cover animate-fade-in" />
-                        ) : (
-                          <div className="h-full w-full bg-surface-hover flex items-center justify-center">
-                            <Film className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                        )}
-                        <div className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[9px] font-mono text-foreground">
-                          {item.durationFormatted}
-                        </div>
-                        <div className="absolute top-1 left-1 rounded bg-black/70 px-1 py-0.5 text-[8px] font-mono text-foreground truncate max-w-[80px]">
-                          {item.name}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openRename(item.id, item.name);
+                    {mediaFiles.map((item) => {
+                      const isImageItem = item.type === 'image' || /\.(png|jpg|jpeg|webp|gif|bmp|svg)$/i.test(item.name);
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            setActiveMediaId(item.id);
+                            setIsSelectedOnCanvas(true);
+                            handleSeek(0);
+                            console.log('[IMAGE ADDED TO MEDIA BIN]', item.id, item.name);
                           }}
-                          className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 rounded bg-black/80 hover:bg-black text-white transition z-10"
-                          title="Rename Asset"
+                          className={`group relative aspect-video rounded-md border overflow-hidden bg-surface cursor-pointer transition ${item.id === activeMedia?.id
+                              ? 'border-sky-400 ring-1 ring-sky-400 shadow-glow'
+                              : 'border-border hover:border-sky-400/50'
+                            }`}
                         >
+                          {item.thumbnails[0] ? (
+                            <img src={item.thumbnails[0]} alt="" className="h-full w-full object-cover animate-fade-in" />
+                          ) : (
+                            <div className="h-full w-full bg-surface-hover flex items-center justify-center">
+                              {isImageItem ? <ImageIcon className="h-4 w-4 text-sky-400" /> : <Film className="h-4 w-4 text-muted-foreground" />}
+                            </div>
+                          )}
+                          <div className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[9px] font-mono text-foreground flex items-center gap-1">
+                            {isImageItem && <ImageIcon className="h-2.5 w-2.5 text-sky-400 inline" />}
+                            <span>{item.durationFormatted || '00:05'}</span>
+                          </div>
+                          <div className="absolute top-1 left-1 rounded bg-black/70 px-1 py-0.5 text-[8px] font-mono text-foreground truncate max-w-[70px]">
+                            {item.name}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openRename(item.id, item.name);
+                            }}
+                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 rounded bg-black/80 hover:bg-black text-white transition z-10"
+                            title="Rename Asset"
+                          >
                           <Edit3 className="h-2.5 w-2.5" />
                         </button>
                       </div>
-                    ))}
+                    );
+                  })}
                   </div>
                 </div>
               </>
@@ -4074,34 +4097,22 @@ function EditorMainScreenContent() {
                         const currentClipFilterId = clip.filterId || activeFilterId;
                         const currentClipFilterIntensity = clip.filterIntensity !== undefined ? clip.filterIntensity : filterIntensity;
                         const normClipIntensity = currentClipFilterIntensity > 1.0 ? currentClipFilterIntensity / 100 : currentClipFilterIntensity;
+                        const currentAdjustments = clip.adjustments || clipAdjustments || getDefaultClipAdjustments();
 
-                        const activeFilterAsset = currentClipFilterId ? (
-                          assetRegistry.getAssetById('Filters', Number(currentClipFilterId)) ||
-                          assetRegistry.getAssetByName(String(currentClipFilterId)) ||
-                          assetRegistry.getAssetsByType('Filters').find(a => 
-                            a.name.toLowerCase() === String(currentClipFilterId).toLowerCase() ||
-                            (a as any).preset === String(currentClipFilterId).toLowerCase() ||
-                            String(a.id) === String(currentClipFilterId)
-                          )
-                        ) : null;
+                        const filterParams = filterProcessor.process(currentClipFilterId, normClipIntensity, currentAdjustments);
+                        const processedCssStr = filterProcessor.toCSSFilterString(filterParams);
 
-                        const filterCssStr = (currentClipFilterId && filterEnabled && !showBeforeOnly)
-                          ? (activeFilterAsset?.engineKey === 'ArtisticFilterEngine'
-                              ? artisticFilterEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
-                              : activeFilterAsset?.engineKey === 'NeonGradeEngine'
-                              ? neonGradeEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
-                              : activeFilterAsset?.engineKey === 'LandscapeEnhanceEngine'
-                              ? landscapeEnhanceEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
-                              : activeFilterAsset?.engineKey === 'MonochromeEngine'
-                              ? monochromeEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
-                              : activeFilterAsset?.engineKey === 'FilmSimulationEngine'
-                              ? filmSimulationEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
-                              : activeFilterAsset?.engineKey === 'PortraitRetouchEngine'
-                              ? portraitRetouchEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
-                              : activeFilterAsset?.engineKey === 'ToneAdjustmentEngine'
-                              ? toneAdjustmentEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity)
-                              : colorGradeEngine.getCSSFilterString(activeFilterAsset?.name || currentClipFilterId, normClipIntensity))
-                          : null;
+                        const isFilterActive = (!!currentClipFilterId || (currentAdjustments && (currentAdjustments.brightness !== 0 || currentAdjustments.contrast !== 0 || currentAdjustments.exposure !== 0 || currentAdjustments.saturation !== 0 || currentAdjustments.temperature !== 0))) && !showBeforeOnly;
+
+                        const filterCssStr = isFilterActive ? processedCssStr : null;
+
+                        if (isFilterActive && typeof window !== 'undefined' && !(window as any).__filterDebugLogged) {
+                          (window as any).__filterDebugLogged = true;
+                          setTimeout(() => { (window as any).__filterDebugLogged = false; }, 500);
+                          console.log('[FilterEngine DEBUG] Selected Filter:', currentClipFilterId);
+                          console.log('[FilterEngine DEBUG] Filter Params:', filterParams);
+                          console.log('[FilterEngine DEBUG] Preview Filter Applied:', filterCssStr);
+                        }
 
 
 
@@ -4257,7 +4268,11 @@ function EditorMainScreenContent() {
 
                         const finalTransform = `translate(-50%, -50%) translate(${effectivePosX}px, ${effectivePosY}px) scale(${effectiveScaleX.toFixed(4)}, ${effectiveScaleY.toFixed(4)}) rotate(${effectiveRotation}deg) ${renderedCSS.transformStr} ${tState.transform} ${effectState?.transformStr || ''}`;
 
-                        const isImageOrFreeze = clip.isFreezeFrame || clip.type === 'freeze_frame' || clip.type === 'image' || clip.type === 'freeze' || (clip.url && (clip.url.startsWith('data:image/') || clip.url.endsWith('.png') || clip.url.endsWith('.jpg') || clip.url.endsWith('.jpeg') || clip.url.endsWith('.webp')));
+                        const isImageOrFreeze = clip.isFreezeFrame || clip.isImage || clip.type === 'freeze_frame' || clip.type === 'image' || clip.asset_type === 'IMAGE' || clip.type === 'freeze' || (clipMedia && clipMedia.type === 'image') || (clip.url && (clip.url.startsWith('data:image/') || clip.url.endsWith('.png') || clip.url.endsWith('.jpg') || clip.url.endsWith('.jpeg') || clip.url.endsWith('.webp')));
+
+                        if (isClipVisible && isImageOrFreeze) {
+                          console.log('[IMAGE RENDERING]', clip.id, clip.name, clip.url);
+                        }
 
                         return (
                           <div

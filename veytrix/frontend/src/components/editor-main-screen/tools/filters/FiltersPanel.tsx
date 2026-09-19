@@ -20,6 +20,8 @@ interface FiltersPanelProps {
   onIntensityChange: (intensity: number) => void;
   onAdjustmentChange?: (key: keyof ClipAdjustments, value: number) => void;
   onResetAdjustments?: () => void;
+  onStartAdjustmentDrag?: () => void;
+  onEndAdjustmentDrag?: () => void;
   previewImageSrc?: string;
 }
 
@@ -31,6 +33,8 @@ export function FiltersPanel({
   onIntensityChange,
   onAdjustmentChange,
   onResetAdjustments,
+  onStartAdjustmentDrag,
+  onEndAdjustmentDrag,
   previewImageSrc = 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=300&q=75',
 }: FiltersPanelProps) {
   const [activeSubTab, setActiveSubTab] = useState<'filters' | 'adjustments'>('filters');
@@ -196,21 +200,99 @@ export function FiltersPanel({
             ))}
           </div>
 
-          {/* Active Filter Preset Controller Header */}
+          {/* Filter Preset Grid (Compact 1:1 Square Thumbnail Cards - CapCut / Premiere Style) */}
+          <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
+            <div className="grid grid-cols-3 gap-2.5">
+              {/* None / Original Square Option */}
+              <div
+                onClick={() => onSelectFilter(null)}
+                className={`flex flex-col items-center group cursor-pointer ${
+                  !activeFilterId ? 'text-sky-300 font-bold' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <div
+                  className={`w-full aspect-square rounded-xl overflow-hidden relative border transition-all flex flex-col items-center justify-center ${
+                    !activeFilterId
+                      ? 'bg-sky-500/10 border-sky-400 shadow-lg shadow-sky-950/50 ring-2 ring-sky-400/40'
+                      : 'bg-surface/50 border-border/80 group-hover:border-sky-500/50 group-hover:bg-surface-hover/60'
+                  }`}
+                >
+                  <Eye className={`h-5 w-5 mb-1 ${!activeFilterId ? 'text-sky-400' : 'text-muted-foreground group-hover:text-foreground'}`} />
+                  <span className="text-[10px] font-semibold">Normal</span>
+                  {!activeFilterId && (
+                    <div className="absolute top-1.5 right-1.5 bg-sky-500 text-white rounded-full p-0.5 shadow">
+                      <Check className="w-3 h-3" />
+                    </div>
+                  )}
+                </div>
+                <span className="text-[10px] font-medium mt-1 truncate w-full text-center">Normal</span>
+              </div>
+
+              {/* Filter Cards Grid Items */}
+              {filterAssets.map((asset) => {
+                const presetKey = (asset as any).preset || asset.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                const isSelected =
+                  String(activeFilterId) === String(asset.id) ||
+                  activeFilterId === asset.name ||
+                  activeFilterId === presetKey;
+
+                return (
+                  <div
+                    key={asset.id}
+                    onClick={() => onSelectFilter(asset.id)}
+                    className={`flex flex-col items-center group cursor-pointer ${
+                      isSelected ? 'text-sky-300 font-bold' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <div
+                      className={`w-full aspect-square rounded-xl overflow-hidden relative border transition-all ${
+                        isSelected
+                          ? 'bg-sky-500/10 border-sky-400 shadow-lg shadow-sky-950/50 ring-2 ring-sky-400/40'
+                          : 'bg-surface/40 border-border/80 group-hover:border-sky-500/50 group-hover:bg-surface-hover/60'
+                      }`}
+                    >
+                      <canvas
+                        ref={(el) => { canvasRefs.current[asset.id] = el; }}
+                        width={128}
+                        height={128}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      />
+
+                      {/* Applied Checkmark Badge */}
+                      {isSelected && (
+                        <div className="absolute top-1.5 right-1.5 bg-sky-500 text-white rounded-full p-0.5 shadow-md flex items-center justify-center">
+                          <Check className="w-3 h-3" />
+                        </div>
+                      )}
+                    </div>
+
+                    <span className={`text-[10px] font-medium mt-1 truncate w-full text-center ${isSelected ? 'text-sky-300 font-semibold' : 'text-foreground/90'}`}>
+                      {asset.name}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* SUB-TAB 2: ADJUSTMENTS TAB (Memoized Sliders, -100 to +100) */}
+      {/* ========================================================= */}
+      {activeSubTab === 'adjustments' && (
+        <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar">
+          {/* Section 0: Active Filter Preset Intensity (Only when filter is selected) */}
           {activeFilterId && activeAsset && (
-            <div className="p-3 border-b border-border bg-sky-950/20 space-y-2">
+            <div className="p-3 rounded-xl border border-sky-500/30 bg-sky-950/20 space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-sky-300 flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-sky-400" />
-                  {activeAsset.name}
+                  {activeAsset.name} Intensity
                 </span>
                 <span className="font-mono text-sky-400 font-bold">{Math.round(normIntensity * 100)}%</span>
               </div>
               <div className="space-y-1">
-                <div className="flex justify-between text-[10px] text-muted-foreground">
-                  <span>Filter Strength</span>
-                  <span>0% - 100%</span>
-                </div>
                 <input
                   type="range"
                   min="0"
@@ -224,81 +306,6 @@ export function FiltersPanel({
             </div>
           )}
 
-          {/* Filter Preset List (Completely Clean Cards, Zero Inline Sliders) */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-2.5 custom-scrollbar">
-            {/* None / Original option */}
-            <div
-              onClick={() => onSelectFilter(null)}
-              className={`p-2.5 rounded-xl border transition cursor-pointer flex items-center gap-3 ${
-                !activeFilterId
-                  ? 'bg-sky-500/10 border-sky-400 text-foreground font-semibold shadow-lg shadow-sky-950/40'
-                  : 'bg-surface/50 border-border hover:border-border-strong hover:bg-surface-hover/50 text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <div className="w-12 h-12 rounded-lg bg-black/40 border border-border flex items-center justify-center shrink-0">
-                <Eye className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold">Normal (Original)</h3>
-                  {!activeFilterId && <Check className="h-4 w-4 text-sky-400" />}
-                </div>
-                <p className="text-[10px] text-muted-foreground truncate">No tone preset applied</p>
-              </div>
-            </div>
-
-            {/* Filter Cards */}
-            {filterAssets.map((asset) => {
-              const presetKey = (asset as any).preset || asset.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-              const isSelected =
-                String(activeFilterId) === String(asset.id) ||
-                activeFilterId === asset.name ||
-                activeFilterId === presetKey;
-
-              return (
-                <div
-                  key={asset.id}
-                  onClick={() => onSelectFilter(asset.id)}
-                  className={`p-2.5 rounded-xl border transition cursor-pointer flex items-center gap-3 group ${
-                    isSelected
-                      ? 'bg-sky-500/10 border-sky-400 text-foreground font-semibold shadow-lg shadow-sky-950/40'
-                      : 'bg-surface/40 border-border/80 hover:border-sky-500/40 hover:bg-surface-hover/50 text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <div className="w-12 h-12 rounded-lg overflow-hidden bg-black/60 border border-border shrink-0 relative group-hover:scale-105 transition-transform">
-                    <canvas
-                      ref={(el) => { canvasRefs.current[asset.id] = el; }}
-                      width={96}
-                      height={96}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-
-                  <div className="flex-1 min-w-0 space-y-0.5">
-                    <div className="flex items-center justify-between">
-                      <h3 className={`text-xs font-semibold truncate ${isSelected ? 'text-sky-300' : 'text-foreground'}`}>
-                        {asset.name}
-                      </h3>
-                      {isSelected && (
-                        <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-sky-500 text-white shrink-0 flex items-center gap-1">
-                          <Check className="w-2.5 h-2.5" /> APPLIED
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground truncate">{asset.category}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* SUB-TAB 2: ADJUSTMENTS TAB (Memoized Sliders, -100 to +100) */}
-      {/* ========================================================= */}
-      {activeSubTab === 'adjustments' && (
-        <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar">
           {/* Section 1: Tone Controls (-100 to +100) */}
           <div className="space-y-2.5">
             <div className="flex items-center gap-1.5 text-[10px] font-bold text-sky-400 uppercase tracking-wider">
